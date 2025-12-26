@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0, user-scalable=yes, viewport-fit=cover" />
+  
+  <!-- PWA Meta Tags -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="זמנית" />
+  <meta name="application-name" content="זמנית" />
+  <meta name="theme-color" content="#3B82F6" />
+  <meta name="msapplication-TileColor" content="#3B82F6" />
+  <meta name="msapplication-tap-highlight" content="no" />
+  
+  <!-- SEO -->
+  <meta name="description" content="אפליקציה חכמה לניהול זמן ומשימות - תכנון יומי, שבועי, מעקב אחר זמן ותובנות" />
+  <meta name="keywords" content="ניהול זמן, משימות, תכנון, productivity, עברית" />
+  
+  <!-- Prevent phone number detection -->
+  <meta name="format-detection" content="telephone=no" />
+  
+  <!-- Favicon & Icons -->
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <link rel="apple-touch-icon" href="/icon-192.png" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icon-192.png" />
+  
+  <!-- PWA Manifest -->
+  <link rel="manifest" href="/manifest.json" />
+  
+  <!-- Splash screens for iOS -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  
+  <title>זמנית</title>
+  
+  <!-- Safe area insets for notched devices -->
+  <style>
+    :root {
+      --sat: env(safe-area-inset-top);
+      --sar: env(safe-area-inset-right);
+      --sab: env(safe-area-inset-bottom);
+      --sal: env(safe-area-inset-left);
+    }
+    
+    /* Prevent pull-to-refresh on mobile */
+    html, body {
+      overscroll-behavior-y: contain;
+    }
+    
+    /* Safe area padding */
+    .safe-area-inset-top { padding-top: env(safe-area-inset-top); }
+    .safe-area-inset-bottom { padding-bottom: env(safe-area-inset-bottom); }
+    
+    /* Touch feedback */
+    button, a, [role="button"] {
+      -webkit-tap-highlight-color: rgba(59, 130, 246, 0.2);
+    }
+    
+    /* Smooth scrolling */
+    * {
+      -webkit-overflow-scrolling: touch;
+    }
+    
+    /* Prevent text selection on buttons */
+    button {
+      -webkit-user-select: none;
+      user-select: none;
+    }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.jsx"></script>
+  
+  <!-- Register Service Worker for PWA -->
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js')
+          .then(reg => console.log('✅ Service Worker registered'))
+          .catch(err => console.log('ℹ️ No Service Worker'));
+      });
+    }
+  </script>
+</body>
+</html>
+
