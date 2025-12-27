@@ -326,14 +326,14 @@ function DailyView() {
           )}
         </div>
 
-        {/* ניווט בין ימים - חיצים מתוקנים ל-RTL */}
+        {/* ניווט בין ימים */}
         <div className="flex items-center justify-between">
           <button
-            onClick={goToNextDay}
+            onClick={goToPreviousDay}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-2xl"
-            title="היום הבא"
+            title="היום הקודם"
           >
-            ◀
+            ▶
           </button>
           
           <div className="text-center">
@@ -351,11 +351,11 @@ function DailyView() {
           </div>
           
           <button
-            onClick={goToPreviousDay}
+            onClick={goToNextDay}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-2xl"
-            title="היום הקודם"
+            title="היום הבא"
           >
-            ▶
+            ◀
           </button>
         </div>
         
