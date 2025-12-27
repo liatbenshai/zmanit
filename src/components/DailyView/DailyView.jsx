@@ -5,7 +5,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { smartScheduleWeek } from '../../utils/smartScheduler';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
-import DiaryView from './DiaryView';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 
@@ -185,7 +184,6 @@ function DailyView() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('day'); // 'day', 'diary', 'week'
 
   // ניווט בין ימים
   const goToPreviousDay = () => {
@@ -314,30 +312,9 @@ function DailyView() {
         animate={{ opacity: 1, y: 0 }}
         className="mb-6"
       >
-        {/* בחירת תצוגה */}
+        {/* כותרת */}
         <div className="flex items-center justify-between mb-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => setViewMode('day')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                viewMode === 'day' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              📋 רשימה
-            </button>
-            <button
-              onClick={() => setViewMode('diary')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                viewMode === 'diary' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              📅 יומן שעות
-            </button>
-          </div>
+          <div></div>
           
           {!isToday(selectedDate) && (
             <button
@@ -356,7 +333,7 @@ function DailyView() {
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-2xl"
             title="היום הבא"
           >
-            ◄
+            ◀
           </button>
           
           <div className="text-center">
@@ -378,7 +355,7 @@ function DailyView() {
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-2xl"
             title="היום הקודם"
           >
-            ►
+            ▶
           </button>
         </div>
         
@@ -387,19 +364,7 @@ function DailyView() {
         </p>
       </motion.div>
 
-      {/* תצוגת יומן שעות */}
-      {viewMode === 'diary' && (
-        <DiaryView
-          date={selectedDate}
-          tasks={selectedDayData.blocks}
-          onEditTask={handleEditTask}
-          onAddTask={handleAddTask}
-          onUpdate={loadTasks}
-        />
-      )}
-
-      {/* סרגל זמן - רק בתצוגה יומית */}
-      {viewMode === 'day' && (
+      {/* סרגל זמן */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -459,7 +424,6 @@ function DailyView() {
           </div>
         )}
       </motion.div>
-      )}
 
       {/* כפתור הוספת משימה */}
       <motion.div
@@ -473,8 +437,7 @@ function DailyView() {
         </Button>
       </motion.div>
 
-      {/* רשימת משימות - רק בתצוגה יומית */}
-      {viewMode === 'day' && (
+      {/* רשימת משימות */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -550,7 +513,6 @@ function DailyView() {
           </>
         )}
       </motion.div>
-      )}
 
       {/* מודל טופס */}
       <Modal

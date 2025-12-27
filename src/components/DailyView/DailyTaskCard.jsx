@@ -13,11 +13,18 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   const [showTimer, setShowTimer] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  // קבלת המשימה העדכנית מה-context
-  const currentTask = tasks.find(t => t.id === task.id) || task;
+  // שימוש בנתוני הבלוק שנשלחו, לא במשימה המקורית
+  // task כאן הוא הבלוק מה-smartScheduler עם duration של 45 דק'
+  const currentTask = task;
+  
+  // קבלת המשימה המקורית רק לצורך פעולות (toggle, delete)
+  const originalTask = tasks.find(t => t.id === task.id);
   
   // סוג המשימה
   const taskType = TASK_TYPES[currentTask.task_type] || TASK_TYPES.other;
+
+  // בדיקה אם זה בלוק מפוצל (יש blockIndex)
+  const isBlock = currentTask.blockIndex !== undefined && currentTask.totalBlocks > 1;
 
   // סימון כהושלם
   const handleToggleComplete = async (e) => {
@@ -45,28 +52,12 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
     }
   };
 
-  // חישוב התקדמות
+  // חישוב התקדמות - לפי זמן הבלוק
   const estimated = currentTask.estimated_duration || 0;
   const spent = currentTask.time_spent || 0;
+  const remaining = Math.max(0, estimated - spent);
   const progress = estimated > 0 ? Math.min(100, Math.round((spent / estimated) * 100)) : 0;
   const isOverTime = spent > estimated && estimated > 0;
-
-  // חישובים למשימות ארוכות
-  const isLongTask = currentTask.start_date && currentTask.due_date && 
-                     currentTask.start_date !== currentTask.due_date;
-  
-  let daysRemaining = 0;
-  let dailyTarget = 0;
-  let remainingTime = estimated - spent;
-  
-  if (isLongTask && !currentTask.is_completed) {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dueDate = new Date(currentTask.due_date);
-    dueDate.setHours(0, 0, 0, 0);
-    daysRemaining = Math.max(1, Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24)) + 1);
-    dailyTarget = Math.ceil(remainingTime / daysRemaining);
-  }
 
   // פורמט דקות
   const formatMinutes = (minutes) => {
@@ -75,6 +66,11 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
     const mins = minutes % 60;
     return mins > 0 ? `${hours}:${mins.toString().padStart(2, '0')}` : `${hours} שעות`;
   };
+
+  // שם תצוגה עם אינדקס בלוק
+  const displayTitle = isBlock 
+    ? `${currentTask.title} (${currentTask.blockIndex}/${currentTask.totalBlocks})`
+    : currentTask.title;
 
   return (
     <motion.div
@@ -115,7 +111,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
               font-medium text-gray-900 dark:text-white
               ${currentTask.is_completed ? 'line-through text-gray-500' : ''}
             `}>
-              {currentTask.title}
+              {displayTitle}
             </h3>
             {/* תגית דחיפות */}
             {currentTask.priority === 'urgent' && (
@@ -128,35 +124,13 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
                 🟡 בינוני
               </span>
             )}
-            {currentTask.due_time && (
-              <span className="text-sm text-gray-500 dark:text-gray-400">
-                {currentTask.due_time}
-              </span>
-            )}
-            {/* תגית משימה ארוכה */}
-            {isLongTask && !currentTask.is_completed && (
-              <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full">
-                📅 {daysRemaining} ימים
+            {/* שעות הבלוק */}
+            {currentTask.startTime && currentTask.endTime && (
+              <span className="text-sm text-gray-500 dark:text-gray-400" dir="ltr">
+                {currentTask.startTime} - {currentTask.endTime}
               </span>
             )}
           </div>
-
-          {/* המלצה יומית למשימות ארוכות */}
-          {isLongTask && !currentTask.is_completed && dailyTarget > 0 && (
-            <div className="mt-2 p-2 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-purple-700 dark:text-purple-300">
-                  💡 יעד להיום: <strong>{formatMinutes(dailyTarget)}</strong>
-                </span>
-                <span className="text-purple-600 dark:text-purple-400 text-xs">
-                  (נותרו {formatMinutes(remainingTime)} סה"כ)
-                </span>
-              </div>
-              <div className="mt-1 text-xs text-purple-600 dark:text-purple-400">
-                דדליין: {new Date(currentTask.due_date).toLocaleDateString('he-IL')}
-              </div>
-            </div>
-          )}
 
           {/* שורה שנייה: זמנים */}
           {!currentTask.is_completed && (
@@ -179,7 +153,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
                 }`}>
                   {isOverTime 
                     ? `חריגה: +${formatMinutes(spent - estimated)}`
-                    : `נותרו ${formatMinutes(estimated - spent)}`
+                    : `נותרו ${formatMinutes(remaining)}`
                   }
                 </span>
               </div>
