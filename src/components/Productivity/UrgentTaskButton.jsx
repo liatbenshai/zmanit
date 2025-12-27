@@ -222,12 +222,12 @@ function UrgentTaskButton() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50
-                         w-[95%] max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
-                         max-h-[90vh] overflow-auto"
+              className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50
+                         md:w-[95%] md:max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
+                         flex flex-col max-h-[calc(100vh-2rem)] md:max-h-[85vh]"
             >
               {/* כותרת */}
-              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white">
+              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white rounded-t-2xl flex-shrink-0">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <span>🚨</span>
                   עבודה דחופה נכנסה
@@ -237,179 +237,196 @@ function UrgentTaskButton() {
                 </p>
               </div>
 
-              {/* שלב 1: פרטים */}
-              {step === 1 && (
-                <div className="p-4 space-y-4">
-                  {/* שם המשימה */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      שם העבודה
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.title}
-                      onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
-                      placeholder="לדוגמה: תמלול דחוף - לקוח חדש"
-                      className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg
-                                 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                      autoFocus
-                    />
-                  </div>
+              {/* תוכן גלילה */}
+              <div className="flex-1 overflow-y-auto">
+                {/* שלב 1: פרטים */}
+                {step === 1 && (
+                  <div className="p-4 space-y-4">
+                    {/* שם המשימה */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        שם העבודה
+                      </label>
+                      <input
+                        type="text"
+                        value={formData.title}
+                        onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
+                        placeholder="לדוגמה: תמלול דחוף - לקוח חדש"
+                        className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg
+                                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        autoFocus
+                      />
+                    </div>
 
-                  {/* סוג משימה */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      סוג
-                    </label>
-                    <div className="grid grid-cols-3 gap-2">
-                      {CRITICAL_TASK_TYPES.map(type => {
-                        const taskType = TASK_TYPES[type];
-                        if (!taskType) return null;
-                        return (
+                    {/* סוג משימה */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        סוג
+                      </label>
+                      <div className="grid grid-cols-3 gap-2">
+                        {CRITICAL_TASK_TYPES.map(type => {
+                          const taskType = TASK_TYPES[type];
+                          if (!taskType) return null;
+                          return (
+                            <button
+                              key={type}
+                              onClick={() => setFormData(f => ({ ...f, taskType: type }))}
+                              className={`p-2 rounded-lg border-2 transition-all ${
+                                formData.taskType === type
+                                  ? 'border-red-500 bg-red-50 dark:bg-red-900/30'
+                                  : 'border-gray-200 dark:border-gray-600'
+                              }`}
+                            >
+                              <div className="text-xl">{taskType.icon}</div>
+                              <div className="text-xs mt-1">{taskType.name}</div>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* זמן משוער - כפתורים + קלט ידני */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        זמן משוער
+                      </label>
+                      <div className="flex gap-2 mb-2">
+                        {[30, 60, 90, 120, 180].map(mins => (
                           <button
-                            key={type}
-                            onClick={() => setFormData(f => ({ ...f, taskType: type }))}
-                            className={`p-2 rounded-lg border-2 transition-all ${
-                              formData.taskType === type
+                            key={mins}
+                            onClick={() => setFormData(f => ({ ...f, estimatedDuration: mins }))}
+                            className={`flex-1 p-2 rounded-lg border-2 text-sm transition-all ${
+                              formData.estimatedDuration === mins
                                 ? 'border-red-500 bg-red-50 dark:bg-red-900/30'
                                 : 'border-gray-200 dark:border-gray-600'
                             }`}
                           >
-                            <div className="text-xl">{taskType.icon}</div>
-                            <div className="text-xs mt-1">{taskType.name}</div>
+                            {mins < 60 ? `${mins}ד'` : `${mins/60}ש'`}
                           </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* זמן משוער */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      זמן משוער
-                    </label>
-                    <div className="flex gap-2">
-                      {[30, 60, 90, 120, 180].map(mins => (
-                        <button
-                          key={mins}
-                          onClick={() => setFormData(f => ({ ...f, estimatedDuration: mins }))}
-                          className={`flex-1 p-2 rounded-lg border-2 text-sm transition-all ${
-                            formData.estimatedDuration === mins
-                              ? 'border-red-500 bg-red-50 dark:bg-red-900/30'
-                              : 'border-gray-200 dark:border-gray-600'
-                          }`}
-                        >
-                          {mins < 60 ? `${mins}ד'` : `${mins/60}ש'`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* דדליין */}
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                      דדליין
-                    </label>
-                    <input
-                      type="date"
-                      value={formData.dueDate}
-                      onChange={e => setFormData(f => ({ ...f, dueDate: e.target.value }))}
-                      className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg
-                                 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-                    />
-                  </div>
-
-                  {/* כפתורים */}
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={() => setShowModal(false)}
-                      className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
-                    >
-                      ביטול
-                    </button>
-                    <button
-                      onClick={handleNext}
-                      className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
-                    >
-                      המשך ←
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {/* שלב 2: אישור */}
-              {step === 2 && (
-                <div className="p-4 space-y-4">
-                  {/* סיכום המשימה */}
-                  <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                    <div className="font-medium text-red-800 dark:text-red-200">
-                      {TASK_TYPES[formData.taskType]?.icon} {formData.title}
-                    </div>
-                    <div className="text-sm text-red-600 dark:text-red-300 mt-1">
-                      {formData.estimatedDuration} דקות • דדליין: {formData.dueDate}
-                    </div>
-                  </div>
-
-                  {/* משימות שיידחו */}
-                  {deferredTasks.length > 0 && (
-                    <div>
-                      <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
-                        <span>📅</span>
-                        משימות שיידחו למחר:
-                      </h3>
-                      <div className="space-y-2">
-                        {deferredTasks.map(task => (
-                          <div 
-                            key={task.id}
-                            className="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg
-                                       flex items-center justify-between"
-                          >
-                            <span className="text-sm">
-                              {TASK_TYPES[task.task_type]?.icon} {task.title}
-                            </span>
-                            <span className="text-xs text-gray-500">
-                              {task.estimated_duration} דק'
-                            </span>
-                          </div>
                         ))}
                       </div>
+                      {/* קלט ידני */}
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm text-gray-500">או הקלד:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="480"
+                          value={formData.estimatedDuration}
+                          onChange={e => setFormData(f => ({ ...f, estimatedDuration: parseInt(e.target.value) || 0 }))}
+                          className="w-20 p-2 border border-gray-300 dark:border-gray-600 rounded-lg
+                                     bg-white dark:bg-gray-700 text-gray-900 dark:text-white text-center"
+                        />
+                        <span className="text-sm text-gray-500">דקות</span>
+                      </div>
                     </div>
-                  )}
 
-                  {deferredTasks.length === 0 && (
-                    <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-700 dark:text-green-300">
-                      ✅ יש מספיק זמן! לא צריך לדחות משימות
+                    {/* דדליין */}
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        דדליין
+                      </label>
+                      <input
+                        type="date"
+                        value={formData.dueDate}
+                        onChange={e => setFormData(f => ({ ...f, dueDate: e.target.value }))}
+                        className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg
+                                   bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                      />
                     </div>
-                  )}
 
-                  {/* אזהרות */}
-                  {warnings.map((warning, idx) => (
-                    <div 
-                      key={idx}
-                      className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg
-                                 text-orange-700 dark:text-orange-300"
-                    >
-                      ⚠️ {warning.message}
+                    {/* כפתורים */}
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        onClick={() => setShowModal(false)}
+                        className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
+                      >
+                        ביטול
+                      </button>
+                      <button
+                        onClick={handleNext}
+                        className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
+                      >
+                        המשך ←
+                      </button>
                     </div>
-                  ))}
-
-                  {/* כפתורים */}
-                  <div className="flex gap-3 pt-2">
-                    <button
-                      onClick={() => setStep(1)}
-                      className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
-                    >
-                      ← חזרה
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
-                    >
-                      🚀 הוסף והתחל!
-                    </button>
                   </div>
-                </div>
-              )}
+                )}
+
+                {/* שלב 2: אישור */}
+                {step === 2 && (
+                  <div className="p-4 space-y-4">
+                    {/* סיכום המשימה */}
+                    <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                      <div className="font-medium text-red-800 dark:text-red-200">
+                        {TASK_TYPES[formData.taskType]?.icon} {formData.title}
+                      </div>
+                      <div className="text-sm text-red-600 dark:text-red-300 mt-1">
+                        {formData.estimatedDuration} דקות • דדליין: {formData.dueDate}
+                      </div>
+                    </div>
+
+                    {/* משימות שיידחו */}
+                    {deferredTasks.length > 0 && (
+                      <div>
+                        <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                          <span>📅</span>
+                          משימות שיידחו למחר:
+                        </h3>
+                        <div className="space-y-2">
+                          {deferredTasks.map(task => (
+                            <div 
+                              key={task.id}
+                              className="p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg
+                                         flex items-center justify-between"
+                            >
+                              <span className="text-sm">
+                                {TASK_TYPES[task.task_type]?.icon} {task.title}
+                              </span>
+                              <span className="text-xs text-gray-500">
+                                {task.estimated_duration} דק'
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {deferredTasks.length === 0 && (
+                      <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg text-green-700 dark:text-green-300">
+                        ✅ יש מספיק זמן! לא צריך לדחות משימות
+                      </div>
+                    )}
+
+                    {/* אזהרות */}
+                    {warnings.map((warning, idx) => (
+                      <div 
+                        key={idx}
+                        className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg
+                                   text-orange-700 dark:text-orange-300"
+                      >
+                        ⚠️ {warning.message}
+                      </div>
+                    ))}
+
+                    {/* כפתורים */}
+                    <div className="flex gap-3 pt-2">
+                      <button
+                        onClick={() => setStep(1)}
+                        className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
+                      >
+                        ← חזרה
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
+                      >
+                        🚀 הוסף והתחל!
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
             </motion.div>
           </>
         )}
