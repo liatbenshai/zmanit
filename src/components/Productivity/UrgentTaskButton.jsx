@@ -222,12 +222,13 @@ function UrgentTaskButton() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="fixed inset-4 md:inset-auto md:top-1/2 md:left-1/2 md:-translate-x-1/2 md:-translate-y-1/2 z-50
-                         md:w-[95%] md:max-w-lg bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
-                         flex flex-col max-h-[calc(100vh-2rem)] md:max-h-[85vh]"
+              className="fixed z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
+                         w-[90%] max-w-md
+                         top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
+                         max-h-[80vh] flex flex-col overflow-hidden"
             >
-              {/* כותרת */}
-              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white rounded-t-2xl flex-shrink-0">
+              {/* כותרת - קבועה */}
+              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white flex-shrink-0">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <span>🚨</span>
                   עבודה דחופה נכנסה
@@ -238,10 +239,10 @@ function UrgentTaskButton() {
               </div>
 
               {/* תוכן גלילה */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto p-4">
                 {/* שלב 1: פרטים */}
                 {step === 1 && (
-                  <div className="p-4 space-y-4">
+                  <div className="space-y-4">
                     {/* שם המשימה */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -285,7 +286,7 @@ function UrgentTaskButton() {
                       </div>
                     </div>
 
-                    {/* זמן משוער - כפתורים + קלט ידני */}
+                    {/* זמן משוער */}
                     <div>
                       <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                         זמן משוער
@@ -305,7 +306,6 @@ function UrgentTaskButton() {
                           </button>
                         ))}
                       </div>
-                      {/* קלט ידני */}
                       <div className="flex items-center gap-2">
                         <span className="text-sm text-gray-500">או הקלד:</span>
                         <input
@@ -334,28 +334,12 @@ function UrgentTaskButton() {
                                    bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                       />
                     </div>
-
-                    {/* כפתורים */}
-                    <div className="flex gap-3 pt-2">
-                      <button
-                        onClick={() => setShowModal(false)}
-                        className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
-                      >
-                        ביטול
-                      </button>
-                      <button
-                        onClick={handleNext}
-                        className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
-                      >
-                        המשך ←
-                      </button>
-                    </div>
                   </div>
                 )}
 
                 {/* שלב 2: אישור */}
                 {step === 2 && (
-                  <div className="p-4 space-y-4">
+                  <div className="space-y-4">
                     {/* סיכום המשימה */}
                     <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
                       <div className="font-medium text-red-800 dark:text-red-200">
@@ -408,22 +392,41 @@ function UrgentTaskButton() {
                         ⚠️ {warning.message}
                       </div>
                     ))}
+                  </div>
+                )}
+              </div>
 
-                    {/* כפתורים */}
-                    <div className="flex gap-3 pt-2">
-                      <button
-                        onClick={() => setStep(1)}
-                        className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
-                      >
-                        ← חזרה
-                      </button>
-                      <button
-                        onClick={handleSave}
-                        className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
-                      >
-                        🚀 הוסף והתחל!
-                      </button>
-                    </div>
+              {/* כפתורים - קבועים למטה */}
+              <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
+                {step === 1 ? (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setShowModal(false)}
+                      className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
+                    >
+                      ביטול
+                    </button>
+                    <button
+                      onClick={handleNext}
+                      className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
+                    >
+                      המשך ←
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex gap-3">
+                    <button
+                      onClick={() => setStep(1)}
+                      className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
+                    >
+                      ← חזרה
+                    </button>
+                    <button
+                      onClick={handleSave}
+                      className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
+                    >
+                      🚀 הוסף והתחל!
+                    </button>
                   </div>
                 )}
               </div>
