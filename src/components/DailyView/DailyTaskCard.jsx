@@ -27,23 +27,52 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   // בדיקה אם זה בלוק מפוצל (יש blockIndex)
   const isBlock = currentTask.blockIndex !== undefined && currentTask.totalBlocks > 1;
 
+  // מפתח localStorage לטיימר
+  const timerStorageKey = currentTask.id ? `timer_v2_${currentTask.id}` : null;
+
   // עדכון liveSpent כשה-task משתנה מבחוץ
   useEffect(() => {
     setLiveSpent(task.time_spent || 0);
   }, [task.time_spent]);
 
-  // טיימר מקומי לעדכון ויזואלי בזמן אמת
+  // בדיקת מצב טיימר מ-localStorage - גם כשהכרטיס סגור!
   useEffect(() => {
-    let interval;
-    if (isTimerRunning) {
-      interval = setInterval(() => {
-        setLiveSpent(prev => prev + 1);
-      }, 60000); // עדכון כל דקה
-    }
-    return () => clearInterval(interval);
-  }, [isTimerRunning]);
+    if (!timerStorageKey) return;
 
-  // callback לקבלת עדכונים מהטיימר
+    const checkTimerState = () => {
+      try {
+        const saved = localStorage.getItem(timerStorageKey);
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data.isRunning && data.startTime && !data.isInterrupted) {
+            // הטיימר רץ! חשב כמה זמן עבר
+            const startTime = new Date(data.startTime);
+            const now = new Date();
+            const elapsedSeconds = Math.floor((now - startTime) / 1000) - (data.totalInterruptionSeconds || 0);
+            const elapsedMinutes = Math.floor(Math.max(0, elapsedSeconds) / 60);
+            const baseTimeSpent = task.time_spent || 0;
+            
+            setLiveSpent(baseTimeSpent + elapsedMinutes);
+            setIsTimerRunning(true);
+          } else {
+            setIsTimerRunning(false);
+          }
+        }
+      } catch (e) {
+        console.error('Error reading timer state:', e);
+      }
+    };
+
+    // בדיקה ראשונית
+    checkTimerState();
+
+    // בדיקה כל שנייה לעדכון בזמן אמת
+    const interval = setInterval(checkTimerState, 1000);
+
+    return () => clearInterval(interval);
+  }, [timerStorageKey, task.time_spent]);
+
+  // callback לקבלת עדכונים מהטיימר (כשפתוח)
   const handleTimerUpdate = useCallback((newSpent, running) => {
     setLiveSpent(newSpent);
     setIsTimerRunning(running);
