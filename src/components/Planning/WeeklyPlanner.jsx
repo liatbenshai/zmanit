@@ -16,7 +16,7 @@ import { supabase } from '../../services/supabase';
  * מראה את כל השבוע עם משימות משובצות אוטומטית
  */
 function WeeklyPlanner() {
-  const { tasks, loading, loadTasks, toggleComplete } = useTasks();
+  const { tasks, loading, loadTasks, toggleComplete, editTask } = useTasks();
   const [weekOffset, setWeekOffset] = useState(0);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -260,21 +260,96 @@ function WeeklyPlanner() {
         />
       )}
 
-      {/* אזהרות */}
+      {/* אזהרות עם פעולות */}
       {plan.warnings?.length > 0 && (
         <div className="mt-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-xl border border-yellow-200 dark:border-yellow-800">
           <h3 className="font-bold text-yellow-800 dark:text-yellow-200 mb-3 flex items-center gap-2">
             <span>⚠️</span>
-            {plan.warnings.length} אזהרות
+            {plan.warnings.length} בעיות שדורשות התייחסות
           </h3>
-          <div className="space-y-2">
+          <div className="space-y-3">
             {plan.warnings.slice(0, 5).map((warning, idx) => (
               <div 
                 key={idx}
-                className="flex items-center justify-between p-2 bg-white dark:bg-gray-800 rounded-lg"
+                className="p-3 bg-white dark:bg-gray-800 rounded-lg"
               >
-                <span className="text-sm text-gray-700 dark:text-gray-300">{warning.message}</span>
-                <span className="text-xs text-gray-500">{warning.date}</span>
+                <div className="flex items-start gap-2 mb-2">
+                  <span className="text-yellow-500">⚠️</span>
+                  <div className="flex-1">
+                    <span className="text-sm font-medium text-gray-800 dark:text-gray-200">
+                      {warning.taskTitle || 'משימה'}
+                    </span>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {warning.details?.deficit > 0 
+                        ? `חסרות ${warning.details.deficit} דקות עד הדדליין (${warning.date || warning.details?.deadline || ''})`
+                        : warning.message
+                      }
+                    </p>
+                  </div>
+                </div>
+                
+                {/* כפתורי פעולה */}
+                <div className="flex flex-wrap gap-2 mt-2">
+                  {/* דחיית משימות לא-קריטיות */}
+                  <button
+                    onClick={() => {
+                      // מציאת משימות לדחות
+                      const deferableTasks = tasks.filter(t => 
+                        !t.is_completed && 
+                        ['course', 'admin', 'email', 'management'].includes(t.task_type) &&
+                        t.due_date <= (warning.date || new Date().toISOString().split('T')[0])
+                      );
+                      
+                      if (deferableTasks.length === 0) {
+                        toast.error('אין משימות שאפשר לדחות');
+                        return;
+                      }
+                      
+                      // דחייה למחר
+                      const tomorrow = new Date();
+                      tomorrow.setDate(tomorrow.getDate() + 1);
+                      const tomorrowISO = tomorrow.toISOString().split('T')[0];
+                      
+                      deferableTasks.forEach(async (task) => {
+                        try {
+                          await editTask(task.id, { ...task, dueDate: tomorrowISO });
+                        } catch (e) {}
+                      });
+                      
+                      toast.success(`נדחו ${deferableTasks.length} משימות למחר`);
+                      loadTasks(); // רענון המשימות
+                    }}
+                    className="px-3 py-1.5 text-xs bg-blue-100 hover:bg-blue-200 text-blue-700 rounded-lg transition-colors"
+                  >
+                    📅 דחה קורס/אדמין למחר
+                  </button>
+                  
+                  {/* הארכת יום עבודה */}
+                  <button
+                    onClick={() => {
+                      toast('💡 אפשר לשנות שעות עבודה בהגדרות', { 
+                        icon: '⚙️',
+                        duration: 3000 
+                      });
+                    }}
+                    className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg transition-colors"
+                  >
+                    ⏰ הארך יום עבודה
+                  </button>
+                  
+                  {/* דבר עם לקוח */}
+                  <button
+                    onClick={() => {
+                      toast('📞 כדאי לעדכן את הלקוח על עיכוב אפשרי', { 
+                        icon: '💡',
+                        duration: 4000 
+                      });
+                    }}
+                    className="px-3 py-1.5 text-xs bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-lg transition-colors"
+                  >
+                    📞 דבר עם לקוח
+                  </button>
+                </div>
               </div>
             ))}
           </div>
