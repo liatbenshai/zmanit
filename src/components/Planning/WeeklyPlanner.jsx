@@ -171,11 +171,11 @@ function WeeklyPlanner() {
         {/* ניווט שבועות */}
         <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl p-3 shadow-sm">
           <button
-            onClick={goToNextWeek}
+            onClick={goToPrevWeek}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
-            title="שבוע הבא"
+            title="שבוע קודם"
           >
-            ◄
+            ▶
           </button>
           
           <div className="flex items-center gap-3">
@@ -193,11 +193,11 @@ function WeeklyPlanner() {
           </div>
           
           <button
-            onClick={goToPrevWeek}
+            onClick={goToNextWeek}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600 dark:text-gray-400"
-            title="שבוע קודם"
+            title="שבוע הבא"
           >
-            ►
+            ◀
           </button>
         </div>
       </div>
@@ -485,11 +485,11 @@ function DayDetailView({ day, allDays, onBack, onAddTask, onEditTask, onComplete
         {/* ניווט בין ימים */}
         <div className="flex items-center justify-between">
           <button
-            onClick={() => prevDay && onSelectDay(prevDay)}
-            disabled={!prevDay}
-            className={`p-2 rounded-lg ${prevDay ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600' : 'text-gray-300 cursor-not-allowed'}`}
+            onClick={() => nextDay && onSelectDay(nextDay)}
+            disabled={!nextDay}
+            className={`p-2 rounded-lg ${nextDay ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600' : 'text-gray-300 cursor-not-allowed'}`}
           >
-            ◄ {prevDay ? dayNames[new Date(prevDay.date + 'T12:00:00').getDay()] : ''}
+            {nextDay ? dayNames[new Date(nextDay.date + 'T12:00:00').getDay()] : ''} ▶
           </button>
           
           <div className="text-center">
@@ -502,11 +502,11 @@ function DayDetailView({ day, allDays, onBack, onAddTask, onEditTask, onComplete
           </div>
           
           <button
-            onClick={() => nextDay && onSelectDay(nextDay)}
-            disabled={!nextDay}
-            className={`p-2 rounded-lg ${nextDay ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600' : 'text-gray-300 cursor-not-allowed'}`}
+            onClick={() => prevDay && onSelectDay(prevDay)}
+            disabled={!prevDay}
+            className={`p-2 rounded-lg ${prevDay ? 'hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-600' : 'text-gray-300 cursor-not-allowed'}`}
           >
-            {nextDay ? dayNames[new Date(nextDay.date + 'T12:00:00').getDay()] : ''} ►
+            ◀ {prevDay ? dayNames[new Date(prevDay.date + 'T12:00:00').getDay()] : ''}
           </button>
         </div>
       </div>
