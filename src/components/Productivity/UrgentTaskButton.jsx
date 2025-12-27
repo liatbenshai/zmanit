@@ -222,13 +222,19 @@ function UrgentTaskButton() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
-              className="fixed z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl
-                         w-[90%] max-w-md
-                         top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2
-                         max-h-[80vh] flex flex-col overflow-hidden"
+              style={{
+                position: 'fixed',
+                top: '50%',
+                left: '50%',
+                transform: 'translate(-50%, -50%)',
+                zIndex: 50,
+                width: '90%',
+                maxWidth: '400px'
+              }}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl"
             >
-              {/* כותרת - קבועה */}
-              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white flex-shrink-0">
+              {/* כותרת */}
+              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white rounded-t-2xl">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <span>🚨</span>
                   עבודה דחופה נכנסה
@@ -238,8 +244,8 @@ function UrgentTaskButton() {
                 </p>
               </div>
 
-              {/* תוכן גלילה */}
-              <div className="flex-1 overflow-y-auto p-4">
+              {/* תוכן */}
+              <div className="p-4">
                 {/* שלב 1: פרטים */}
                 {step === 1 && (
                   <div className="space-y-4">
@@ -394,41 +400,41 @@ function UrgentTaskButton() {
                     ))}
                   </div>
                 )}
-              </div>
 
-              {/* כפתורים - קבועים למטה */}
-              <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex-shrink-0">
-                {step === 1 ? (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setShowModal(false)}
-                      className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
-                    >
-                      ביטול
-                    </button>
-                    <button
-                      onClick={handleNext}
-                      className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
-                    >
-                      המשך ←
-                    </button>
-                  </div>
-                ) : (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => setStep(1)}
-                      className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
-                    >
-                      ← חזרה
-                    </button>
-                    <button
-                      onClick={handleSave}
-                      className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
-                    >
-                      🚀 הוסף והתחל!
-                    </button>
-                  </div>
-                )}
+                {/* כפתורים */}
+                <div className="flex gap-3 mt-4">
+                  {step === 1 ? (
+                    <>
+                      <button
+                        onClick={() => setShowModal(false)}
+                        className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
+                      >
+                        ביטול
+                      </button>
+                      <button
+                        onClick={handleNext}
+                        className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
+                      >
+                        המשך ←
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <button
+                        onClick={() => setStep(1)}
+                        className="flex-1 p-3 rounded-lg border border-gray-300 text-gray-700 dark:text-gray-300"
+                      >
+                        ← חזרה
+                      </button>
+                      <button
+                        onClick={handleSave}
+                        className="flex-1 p-3 rounded-lg bg-red-500 hover:bg-red-600 text-white font-medium"
+                      >
+                        🚀 הוסף והתחל!
+                      </button>
+                    </>
+                  )}
+                </div>
               </div>
             </motion.div>
           </>
