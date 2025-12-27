@@ -78,12 +78,39 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
     setIsTimerRunning(running);
   }, []);
 
-  // סימון כהושלם
+  // סימון כהושלם - עם הודעה חכמה
   const handleToggleComplete = async (e) => {
     if (e) e.stopPropagation();
     try {
       await toggleComplete(currentTask.id);
-      toast.success(currentTask.is_completed ? 'המשימה הוחזרה לפעילה' : '✅ המשימה הושלמה!');
+      
+      if (currentTask.is_completed) {
+        // החזרה לפעיל
+        toast.success('המשימה הוחזרה לפעילה');
+      } else {
+        // סיום משימה
+        const timeUsed = liveSpent;
+        const estimated = currentTask.estimated_duration || 0;
+        
+        if (timeUsed < estimated && estimated > 0) {
+          // סיימה מוקדם!
+          const saved = estimated - timeUsed;
+          toast.success(
+            `🎉 סיימת מוקדם! חסכת ${formatMinutes(saved)}`,
+            { duration: 4000 }
+          );
+        } else if (timeUsed > estimated * 1.2 && estimated > 0) {
+          // לקח יותר זמן
+          const extra = timeUsed - estimated;
+          toast(
+            `✅ הושלם! לקח ${formatMinutes(extra)} יותר מהצפוי`,
+            { icon: '⏰', duration: 4000 }
+          );
+        } else {
+          toast.success('✅ המשימה הושלמה!');
+        }
+      }
+      
       if (onUpdate) onUpdate();
     } catch (err) {
       toast.error('שגיאה בעדכון');

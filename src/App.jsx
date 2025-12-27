@@ -16,6 +16,9 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Header from './components/Layout/Header';
 import MobileNav from './components/Layout/MobileNav';
 import InstallPrompt from './components/PWA/InstallPrompt';
+import IdleDetector from './components/Productivity/IdleDetector';
+import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
+import DailySummary from './components/Productivity/DailySummary';
 
 function App() {
   const { user, loading } = useAuth();
@@ -47,6 +50,15 @@ function App() {
 
       {/* הודעת התקנת PWA */}
       <InstallPrompt />
+
+      {/* זיהוי זמן מת */}
+      {user && <IdleDetector />}
+
+      {/* כפתור עבודה דחופה */}
+      {user && <UrgentTaskButton />}
+
+      {/* סיכום יומי */}
+      {user && <DailySummary />}
 
       {/* כותרת עליונה */}
       {user && <Header />}
