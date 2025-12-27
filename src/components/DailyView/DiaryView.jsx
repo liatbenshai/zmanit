@@ -60,9 +60,38 @@ function DiaryView({ date, tasks, onEditTask, onAddTask, onUpdate }) {
   const [dropTarget, setDropTarget] = useState(null);
   const dragCounter = useRef(0);
 
-  // סינון משימות ליום זה
+  // המרת בלוקים מ-smartScheduler לפורמט משימות
+  // tasks כאן הם הבלוקים שנשלחו מ-DailyView (מה-smartScheduler)
   const dayTasks = useMemo(() => {
-    const dateISO = date instanceof Date ? date.toISOString().split('T')[0] : date;
+    if (!tasks || tasks.length === 0) return [];
+    
+    // בדיקה אם קיבלנו בלוקים מ-smartScheduler (יש להם startTime)
+    // או משימות רגילות (יש להם due_date)
+    const isSmartBlocks = tasks[0]?.startTime !== undefined;
+    
+    if (isSmartBlocks) {
+      // המרת בלוקים לפורמט משימות
+      return tasks.map(block => ({
+        id: block.taskId || block.id,
+        title: block.title,
+        estimated_duration: block.duration,
+        time_spent: block.timeSpent || 0,
+        is_completed: block.isCompleted || false,
+        task_type: block.taskType,
+        due_time: block.startTime,
+        priority: block.priority,
+        blockIndex: block.blockIndex,
+        totalBlocks: block.totalBlocks,
+        startTime: block.startTime,
+        endTime: block.endTime,
+        notes: block.notes
+      }));
+    }
+    
+    // אם קיבלנו משימות רגילות, סנן לפי תאריך (לתאימות אחורה)
+    const dateISO = date instanceof Date 
+      ? `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`
+      : date;
     return tasks.filter(t => t.due_date === dateISO);
   }, [tasks, date]);
 
@@ -71,10 +100,12 @@ function DiaryView({ date, tasks, onEditTask, onAddTask, onUpdate }) {
     return dayTasks
       .filter(t => !t.is_completed)
       .sort((a, b) => {
-        if (!a.due_time && !b.due_time) return 0;
-        if (!a.due_time) return 1;
-        if (!b.due_time) return -1;
-        return timeToMinutes(a.due_time) - timeToMinutes(b.due_time);
+        const aTime = a.startTime || a.due_time;
+        const bTime = b.startTime || b.due_time;
+        if (!aTime && !bTime) return 0;
+        if (!aTime) return 1;
+        if (!bTime) return -1;
+        return timeToMinutes(aTime) - timeToMinutes(bTime);
       });
   }, [dayTasks]);
 
@@ -96,8 +127,9 @@ function DiaryView({ date, tasks, onEditTask, onAddTask, onUpdate }) {
   const tasksByHour = useMemo(() => {
     const map = {};
     activeTasks.forEach(task => {
-      if (task.due_time) {
-        const [startHour, startMin] = task.due_time.split(':').map(Number);
+      const taskTime = task.startTime || task.due_time;
+      if (taskTime) {
+        const [startHour, startMin] = taskTime.split(':').map(Number);
         const startMinutes = startHour * 60 + (startMin || 0);
         const duration = task.estimated_duration || 30;
         const endMinutes = startMinutes + duration;
@@ -120,7 +152,7 @@ function DiaryView({ date, tasks, onEditTask, onAddTask, onUpdate }) {
 
   // משימות ללא שעה
   const unscheduledTasks = useMemo(() => {
-    return activeTasks.filter(t => !t.due_time);
+    return activeTasks.filter(t => !t.startTime && !t.due_time);
   }, [activeTasks]);
 
   // חישובים לסטטיסטיקות
