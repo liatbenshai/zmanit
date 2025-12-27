@@ -12,6 +12,19 @@ const MONTHS_HE = [
 const DAYS_HE = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
 /**
+ * המרת תאריך לפורמט ISO מקומי (ללא בעיות timezone)
+ * חשוב! משתמשים בזה במקום toISOString().split('T')[0]
+ */
+export function toLocalISODate(date) {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * פורמט תאריך לעברית
  */
 export function formatDateHe(dateString, options = {}) {
@@ -69,10 +82,10 @@ export function getRelativeDate(dateString) {
   const tomorrow = new Date(today);
   tomorrow.setDate(tomorrow.getDate() + 1);
   
-  const dateStr = date.toISOString().split('T')[0];
-  const todayStr = today.toISOString().split('T')[0];
-  const yesterdayStr = yesterday.toISOString().split('T')[0];
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const dateStr = toLocalISODate(date);
+  const todayStr = toLocalISODate(today);
+  const yesterdayStr = toLocalISODate(yesterday);
+  const tomorrowStr = toLocalISODate(tomorrow);
   
   if (dateStr === todayStr) return 'היום';
   if (dateStr === yesterdayStr) return 'אתמול';
@@ -115,7 +128,7 @@ export function getTimeAgo(dateString) {
  * קבלת תאריך היום בפורמט ISO
  */
 export function getTodayISO() {
-  return new Date().toISOString().split('T')[0];
+  return toLocalISODate(new Date());
 }
 
 /**
@@ -144,7 +157,7 @@ export function isPastDate(dateString) {
 export function addDays(dateString, days) {
   const date = new Date(dateString);
   date.setDate(date.getDate() + days);
-  return date.toISOString().split('T')[0];
+  return toLocalISODate(date);
 }
 
 /**
@@ -154,7 +167,7 @@ export function getWeekStart(dateString) {
   const date = new Date(dateString || new Date());
   const day = date.getDay();
   date.setDate(date.getDate() - day);
-  return date.toISOString().split('T')[0];
+  return toLocalISODate(date);
 }
 
 /**
@@ -164,10 +177,11 @@ export function getWeekEnd(dateString) {
   const date = new Date(dateString || new Date());
   const day = date.getDay();
   date.setDate(date.getDate() + (6 - day));
-  return date.toISOString().split('T')[0];
+  return toLocalISODate(date);
 }
 
 export default {
+  toLocalISODate,
   formatDateHe,
   formatTime,
   formatDateTime,
