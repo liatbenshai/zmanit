@@ -207,47 +207,46 @@ function UrgentTaskButton() {
       {/* מודל */}
       <AnimatePresence>
         {showModal && (
-          <>
-            {/* רקע + מרכוז */}
+          /* רקע + מרכוז */
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+            onClick={() => setShowModal(false)}
+          >
+            {/* תוכן - עוצר את ה-click propagation */}
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-              onClick={() => setShowModal(false)}
+              initial={{ opacity: 0, scale: 0.9 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
             >
-              {/* תוכן - עוצר את ה-click propagation */}
-              <motion.div
-                initial={{ opacity: 0, scale: 0.9 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.9 }}
-                onClick={(e) => e.stopPropagation()}
-                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
-              >
-                {/* כותרת */}
-                <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white rounded-t-2xl">
-                  <h2 className="text-xl font-bold flex items-center gap-2">
-                    <span>🚨</span>
-                    עבודה דחופה נכנסה
-                  </h2>
-                  <p className="text-red-100 text-sm mt-1">
-                    {step === 1 ? 'פרטי העבודה' : 'אישור שינויים'}
-                  </p>
-                </div>
+              {/* כותרת */}
+              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white rounded-t-2xl">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <span>🚨</span>
+                  עבודה דחופה נכנסה
+                </h2>
+                <p className="text-red-100 text-sm mt-1">
+                  {step === 1 ? 'פרטי העבודה' : 'אישור שינויים'}
+                </p>
+              </div>
 
-                {/* תוכן */}
-                <div className="p-4">
-                {/* שלב 1: פרטים */}
-                {step === 1 && (
-                  <div className="space-y-4">
-                    {/* שם המשימה */}
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                        שם העבודה
-                      </label>
-                      <input
-                        type="text"
-                        value={formData.title}
+              {/* תוכן */}
+              <div className="p-4">
+              {/* שלב 1: פרטים */}
+              {step === 1 && (
+                <div className="space-y-4">
+                  {/* שם המשימה */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                      שם העבודה
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.title}
                         onChange={e => setFormData(f => ({ ...f, title: e.target.value }))}
                         placeholder="לדוגמה: תמלול דחוף - לקוח חדש"
                         className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-lg
