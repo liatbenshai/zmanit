@@ -5,6 +5,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { TASK_TYPES } from '../../config/taskTypes';
 import { getInterruptionStats } from '../../services/supabase';
+import { useProductivityInsights } from '../Productivity/ProductivityTracker';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
@@ -17,6 +18,7 @@ import toast from 'react-hot-toast';
 function SmartDashboard() {
   const { tasks, loading, toggleComplete } = useTasks();
   const { user } = useAuth();
+  const { analysis: productivityAnalysis } = useProductivityInsights();
   
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -220,8 +222,26 @@ function SmartDashboard() {
       });
     }
 
+    // תובנה: שעות פרודוקטיביות
+    if (productivityAnalysis?.bestHours?.length > 0 && !dismissedIds.includes('best_hours')) {
+      const bestHour = productivityAnalysis.bestHours[0];
+      const currentHour = today.getHours();
+      
+      // הצג רק אם עכשיו קרוב לשעה הטובה או שאנחנו בשעה הטובה
+      if (Math.abs(currentHour - bestHour) <= 1 || productivityAnalysis.bestHours.includes(currentHour)) {
+        insights.push({
+          id: 'best_hours',
+          type: 'insight',
+          icon: '🌟',
+          title: 'זו השעה הטובה שלך!',
+          text: `את הכי פרודוקטיבית עכשיו. תנצלי את זה לעבודות לקוח!`,
+          action: { label: 'למשימות', link: '/daily' }
+        });
+      }
+    }
+
     return insights.slice(0, 3); // מקסימום 3 תובנות
-  }, [stats, interruptionStats, dismissedInsights]);
+  }, [stats, interruptionStats, dismissedInsights, productivityAnalysis, today]);
 
   // דחיית תובנה
   const dismissInsight = (insightId) => {

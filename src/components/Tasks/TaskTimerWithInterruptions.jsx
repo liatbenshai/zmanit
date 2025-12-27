@@ -282,6 +282,18 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
       const newTimeSpent = timeSpent + minutesToAdd;
       await updateTaskTime(currentTask.id, newTimeSpent);
 
+      // תיעוד פרודוקטיביות
+      try {
+        const { logProductivity } = await import('../Productivity/ProductivityTracker');
+        logProductivity(user?.id, {
+          minutesWorked: minutesToAdd,
+          minutesEstimated: estimated > 0 ? Math.round(minutesToAdd * (estimated / (timeSpent + minutesToAdd))) : minutesToAdd,
+          interruption: interruptions.length > 0
+        });
+      } catch (e) {
+        console.log('Productivity tracking not available');
+      }
+
       // שמירת היסטוריית הפרעות
       if (user?.id && interruptions.length > 0) {
         const storedInterruptions = JSON.parse(
