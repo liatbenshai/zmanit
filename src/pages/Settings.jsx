@@ -81,21 +81,7 @@ function Settings() {
           {activeTab === 'taskTypes' && <TaskTypesSettings user={user} />}
           {activeTab === 'profile' && <ProfileSettings user={user} loading={loading} setLoading={setLoading} />}
           {activeTab === 'appearance' && (
-            <div className="space-y-6">
-              <h2 className="text-lg font-bold text-gray-900 dark:text-white">הגדרות תצוגה</h2>
-              <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
-                <div>
-                  <p className="font-medium text-gray-900 dark:text-white">מצב כהה</p>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">החלף בין ערכת צבעים בהירה לכהה</p>
-                </div>
-                <button
-                  onClick={toggleDarkMode}
-                  className={`relative w-14 h-8 rounded-full transition-colors ${darkMode ? 'bg-blue-600' : 'bg-gray-300'}`}
-                >
-                  <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${darkMode ? 'right-1' : 'left-1'}`} />
-                </button>
-              </div>
-            </div>
+            <AppearanceSettings darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
           )}
           {activeTab === 'account' && <AccountSettings user={user} logout={logout} loading={loading} setLoading={setLoading} />}
         </div>
@@ -389,6 +375,118 @@ function TaskTypeForm({ type, onSave, onCancel }) {
       <div className="flex gap-2 pt-4">
         <Button onClick={() => onSave(form)} disabled={!form.name}>שמור</Button>
         <Button variant="secondary" onClick={onCancel}>ביטול</Button>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * הגדרות תצוגה + התקנת אפליקציה
+ */
+function AppearanceSettings({ darkMode, toggleDarkMode }) {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [isInstalled, setIsInstalled] = useState(false);
+  const [isIOS, setIsIOS] = useState(false);
+
+  useEffect(() => {
+    // בדיקה אם האפליקציה כבר מותקנת
+    if (window.matchMedia('(display-mode: standalone)').matches) {
+      setIsInstalled(true);
+    }
+
+    // בדיקת iOS
+    const userAgent = navigator.userAgent || navigator.vendor;
+    setIsIOS(/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream);
+
+    // האזנה ל-beforeinstallprompt
+    const handleBeforeInstallPrompt = (e) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+  }, []);
+
+  const handleInstall = async () => {
+    if (deferredPrompt) {
+      deferredPrompt.prompt();
+      const { outcome } = await deferredPrompt.userChoice;
+      if (outcome === 'accepted') {
+        toast.success('✅ האפליקציה הותקנה!');
+        setIsInstalled(true);
+      }
+      setDeferredPrompt(null);
+    } else if (isIOS) {
+      toast((t) => (
+        <div className="text-right">
+          <p className="font-bold mb-2">להתקנה ב-iPhone/iPad:</p>
+          <p>1. לחצי על כפתור השיתוף ⬆️</p>
+          <p>2. בחרי "הוסף למסך הבית"</p>
+          <button 
+            onClick={() => toast.dismiss(t.id)}
+            className="mt-2 px-3 py-1 bg-blue-500 text-white rounded"
+          >
+            הבנתי
+          </button>
+        </div>
+      ), { duration: 10000 });
+    }
+  };
+
+  const clearInstallDismiss = () => {
+    localStorage.removeItem('pwa-install-dismissed');
+    toast.success('ההודעה תופיע שוב בפעם הבאה');
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white">הגדרות תצוגה</h2>
+      
+      {/* מצב כהה */}
+      <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
+        <div>
+          <p className="font-medium text-gray-900 dark:text-white">מצב כהה</p>
+          <p className="text-sm text-gray-500 dark:text-gray-400">החלף בין ערכת צבעים בהירה לכהה</p>
+        </div>
+        <button
+          onClick={toggleDarkMode}
+          className={`relative w-14 h-8 rounded-full transition-colors ${darkMode ? 'bg-blue-600' : 'bg-gray-300'}`}
+        >
+          <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${darkMode ? 'right-1' : 'left-1'}`} />
+        </button>
+      </div>
+
+      {/* התקנת אפליקציה */}
+      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+        <div className="flex items-center gap-3 mb-3">
+          <span className="text-2xl">📱</span>
+          <div>
+            <p className="font-medium text-gray-900 dark:text-white">התקנת אפליקציה</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {isInstalled ? 'האפליקציה מותקנת!' : 'התקן את זמנית על המכשיר שלך'}
+            </p>
+          </div>
+        </div>
+        
+        {isInstalled ? (
+          <div className="text-green-600 dark:text-green-400 flex items-center gap-2">
+            <span>✓</span>
+            <span>האפליקציה מותקנת</span>
+          </div>
+        ) : (
+          <div className="space-y-2">
+            <Button onClick={handleInstall} className="w-full">
+              {isIOS ? '📲 איך להתקין?' : '📲 התקן עכשיו'}
+            </Button>
+            <button 
+              onClick={clearInstallDismiss}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
+            >
+              לא רואה הודעת התקנה? לחץ כאן
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

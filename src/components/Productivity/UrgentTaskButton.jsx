@@ -208,44 +208,35 @@ function UrgentTaskButton() {
       <AnimatePresence>
         {showModal && (
           <>
-            {/* רקע */}
+            {/* רקע + מרכוז */}
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 bg-black/50 z-50"
+              className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
               onClick={() => setShowModal(false)}
-            />
-
-            {/* תוכן */}
-            <motion.div
-              initial={{ opacity: 0, scale: 0.9 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.9 }}
-              style={{
-                position: 'fixed',
-                top: '50%',
-                left: '50%',
-                transform: 'translate(-50%, -50%)',
-                zIndex: 50,
-                width: '90%',
-                maxWidth: '400px'
-              }}
-              className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl"
             >
-              {/* כותרת */}
-              <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white rounded-t-2xl">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <span>🚨</span>
-                  עבודה דחופה נכנסה
-                </h2>
-                <p className="text-red-100 text-sm mt-1">
-                  {step === 1 ? 'פרטי העבודה' : 'אישור שינויים'}
-                </p>
-              </div>
+              {/* תוכן - עוצר את ה-click propagation */}
+              <motion.div
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-y-auto"
+              >
+                {/* כותרת */}
+                <div className="bg-gradient-to-l from-red-500 to-orange-500 p-4 text-white rounded-t-2xl">
+                  <h2 className="text-xl font-bold flex items-center gap-2">
+                    <span>🚨</span>
+                    עבודה דחופה נכנסה
+                  </h2>
+                  <p className="text-red-100 text-sm mt-1">
+                    {step === 1 ? 'פרטי העבודה' : 'אישור שינויים'}
+                  </p>
+                </div>
 
-              {/* תוכן */}
-              <div className="p-4">
+                {/* תוכן */}
+                <div className="p-4">
                 {/* שלב 1: פרטים */}
                 {step === 1 && (
                   <div className="space-y-4">
@@ -437,7 +428,7 @@ function UrgentTaskButton() {
                 </div>
               </div>
             </motion.div>
-          </>
+          </motion.div>
         )}
       </AnimatePresence>
     </>
