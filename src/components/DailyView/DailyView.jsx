@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
+import { smartScheduleWeek } from '../../utils/smartScheduler';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
 import WeeklyCalendarView from './WeeklyCalendarView';
@@ -139,7 +140,6 @@ function getDateHebrew(date) {
  * קבלת תאריך בפורמט ISO - תיקון timezone
  */
 function getDateISO(date) {
-  // שימוש בתאריך מקומי במקום UTC
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, '0');
   const day = String(date.getDate()).padStart(2, '0');
@@ -155,6 +155,29 @@ function isToday(date) {
 }
 
 /**
+ * חישוב תחילת השבוע (יום ראשון)
+ */
+function getWeekStart(date) {
+  const d = new Date(date);
+  const dayOfWeek = d.getDay();
+  d.setDate(d.getDate() - dayOfWeek);
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+/**
+ * פורמט דקות לשעות:דקות
+ */
+function formatMinutes(minutes) {
+  if (!minutes || minutes <= 0) return '0 דק\'';
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  if (hours === 0) return `${mins} דק'`;
+  if (mins === 0) return `${hours} שעות`;
+  return `${hours}:${String(mins).padStart(2, '0')} שעות`;
+}
+
+/**
  * תצוגת יום עבודה - מסך ראשי חדש
  */
 function DailyView() {
@@ -163,7 +186,7 @@ function DailyView() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
-  const [viewMode, setViewMode] = useState('day'); // 'day' or 'week'
+  const [viewMode, setViewMode] = useState('day'); // 'day', 'diary', 'week'
 
   // ניווט בין ימים
   const goToPreviousDay = () => {
@@ -182,80 +205,50 @@ function DailyView() {
     setSelectedDate(new Date());
   };
 
-  // קבלת ימי השבוע הנוכחי
-  const getWeekDays = () => {
-    const days = [];
-    const startOfWeek = new Date(selectedDate);
-    const dayOfWeek = startOfWeek.getDay();
-    startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek); // חזרה ליום ראשון
-    
-    for (let i = 0; i < 7; i++) {
-      const day = new Date(startOfWeek);
-      day.setDate(day.getDate() + i);
-      days.push(day);
-    }
-    return days;
-  };
-
-  // משימות לתאריך מסוים
-  const getTasksForDate = (date) => {
-    const dateISO = getDateISO(date);
-    const dateObj = new Date(dateISO);
-    
-    return tasks.filter(task => {
-      // משימה רגילה - לפי due_date
-      if (task.due_date === dateISO && !task.start_date) return true;
-      if (task.start_date === dateISO && !task.due_date) return true;
-      
-      // משימה ארוכה - בין start_date ל-due_date
-      if (task.start_date && task.due_date && task.start_date !== task.due_date) {
-        const startDate = new Date(task.start_date);
-        const dueDate = new Date(task.due_date);
-        // אם התאריך הנבחר בין תאריך ההתחלה לדדליין (כולל)
-        if (dateObj >= startDate && dateObj <= dueDate) {
-          return true;
-        }
-      }
-      
-      // משימה פשוטה עם start_date = due_date
-      if (task.start_date === dateISO || task.due_date === dateISO) return true;
-      
-      // משימות בלי תאריך מופיעות רק ביום הנוכחי
-      if (!task.due_date && !task.start_date && !task.is_completed && isToday(date)) return true;
-      return false;
-    }).sort((a, b) => {
-      // דחופים קודם
-      const priorityOrder = { urgent: 0, high: 1, normal: 2 };
-      const aPriority = priorityOrder[a.priority] ?? 2;
-      const bPriority = priorityOrder[b.priority] ?? 2;
-      if (aPriority !== bPriority) return aPriority - bPriority;
-      
-      if (a.is_completed !== b.is_completed) return a.is_completed ? 1 : -1;
-      if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
-      if (a.due_time) return -1;
-      if (b.due_time) return 1;
-      return 0;
-    });
-  };
-
-  // משימות לתאריך הנבחר
-  const selectedDateTasks = useMemo(() => {
-    return getTasksForDate(selectedDate);
+  // חישוב תוכנית שבועית עם smartScheduler
+  const weekPlan = useMemo(() => {
+    if (!tasks || tasks.length === 0) return null;
+    const weekStart = getWeekStart(selectedDate);
+    console.log('📅 DailyView: Computing week plan from', getDateISO(weekStart));
+    return smartScheduleWeek(weekStart, tasks);
   }, [tasks, selectedDate]);
 
-  // חישוב זמנים
+  // קבלת הבלוקים ליום הנבחר מתוך התוכנית השבועית
+  const selectedDayData = useMemo(() => {
+    if (!weekPlan) return { blocks: [], tasks: [] };
+    
+    const dateISO = getDateISO(selectedDate);
+    const dayPlan = weekPlan.days.find(d => d.date === dateISO);
+    
+    if (!dayPlan) {
+      console.log('📅 No plan found for', dateISO);
+      return { blocks: [], tasks: [] };
+    }
+    
+    console.log('📅 Day plan for', dateISO, ':', dayPlan.blocks?.length || 0, 'blocks');
+    return {
+      blocks: dayPlan.blocks || [],
+      usagePercent: dayPlan.usagePercent || 0,
+      plannedMinutes: dayPlan.plannedMinutes || 0,
+      completedMinutes: dayPlan.completedMinutes || 0
+    };
+  }, [weekPlan, selectedDate]);
+
+  // חישוב זמנים מעודכן
   const timeStats = useMemo(() => {
-    const completedMinutes = selectedDateTasks
-      .filter(t => t.is_completed)
-      .reduce((sum, t) => sum + (t.time_spent || 0), 0);
+    const blocks = selectedDayData.blocks || [];
     
-    const plannedMinutes = selectedDateTasks
-      .filter(t => !t.is_completed)
-      .reduce((sum, t) => sum + (t.estimated_duration || 0), 0);
+    const completedMinutes = blocks
+      .filter(b => b.isCompleted)
+      .reduce((sum, b) => sum + (b.duration || 0), 0);
     
-    const inProgressMinutes = selectedDateTasks
-      .filter(t => !t.is_completed && t.time_spent > 0)
-      .reduce((sum, t) => sum + (t.time_spent || 0), 0);
+    const plannedMinutes = blocks
+      .filter(b => !b.isCompleted)
+      .reduce((sum, b) => sum + (b.duration || 0), 0);
+    
+    const inProgressMinutes = blocks
+      .filter(b => !b.isCompleted && b.timeSpent > 0)
+      .reduce((sum, b) => sum + (b.timeSpent || 0), 0);
     
     const remainingWorkMinutes = WORK_HOURS.totalMinutes - completedMinutes - inProgressMinutes;
     
@@ -268,43 +261,32 @@ function DailyView() {
       usedPercent: Math.round(((completedMinutes + inProgressMinutes) / WORK_HOURS.totalMinutes) * 100),
       canFitAll: plannedMinutes <= remainingWorkMinutes
     };
-  }, [selectedDateTasks]);
+  }, [selectedDayData]);
 
-  // פתיחת טופס הוספה
+  // handlers
   const handleAddTask = () => {
     setEditingTask(null);
     setShowTaskForm(true);
   };
 
-  // פתיחת טופס עריכה
   const handleEditTask = (task) => {
-    setEditingTask(task);
+    // מציאת המשימה המקורית מה-tasks (לא הבלוק)
+    const originalTask = tasks.find(t => t.id === task.taskId || t.id === task.id);
+    setEditingTask(originalTask || task);
     setShowTaskForm(true);
   };
 
-  // סגירת טופס
   const handleCloseForm = () => {
     setShowTaskForm(false);
     setEditingTask(null);
+    loadTasks();
   };
 
-  // פורמט דקות לשעות:דקות
-  const formatMinutes = (minutes) => {
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    if (hours === 0) return `${mins} דקות`;
-    if (mins === 0) return `${hours} שעות`;
-    return `${hours}:${mins.toString().padStart(2, '0')}`;
-  };
-
-  // מסך טעינה
+  // טעינה
   if (loading) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-4 border-blue-500 border-t-transparent mx-auto"></div>
-          <p className="mt-4 text-gray-600 dark:text-gray-400">טוען משימות...</p>
-        </div>
+      <div className="flex justify-center items-center h-64">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -312,22 +294,24 @@ function DailyView() {
   // שגיאה
   if (error) {
     return (
-      <div className="min-h-[80vh] flex items-center justify-center">
-        <div className="card p-8 text-center max-w-md">
-          <span className="text-4xl mb-4 block">⚠️</span>
-          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">שגיאה</h2>
-          <p className="text-gray-600 dark:text-gray-400">{error}</p>
-          <Button onClick={loadTasks} className="mt-4">נסה שוב</Button>
-        </div>
+      <div className="card p-6 text-center text-red-600">
+        <p>שגיאה בטעינת משימות: {error}</p>
+        <button onClick={loadTasks} className="mt-4 btn btn-primary">
+          נסי שוב
+        </button>
       </div>
     );
   }
 
+  // הפרדת בלוקים לפעילים ומושלמים
+  const activeBlocks = selectedDayData.blocks.filter(b => !b.isCompleted);
+  const completedBlocks = selectedDayData.blocks.filter(b => b.isCompleted);
+
   return (
-    <div className="container mx-auto px-4 py-6 max-w-4xl">
+    <div className="max-w-4xl mx-auto p-4">
       {/* כותרת עם ניווט */}
       <motion.div
-        initial={{ opacity: 0, y: -10 }}
+        initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-6"
       >
@@ -435,7 +419,7 @@ function DailyView() {
       {viewMode === 'diary' && (
         <DiaryView
           date={selectedDate}
-          tasks={selectedDateTasks}
+          tasks={selectedDayData.blocks}
           onEditTask={handleEditTask}
           onAddTask={handleAddTask}
           onUpdate={loadTasks}
@@ -525,7 +509,7 @@ function DailyView() {
         transition={{ delay: 0.3 }}
         className="space-y-3"
       >
-        {selectedDateTasks.length === 0 ? (
+        {selectedDayData.blocks.length === 0 ? (
           <div className="card p-8 text-center">
             <span className="text-4xl mb-4 block">📝</span>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
@@ -538,28 +522,54 @@ function DailyView() {
         ) : (
           <>
             {/* משימות פעילות */}
-            {selectedDateTasks.filter(t => !t.is_completed).map(task => (
+            {activeBlocks.map((block, index) => (
               <DailyTaskCard 
-                key={task.id} 
-                task={task} 
-                onEdit={() => handleEditTask(task)}
+                key={block.id || `block-${index}`} 
+                task={{
+                  id: block.taskId || block.id,
+                  title: block.title,
+                  estimated_duration: block.duration,
+                  time_spent: block.timeSpent || 0,
+                  is_completed: block.isCompleted,
+                  task_type: block.taskType,
+                  due_time: block.startTime,
+                  priority: block.priority,
+                  // מידע על הבלוק
+                  blockIndex: block.blockIndex,
+                  totalBlocks: block.totalBlocks,
+                  startTime: block.startTime,
+                  endTime: block.endTime
+                }} 
+                onEdit={() => handleEditTask(block)}
                 onUpdate={loadTasks}
+                showTime={true}
               />
             ))}
             
             {/* משימות שהושלמו */}
-            {selectedDateTasks.filter(t => t.is_completed).length > 0 && (
+            {completedBlocks.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
-                  ✅ הושלמו ({selectedDateTasks.filter(t => t.is_completed).length})
+                  ✅ הושלמו ({completedBlocks.length})
                 </h3>
                 <div className="space-y-2 opacity-60">
-                  {selectedDateTasks.filter(t => t.is_completed).map(task => (
+                  {completedBlocks.map((block, index) => (
                     <DailyTaskCard 
-                      key={task.id} 
-                      task={task} 
-                      onEdit={() => handleEditTask(task)}
+                      key={block.id || `completed-${index}`} 
+                      task={{
+                        id: block.taskId || block.id,
+                        title: block.title,
+                        estimated_duration: block.duration,
+                        time_spent: block.timeSpent || 0,
+                        is_completed: true,
+                        task_type: block.taskType,
+                        due_time: block.startTime,
+                        startTime: block.startTime,
+                        endTime: block.endTime
+                      }} 
+                      onEdit={() => handleEditTask(block)}
                       onUpdate={loadTasks}
+                      showTime={true}
                     />
                   ))}
                 </div>
