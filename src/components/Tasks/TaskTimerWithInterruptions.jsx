@@ -21,7 +21,7 @@ const INTERRUPTION_TYPES = {
  * טיימר עם תמיכה בהפרעות
  * הזמן של ההפרעות נספר בנפרד ולא מתווסף לזמן המשימה
  */
-function TaskTimerWithInterruptions({ task, onUpdate, onComplete }) {
+function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }) {
   const { updateTaskTime, tasks } = useTasks();
   const { user } = useAuth();
 
@@ -137,6 +137,12 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete }) {
           const now = new Date();
           const elapsed = Math.floor((now - startTime) / 1000) - totalInterruptionSeconds;
           setElapsedSeconds(Math.max(0, elapsed));
+          
+          // עדכון הקומפוננט האב כל דקה
+          const newTotalMinutes = timeSpent + Math.floor(Math.max(0, elapsed) / 60);
+          if (onTimeUpdate) {
+            onTimeUpdate(newTotalMinutes, true);
+          }
         }
       }, 1000);
     } else {
@@ -144,11 +150,15 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete }) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+      // עדכון שהטיימר עצר
+      if (onTimeUpdate && !isRunning) {
+        onTimeUpdate(totalSpent, false);
+      }
     }
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [isRunning, isInterrupted, startTime, totalInterruptionSeconds]);
+  }, [isRunning, isInterrupted, startTime, totalInterruptionSeconds, timeSpent, totalSpent, onTimeUpdate]);
 
   // טיימר הפרעה
   useEffect(() => {

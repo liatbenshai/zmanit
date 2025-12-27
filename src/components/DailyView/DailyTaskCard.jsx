@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import toast from 'react-hot-toast';
@@ -12,9 +12,10 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   const { toggleComplete, removeTask, tasks } = useTasks();
   const [showTimer, setShowTimer] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [liveSpent, setLiveSpent] = useState(task.time_spent || 0);
+  const [isTimerRunning, setIsTimerRunning] = useState(false);
 
   // שימוש בנתוני הבלוק שנשלחו, לא במשימה המקורית
-  // task כאן הוא הבלוק מה-smartScheduler עם duration של 45 דק'
   const currentTask = task;
   
   // קבלת המשימה המקורית רק לצורך פעולות (toggle, delete)
@@ -25,6 +26,28 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
 
   // בדיקה אם זה בלוק מפוצל (יש blockIndex)
   const isBlock = currentTask.blockIndex !== undefined && currentTask.totalBlocks > 1;
+
+  // עדכון liveSpent כשה-task משתנה מבחוץ
+  useEffect(() => {
+    setLiveSpent(task.time_spent || 0);
+  }, [task.time_spent]);
+
+  // טיימר מקומי לעדכון ויזואלי בזמן אמת
+  useEffect(() => {
+    let interval;
+    if (isTimerRunning) {
+      interval = setInterval(() => {
+        setLiveSpent(prev => prev + 1);
+      }, 60000); // עדכון כל דקה
+    }
+    return () => clearInterval(interval);
+  }, [isTimerRunning]);
+
+  // callback לקבלת עדכונים מהטיימר
+  const handleTimerUpdate = useCallback((newSpent, running) => {
+    setLiveSpent(newSpent);
+    setIsTimerRunning(running);
+  }, []);
 
   // סימון כהושלם
   const handleToggleComplete = async (e) => {
@@ -52,9 +75,9 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
     }
   };
 
-  // חישוב התקדמות - לפי זמן הבלוק
+  // חישוב התקדמות - לפי זמן הבלוק עם עדכון בזמן אמת
   const estimated = currentTask.estimated_duration || 0;
-  const spent = currentTask.time_spent || 0;
+  const spent = liveSpent;
   const remaining = Math.max(0, estimated - spent);
   const progress = estimated > 0 ? Math.min(100, Math.round((spent / estimated) * 100)) : 0;
   const isOverTime = spent > estimated && estimated > 0;
@@ -132,35 +155,55 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
             )}
           </div>
 
-          {/* שורה שנייה: זמנים */}
-          {!currentTask.is_completed && (
-            <div className="mt-2 space-y-2">
-              {/* סרגל התקדמות */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                  <div
-                    className={`h-full transition-all duration-500 ${
-                      isOverTime ? 'bg-red-500' :
-                      progress >= 80 ? 'bg-orange-500' :
-                      progress >= 50 ? 'bg-yellow-500' :
-                      'bg-green-500'
-                    }`}
-                    style={{ width: `${Math.min(100, progress)}%` }}
-                  />
-                </div>
-                <span className={`text-sm font-medium ${
-                  isOverTime ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'
-                }`}>
-                  {isOverTime 
-                    ? `חריגה: +${formatMinutes(spent - estimated)}`
-                    : `נותרו ${formatMinutes(remaining)}`
-                  }
-                </span>
+          {/* בר התקדמות תמיד מוצג */}
+          {!currentTask.is_completed && estimated > 0 && (
+            <div className="mt-2 flex items-center gap-3">
+              {/* אייקון שעון חול עם אנימציה */}
+              <div className={`text-lg transition-transform duration-500 ${
+                isTimerRunning ? 'animate-spin' : ''
+              }`} style={{ animationDuration: '3s' }}>
+                {isTimerRunning ? '⏳' : progress === 0 ? '⏳' : progress < 100 ? '⌛' : '✅'}
               </div>
+              
+              {/* סרגל התקדמות */}
+              <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
+                <motion.div
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(100, progress)}%` }}
+                  transition={{ duration: 0.5, ease: "easeOut" }}
+                  className={`h-full rounded-full ${
+                    isOverTime ? 'bg-red-500' :
+                    progress >= 80 ? 'bg-orange-500' :
+                    progress >= 50 ? 'bg-yellow-500' :
+                    progress > 0 ? 'bg-blue-500' :
+                    'bg-gray-300'
+                  }`}
+                />
+                {/* פולס כשרץ */}
+                {isTimerRunning && (
+                  <div className="absolute inset-0 bg-white/30 animate-pulse rounded-full" />
+                )}
+              </div>
+              
+              {/* טקסט התקדמות */}
+              <span className={`text-sm font-medium whitespace-nowrap ${
+                isOverTime ? 'text-red-600 dark:text-red-400' : 
+                isTimerRunning ? 'text-green-600 dark:text-green-400' :
+                progress > 0 ? 'text-blue-600 dark:text-blue-400' :
+                'text-gray-500 dark:text-gray-400'
+              }`}>
+                {spent > 0 && `${formatMinutes(spent)} / `}{formatMinutes(estimated)}
+                {isTimerRunning && ' 🔴'}
+              </span>
+            </div>
+          )}
 
+          {/* פרטים נוספים כשפתוח */}
+          {!currentTask.is_completed && showTimer && (
+            <div className="mt-2 space-y-2">
               {/* אזהרה אם עבר את הזמן */}
               {isOverTime && (
-                <div className="text-sm text-red-600 dark:text-red-400">
+                <div className="text-sm text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
                   ⚠️ עברת את הזמן המתוכנן ב-{formatMinutes(spent - estimated)}
                 </div>
               )}
@@ -242,6 +285,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
             task={currentTask}
             onUpdate={onUpdate}
             onComplete={handleToggleComplete}
+            onTimeUpdate={handleTimerUpdate}
           />
         </div>
       )}
