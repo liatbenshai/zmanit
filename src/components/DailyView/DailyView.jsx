@@ -5,7 +5,6 @@ import { useAuth } from '../../hooks/useAuth';
 import { smartScheduleWeek } from '../../utils/smartScheduler';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
-import WeeklyCalendarView from './WeeklyCalendarView';
 import DiaryView from './DiaryView';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
@@ -338,16 +337,6 @@ function DailyView() {
             >
               📅 יומן שעות
             </button>
-            <button
-              onClick={() => setViewMode('week')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
-                viewMode === 'week' 
-                  ? 'bg-blue-500 text-white' 
-                  : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-              }`}
-            >
-              📆 שבוע
-            </button>
           </div>
           
           {!isToday(selectedDate) && (
@@ -360,11 +349,12 @@ function DailyView() {
           )}
         </div>
 
-        {/* ניווט בין ימים */}
+        {/* ניווט בין ימים - חיצים מתוקנים ל-RTL */}
         <div className="flex items-center justify-between">
           <button
-            onClick={goToPreviousDay}
+            onClick={goToNextDay}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-2xl"
+            title="היום הבא"
           >
             ◄
           </button>
@@ -384,8 +374,9 @@ function DailyView() {
           </div>
           
           <button
-            onClick={goToNextDay}
+            onClick={goToPreviousDay}
             className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-2xl"
+            title="היום הקודם"
           >
             ►
           </button>
@@ -396,26 +387,7 @@ function DailyView() {
         </p>
       </motion.div>
 
-      {/* תצוגה שבועית - כיומן */}
-      {viewMode === 'week' && (
-        <motion.div
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          className="card p-4 mb-6"
-        >
-          <WeeklyCalendarView
-            tasks={tasks}
-            selectedDate={selectedDate}
-            onSelectDate={(day) => {
-              setSelectedDate(day);
-              setViewMode('day');
-            }}
-            onEditTask={handleEditTask}
-          />
-        </motion.div>
-      )}
-
-      {/* תצוגת יומן שעות - עם גרירה */}
+      {/* תצוגת יומן שעות */}
       {viewMode === 'diary' && (
         <DiaryView
           date={selectedDate}
