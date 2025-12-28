@@ -253,7 +253,7 @@ function DailyView() {
     };
   }, [weekPlan, selectedDate]);
 
-  // חישוב זמנים מעודכן - רק משימות עתידיות נספרות כמתוכננות
+  // חישוב זמנים מעודכן - כל המשימות שלא הושלמו נספרות
   const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;
   
   const timeStats = useMemo(() => {
@@ -271,12 +271,12 @@ function DailyView() {
       .filter(b => b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
-    // רק משימות עתידיות נספרות כמתוכננות
-    const plannedMinutes = blocks
-      .filter(b => !b.isCompleted && !blockHasPassed(b))
+    // כל המשימות שלא הושלמו - כולל באיחור - זה עבודה שצריך לעשות!
+    const pendingMinutes = blocks
+      .filter(b => !b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
-    // משימות באיחור
+    // משימות באיחור (לסטטיסטיקה)
     const overdueMinutes = blocks
       .filter(b => !b.isCompleted && blockHasPassed(b))
       .reduce((sum, b) => sum + (b.duration || 0), 0);
@@ -285,17 +285,25 @@ function DailyView() {
       .filter(b => !b.isCompleted && b.timeSpent > 0)
       .reduce((sum, b) => sum + (b.timeSpent || 0), 0);
     
-    const remainingWorkMinutes = WORK_HOURS.totalMinutes - completedMinutes - inProgressMinutes;
+    // זמן שנשאר = מעכשיו עד סוף היום (16:00) פחות עבודה שצריך לעשות
+    const endOfDayMinutes = WORK_HOURS.end * 60; // 16:00 = 960 דקות
+    const minutesLeftInDay = isViewingToday 
+      ? Math.max(0, endOfDayMinutes - currentTime.minutes)
+      : WORK_HOURS.totalMinutes;
+    
+    // זמן פנוי = זמן שנשאר ביום - משימות שצריך לעשות
+    const freeMinutes = Math.max(0, minutesLeftInDay - pendingMinutes + inProgressMinutes);
     
     return {
       completed: completedMinutes,
-      planned: plannedMinutes,
+      pending: pendingMinutes, // כל מה שצריך לעשות
       overdue: overdueMinutes,
       inProgress: inProgressMinutes,
-      remaining: Math.max(0, remainingWorkMinutes),
+      remaining: freeMinutes, // זמן פנוי באמת
+      minutesLeftInDay: minutesLeftInDay,
       total: WORK_HOURS.totalMinutes,
-      usedPercent: Math.round(((completedMinutes + inProgressMinutes) / WORK_HOURS.totalMinutes) * 100),
-      canFitAll: plannedMinutes <= remainingWorkMinutes
+      usedPercent: Math.round((completedMinutes / WORK_HOURS.totalMinutes) * 100),
+      canFitAll: pendingMinutes <= minutesLeftInDay
     };
   }, [selectedDayData, isViewingToday, currentTime.minutes]);
 
@@ -339,10 +347,10 @@ function DailyView() {
     );
   }
 
-  // === סינון לפי זמן ===
-  // בלוקים שעברו ולא הושלמו = "באיחור"
-  // בלוקים שעברו והושלמו = לא מוצגים (כבר בוצעו)
-  // בלוקים עתידיים = מוצגים רגיל
+  // === סינון וחישוב מחדש של זמנים ===
+  // בלוקים שעברו ולא הושלמו = "באיחור" - צריך לתזמן מחדש מעכשיו
+  // בלוקים שעברו והושלמו = מוצגים כ"הושלמו"
+  // בלוקים עתידיים = נדחים אם יש איחורים
   
   // פונקציה לבדיקה אם בלוק עבר (משתמשת ב-currentTime מה-state)
   const isBlockPast = (block) => {
@@ -354,23 +362,53 @@ function DailyView() {
     return blockEndMinutes < currentTime.minutes;
   };
   
+  // פונקציה להמרת דקות לפורמט שעה
+  const minutesToTime = (totalMinutes) => {
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  };
+  
   // הפרדת בלוקים
   const allBlocks = selectedDayData.blocks || [];
   
-  // בלוקים פעילים: לא הושלמו + (עתידיים או באיחור)
-  const activeBlocks = allBlocks.filter(b => {
-    if (b.isCompleted) return false;
-    return true; // כל מה שלא הושלם מוצג (כולל איחורים)
-  });
-  
-  // בלוקים שהושלמו
+  // בלוקים שהושלמו - נשארים עם הזמנים המקוריים
   const completedBlocks = allBlocks.filter(b => b.isCompleted);
   
-  // בלוקים באיחור (עברו אבל לא הושלמו) - לסימון מיוחד
-  const overdueBlocks = activeBlocks.filter(b => isBlockPast(b));
+  // בלוקים פעילים (לא הושלמו)
+  const activeBlocks = allBlocks.filter(b => !b.isCompleted);
   
-  // בלוקים עתידיים (לא עברו ולא הושלמו)
-  const upcomingBlocks = activeBlocks.filter(b => !isBlockPast(b));
+  // === חישוב זמנים מחדש מעכשיו ===
+  // כל המשימות הפעילות מתוזמנות מחדש מהשעה הנוכחית
+  let nextStartMinutes = isViewingToday ? currentTime.minutes : WORK_HOURS.start * 60;
+  
+  const rescheduledBlocks = activeBlocks.map(block => {
+    const duration = block.duration || 30;
+    const startMinutes = nextStartMinutes;
+    const endMinutes = startMinutes + duration;
+    
+    // האם הבלוק המקורי היה באיחור?
+    const wasOverdue = isBlockPast(block);
+    
+    // עדכון לבלוק הבא
+    nextStartMinutes = endMinutes + 5; // 5 דקות הפסקה
+    
+    return {
+      ...block,
+      originalStartTime: block.startTime,
+      originalEndTime: block.endTime,
+      startTime: minutesToTime(startMinutes),
+      endTime: minutesToTime(endMinutes),
+      isOverdue: wasOverdue,
+      isRescheduled: wasOverdue // סימון שהזמן השתנה
+    };
+  });
+  
+  // בלוקים באיחור (היו באיחור לפי הזמן המקורי)
+  const overdueBlocks = rescheduledBlocks.filter(b => b.isOverdue);
+  
+  // בלוקים עתידיים (לא היו באיחור במקור)
+  const upcomingBlocks = rescheduledBlocks.filter(b => !b.isOverdue);
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -443,42 +481,47 @@ function DailyView() {
           <div className="flex items-center gap-2">
             <span className="text-2xl">⏱️</span>
             <span className="font-medium text-gray-900 dark:text-white">
-              {isToday(selectedDate) ? 'נשאר היום' : 'זמן מתוכנן'}: {formatMinutes(timeStats.remaining)}
+              {isToday(selectedDate) ? 'זמן פנוי' : 'זמן מתוכנן'}: {formatMinutes(timeStats.remaining)}
             </span>
           </div>
           <span className="text-sm text-gray-500 dark:text-gray-400">
-            {timeStats.usedPercent}% נוצל
+            {isViewingToday && `נותרו ${formatMinutes(timeStats.minutesLeftInDay)} עד סוף היום`}
           </span>
         </div>
         
         {/* סרגל התקדמות */}
         <div className="w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full flex">
-            {/* הושלם */}
+            {/* הושלם - ירוק */}
             <div 
               className="bg-green-500 transition-all duration-500"
               style={{ width: `${(timeStats.completed / timeStats.total) * 100}%` }}
               title={`הושלם: ${formatMinutes(timeStats.completed)}`}
             />
-            {/* בעבודה */}
+            {/* ממתין לביצוע - כתום */}
             <div 
-              className="bg-blue-500 transition-all duration-500"
-              style={{ width: `${(timeStats.inProgress / timeStats.total) * 100}%` }}
-              title={`בעבודה: ${formatMinutes(timeStats.inProgress)}`}
+              className="bg-orange-500 transition-all duration-500"
+              style={{ width: `${(timeStats.pending / timeStats.total) * 100}%` }}
+              title={`ממתין: ${formatMinutes(timeStats.pending)}`}
             />
           </div>
         </div>
         
         {/* מקרא */}
-        <div className="flex items-center gap-4 mt-2 text-xs text-gray-600 dark:text-gray-400">
+        <div className="flex items-center gap-4 mt-2 text-xs text-gray-600 dark:text-gray-400 flex-wrap">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-green-500 rounded"></div>
             <span>הושלם ({formatMinutes(timeStats.completed)})</span>
           </div>
           <div className="flex items-center gap-1">
-            <div className="w-3 h-3 bg-blue-500 rounded"></div>
-            <span>בעבודה ({formatMinutes(timeStats.inProgress)})</span>
+            <div className="w-3 h-3 bg-orange-500 rounded"></div>
+            <span>ממתין ({formatMinutes(timeStats.pending)})</span>
           </div>
+          {timeStats.overdue > 0 && (
+            <div className="flex items-center gap-1 text-red-600">
+              <span>🔴 באיחור: {formatMinutes(timeStats.overdue)}</span>
+            </div>
+          )}
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-gray-300 dark:bg-gray-600 rounded"></div>
             <span>פנוי ({formatMinutes(timeStats.remaining)})</span>
@@ -486,9 +529,9 @@ function DailyView() {
         </div>
 
         {/* אזהרה אם לא יספיק */}
-        {!timeStats.canFitAll && timeStats.planned > 0 && (
-          <div className="mt-3 p-2 bg-orange-100 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400 rounded-lg text-sm">
-            ⚠️ המשימות המתוכננות ({formatMinutes(timeStats.planned)}) לא יכנסו לזמן שנשאר ({formatMinutes(timeStats.remaining)})
+        {!timeStats.canFitAll && timeStats.pending > 0 && (
+          <div className="mt-3 p-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">
+            ⚠️ לא יספיק! צריך {formatMinutes(timeStats.pending)} אבל נשארו רק {formatMinutes(timeStats.minutesLeftInDay)} עד 16:00
           </div>
         )}
       </motion.div>
@@ -524,11 +567,11 @@ function DailyView() {
           </div>
         ) : (
           <>
-            {/* משימות באיחור - בלוקים שהזמן שלהם עבר ולא הושלמו */}
+            {/* משימות באיחור - עם זמנים מחושבים מחדש */}
             {overdueBlocks.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
-                  🔴 באיחור ({overdueBlocks.length})
+                  🔴 באיחור ({overdueBlocks.length}) - זמנים מעודכנים מעכשיו
                 </h3>
                 <div className="space-y-2 border-r-4 border-red-500 pr-2">
                   {overdueBlocks.map((block, index) => (
@@ -547,7 +590,10 @@ function DailyView() {
                         totalBlocks: block.totalBlocks,
                         startTime: block.startTime,
                         endTime: block.endTime,
-                        isOverdue: true
+                        originalStartTime: block.originalStartTime,
+                        originalEndTime: block.originalEndTime,
+                        isOverdue: true,
+                        isRescheduled: block.isRescheduled
                       }} 
                       onEdit={() => handleEditTask(block)}
                       onUpdate={loadTasks}
@@ -558,7 +604,7 @@ function DailyView() {
               </div>
             )}
 
-            {/* משימות עתידיות - בלוקים שעוד לא הגיע הזמן שלהם */}
+            {/* משימות עתידיות - עם זמנים מעודכנים */}
             {upcomingBlocks.length > 0 && (
               <div className="mb-4">
                 {overdueBlocks.length > 0 && (
@@ -582,7 +628,10 @@ function DailyView() {
                         blockIndex: block.blockIndex,
                         totalBlocks: block.totalBlocks,
                         startTime: block.startTime,
-                        endTime: block.endTime
+                        endTime: block.endTime,
+                        originalStartTime: block.originalStartTime,
+                        originalEndTime: block.originalEndTime,
+                        isRescheduled: block.isRescheduled
                       }} 
                       onEdit={() => handleEditTask(block)}
                       onUpdate={loadTasks}
