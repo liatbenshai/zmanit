@@ -415,7 +415,11 @@ function scheduleTask(task, days, taskProgress, config) {
   if (!progress || progress.remaining <= 0) return;
   
   const isMorningTask = isMorningTaskType(task, config);
-  const totalBlocks = Math.ceil(progress.total / config.blockDuration);
+  
+  // 🆕 אם זו משימה שכבר פוצלה (יש לה parent_task_id) - לא לפצל שוב!
+  // היא כבר interval בודד, אז totalBlocks = 1
+  const isAlreadySplit = task.parent_task_id != null;
+  const totalBlocks = isAlreadySplit ? 1 : Math.ceil(progress.total / config.blockDuration);
   
   // עובר על כל הימים - ממלא כל יום למקסימום לפני מעבר להבא
   for (const day of days) {
@@ -453,14 +457,18 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
   // מציאת סלוטים פנויים בחלון
   const freeSlots = findFreeSlots(day.blocks, window.start, window.end, config);
   
+  // 🆕 אם זו משימה שכבר פוצלה (interval) - לשבץ את כולה כבלוק אחד
+  const isAlreadySplit = task.parent_task_id != null;
+  const effectiveBlockDuration = isAlreadySplit ? progress.remaining : config.blockDuration;
+  
   for (const slot of freeSlots) {
     if (progress.remaining <= 0) break;
     
     let currentStart = slot.start;
     
     // שיבוץ בלוקים בסלוט
-    while (progress.remaining > 0 && currentStart + config.blockDuration <= slot.end) {
-      const blockDuration = Math.min(progress.remaining, config.blockDuration);
+    while (progress.remaining > 0 && currentStart + Math.min(progress.remaining, effectiveBlockDuration) <= slot.end) {
+      const blockDuration = Math.min(progress.remaining, effectiveBlockDuration);
       const blockEnd = currentStart + blockDuration;
       
       const blockIndex = progress.blocks.length + 1;
