@@ -7,6 +7,7 @@ import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
+import toast from 'react-hot-toast';
 
 /**
  * סוגי משימות מוגדרים - כולם לפי זמן
@@ -528,10 +529,30 @@ function DailyView() {
           </div>
         </div>
 
-        {/* אזהרה אם לא יספיק */}
+        {/* אזהרה אם לא יספיק + הצעות */}
         {!timeStats.canFitAll && timeStats.pending > 0 && (
-          <div className="mt-3 p-2 bg-red-100 dark:bg-red-900/20 text-red-700 dark:text-red-400 rounded-lg text-sm">
-            ⚠️ לא יספיק! צריך {formatMinutes(timeStats.pending)} אבל נשארו רק {formatMinutes(timeStats.minutesLeftInDay)} עד 16:00
+          <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
+            <div className="text-red-700 dark:text-red-400 text-sm font-medium mb-2">
+              ⚠️ לא יספיק! צריך {formatMinutes(timeStats.pending)} אבל נשארו רק {formatMinutes(timeStats.minutesLeftInDay)} עד 16:00
+            </div>
+            
+            {/* הצעות לפתרון */}
+            <div className="text-xs text-red-600 dark:text-red-300 space-y-1">
+              <p className="font-medium">💡 הצעות:</p>
+              <ul className="list-disc list-inside space-y-1 mr-2">
+                <li>העבירי {formatMinutes(timeStats.pending - timeStats.minutesLeftInDay)} למחר</li>
+                <li>האם יש משימה שאפשר לקצר או לדחות?</li>
+                <li>שקלי להאריך את יום העבודה ב-{formatMinutes(Math.min(60, timeStats.pending - timeStats.minutesLeftInDay))}</li>
+              </ul>
+            </div>
+            
+            {/* כפתור להעברה למחר */}
+            <button
+              onClick={() => toast('🚧 פיצ\'ר בפיתוח - בקרוב תוכלי להעביר משימות בלחיצה!')}
+              className="mt-2 w-full py-1.5 text-xs bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-700 transition-colors"
+            >
+              📅 העבר משימות באיחור למחר
+            </button>
           </div>
         )}
       </motion.div>

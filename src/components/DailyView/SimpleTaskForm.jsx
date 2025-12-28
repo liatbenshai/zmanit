@@ -25,10 +25,10 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     title: '',
     taskType: 'transcription',
     inputValue: '', // משך הקלטה / עמודים / דקות ישירות
-    dueDate: '',
-    dueTime: '',
+    startDate: '', // תאריך התחלה - מתי אפשר להתחיל
+    dueDate: '',   // תאריך יעד - דדליין
     description: '',
-    priority: 'normal'
+    priority: 'normal' // ברירת מחדל: רגיל (לא דחוף!)
   });
 
   const [loading, setLoading] = useState(false);
@@ -61,8 +61,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         title: task.title || '',
         taskType: task.task_type || 'transcription',
         inputValue: task.recording_duration || task.page_count || task.estimated_duration || '',
+        startDate: task.start_date || '',
         dueDate: task.due_date || '',
-        dueTime: task.due_time || '',
         description: task.description || '',
         priority: task.priority || 'normal'
       });
@@ -110,8 +110,9 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         title: formData.title.trim(),
         task_type: formData.taskType,
         estimated_duration: calculatedDuration,
-        due_date: formData.dueDate || null,
-        due_time: formData.dueTime || null,
+        start_date: formData.startDate || null, // תאריך התחלה
+        due_date: formData.dueDate || null,     // תאריך יעד
+        due_time: null, // השעה מחושבת אוטומטית
         description: formData.description || null,
         priority: formData.priority,
         // שמירת הקלט המקורי ללמידה עתידית
@@ -267,23 +268,30 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         </div>
       </div>
 
-      {/* דדליין */}
+      {/* תאריכים */}
       <div className="grid grid-cols-2 gap-3">
         <Input
-          label="דדליין (אופציונלי)"
+          label="📅 מתי אפשר להתחיל?"
+          type="date"
+          name="startDate"
+          value={formData.startDate}
+          onChange={handleChange}
+          min={new Date().toISOString().split('T')[0]}
+        />
+        <Input
+          label="🎯 תאריך יעד (דדליין)"
           type="date"
           name="dueDate"
           value={formData.dueDate}
           onChange={handleChange}
-        />
-        <Input
-          label="שעה (אופציונלי)"
-          type="time"
-          name="dueTime"
-          value={formData.dueTime}
-          onChange={handleChange}
+          min={formData.startDate || new Date().toISOString().split('T')[0]}
         />
       </div>
+      
+      {/* הסבר */}
+      <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
+        💡 השעות משובצות אוטומטית לפי העומס היומי
+      </p>
 
       {/* הערות */}
       <div>

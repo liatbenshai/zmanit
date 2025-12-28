@@ -90,14 +90,24 @@ export async function createTaskWithIntervals(task) {
   // חישוב זמנים לכל אינטרוול
   const intervals = [];
   const now = new Date();
+  const todayISO = now.toISOString().split('T')[0];
   
-  // אם יש שעה מוגדרת - משתמשים בה, אחרת משתמשים בשעה הנוכחית
+  // תאריך התחלה - אם יש start_date משתמשים בו, אחרת היום
+  let currentDate = task.start_date || task.due_date || todayISO;
+  
+  // אם תאריך ההתחלה הוא בעתיד - מתחילים ב-9:00
+  // אם תאריך ההתחלה הוא היום - מתחילים מהשעה הנוכחית
   let currentTime;
-  if (task.due_time) {
+  if (currentDate > todayISO) {
+    // תאריך עתידי - מתחילים ב-9:00
+    currentTime = { hours: 9, minutes: 0 };
+    console.log('⏰ תאריך עתידי - מתחיל ב-09:00');
+  } else if (task.due_time) {
+    // יש שעה מוגדרת
     currentTime = parseTime(task.due_time);
     console.log('⏰ משתמש בשעה מוגדרת:', task.due_time);
   } else {
-    // שעה נוכחית + עיגול ל-5 דקות
+    // היום - מתחילים מהשעה הנוכחית + עיגול ל-5 דקות
     currentTime = { 
       hours: now.getHours(), 
       minutes: Math.ceil(now.getMinutes() / 5) * 5 
@@ -107,11 +117,17 @@ export async function createTaskWithIntervals(task) {
       currentTime.hours++;
       currentTime.minutes = 0;
     }
-    console.log('⏰ משתמש בשעה נוכחית:', formatTime(currentTime));
+    // אם כבר אחרי סוף היום, עוברים למחר
+    if (currentTime.hours >= 16) {
+      currentDate = getNextWorkDay(currentDate);
+      currentTime = { hours: 9, minutes: 0 };
+      console.log('⏰ כבר אחרי 16:00 - עובר למחר');
+    } else {
+      console.log('⏰ משתמש בשעה נוכחית:', formatTime(currentTime));
+    }
   }
   
-  let currentDate = task.due_date || now.toISOString().split('T')[0];
-  console.log('📅 תאריך:', currentDate);
+  console.log('📅 תאריך התחלה:', currentDate);
   
   for (let i = 0; i < numIntervals; i++) {
     // אורך האינטרוול הנוכחי

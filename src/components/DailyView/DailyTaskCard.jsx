@@ -6,6 +6,30 @@ import TaskTimerWithInterruptions from '../Tasks/TaskTimerWithInterruptions';
 import { TASK_TYPES } from './DailyView';
 
 /**
+ * בדיקה אם ID הוא UUID תקין
+ */
+function isValidUUID(id) {
+  if (!id || typeof id !== 'string') return false;
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(id);
+}
+
+/**
+ * בדיקה אם זה בלוק וירטואלי (לא משימה אמיתית ב-DB)
+ */
+function isVirtualBlock(id) {
+  return !isValidUUID(id);
+}
+
+/**
+ * קבלת מפתח localStorage להשלמת בלוק וירטואלי
+ */
+function getVirtualBlockKey(id, date) {
+  const dateStr = date || new Date().toISOString().split('T')[0];
+  return `virtual_block_completed_${id}_${dateStr}`;
+}
+
+/**
  * כרטיס משימה לתצוגה יומית
  */
 function DailyTaskCard({ task, onEdit, onUpdate }) {
@@ -14,9 +38,15 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   const [deleting, setDeleting] = useState(false);
   const [liveSpent, setLiveSpent] = useState(task.time_spent || 0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
+  
+  // מצב השלמה לבלוקים וירטואליים (נשמר ב-localStorage)
+  const [virtualCompleted, setVirtualCompleted] = useState(false);
 
   // שימוש בנתוני הבלוק שנשלחו, לא במשימה המקורית
   const currentTask = task;
+  
+  // בדיקה אם זה בלוק וירטואלי
+  const isVirtual = isVirtualBlock(currentTask.id);
   
   // קבלת המשימה המקורית רק לצורך פעולות (toggle, delete)
   const originalTask = tasks.find(t => t.id === task.id);
@@ -29,6 +59,15 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
 
   // מפתח localStorage לטיימר
   const timerStorageKey = currentTask.id ? `timer_v2_${currentTask.id}` : null;
+  
+  // טעינת מצב השלמה לבלוק וירטואלי מ-localStorage
+  useEffect(() => {
+    if (isVirtual) {
+      const key = getVirtualBlockKey(currentTask.id);
+      const saved = localStorage.getItem(key);
+      setVirtualCompleted(saved === 'true');
+    }
+  }, [isVirtual, currentTask.id]);
 
   // עדכון liveSpent כשה-task משתנה מבחוץ
   useEffect(() => {
@@ -81,9 +120,31 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   // סימון כהושלם - עם הודעה חכמה
   const handleToggleComplete = async (e) => {
     if (e) e.stopPropagation();
+    
+    // טיפול בבלוק וירטואלי (כמו אדמיניסטרציה)
+    if (isVirtual) {
+      const newCompleted = !virtualCompleted;
+      setVirtualCompleted(newCompleted);
+      
+      // שמירה ב-localStorage
+      const key = getVirtualBlockKey(currentTask.id);
+      localStorage.setItem(key, newCompleted.toString());
+      
+      if (newCompleted) {
+        toast.success('✅ הבלוק הושלם!');
+      } else {
+        toast.success('הבלוק הוחזר לפעיל');
+      }
+      
+      if (onUpdate) onUpdate();
+      return;
+    }
+    
+    // טיפול במשימה רגילה
     try {
       await toggleComplete(currentTask.id);
       
+      // בודקים את המצב לפני הלחיצה (currentTask.is_completed)
       if (currentTask.is_completed) {
         // החזרה לפעיל
         toast.success('המשימה הוחזרה לפעילה');
@@ -120,6 +181,13 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   // מחיקה
   const handleDelete = async (e) => {
     e.stopPropagation();
+    
+    // בלוק וירטואלי - אי אפשר למחוק
+    if (isVirtual) {
+      toast.error('לא ניתן למחוק בלוק קבוע');
+      return;
+    }
+    
     if (!confirm('למחוק את המשימה?')) return;
     setDeleting(true);
     try {
@@ -137,6 +205,9 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   const remaining = Math.max(0, estimated - spent);
   const progress = estimated > 0 ? Math.min(100, Math.round((spent / estimated) * 100)) : 0;
   const isOverTime = spent > estimated && estimated > 0;
+  
+  // האם המשימה הושלמה - משלב בלוקים וירטואליים ומשימות רגילות
+  const isCompleted = isVirtual ? virtualCompleted : currentTask.is_completed;
 
   // פורמט דקות
   const formatMinutes = (minutes) => {
@@ -156,7 +227,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
       layout
       className={`
         card p-4 transition-all duration-200
-        ${currentTask.is_completed ? 'opacity-60' : ''}
+        ${isCompleted ? 'opacity-60' : ''}
         ${deleting ? 'opacity-50 scale-95' : ''}
         ${isOverTime ? 'border-l-4 border-l-red-500' : ''}
       `}
@@ -168,13 +239,13 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
           className={`
             flex-shrink-0 w-6 h-6 rounded-full border-2 mt-0.5
             transition-all duration-200 flex items-center justify-center
-            ${currentTask.is_completed 
+            ${isCompleted 
               ? 'bg-green-500 border-green-500 text-white' 
               : 'border-gray-300 dark:border-gray-600 hover:border-green-500'
             }
           `}
         >
-          {currentTask.is_completed && (
+          {isCompleted && (
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
@@ -188,7 +259,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
             <span className="text-lg">{taskType.icon}</span>
             <h3 className={`
               font-medium text-gray-900 dark:text-white
-              ${currentTask.is_completed ? 'line-through text-gray-500' : ''}
+              ${isCompleted ? 'line-through text-gray-500' : ''}
             `}>
               {displayTitle}
             </h3>
@@ -212,7 +283,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
           </div>
 
           {/* בר התקדמות תמיד מוצג */}
-          {!currentTask.is_completed && estimated > 0 && (
+          {!isCompleted && estimated > 0 && (
             <div className="mt-2 flex items-center gap-3">
               {/* אייקון שעון חול עם אנימציה */}
               <div className={`text-lg transition-transform duration-500 ${
@@ -255,7 +326,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
           )}
 
           {/* פרטים נוספים כשפתוח */}
-          {!currentTask.is_completed && showTimer && (
+          {!isCompleted && showTimer && (
             <div className="mt-2 space-y-2">
               {/* אזהרה אם עבר את הזמן */}
               {isOverTime && (
@@ -274,7 +345,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
           )}
 
           {/* סיכום למשימה שהושלמה */}
-          {currentTask.is_completed && estimated > 0 && (
+          {isCompleted && estimated > 0 && (
             <div className="mt-2 text-sm">
               {spent > estimated ? (
                 <span className="text-orange-600 dark:text-orange-400">
@@ -292,7 +363,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
         {/* כפתורי פעולה */}
         <div className="flex items-center gap-1">
           {/* כפתור טיימר */}
-          {!currentTask.is_completed && (
+          {!isCompleted && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
@@ -335,7 +406,7 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
       </div>
 
       {/* טיימר עם הפרעות */}
-      {showTimer && !currentTask.is_completed && (
+      {showTimer && !isCompleted && (
         <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
           <TaskTimerWithInterruptions
             task={currentTask}
