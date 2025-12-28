@@ -114,6 +114,7 @@ function RescheduleModal({ isOpen, onClose, overdueBlocks, allBlocks, selectedDa
       return;
     }
     
+    console.log('🔄 Starting reschedule to date:', actualDate);
     setProcessing(true);
     
     try {
@@ -126,31 +127,43 @@ function RescheduleModal({ isOpen, onClose, overdueBlocks, allBlocks, selectedDa
           // אם זה משימה רגילה - לוקחים את ה-id
           const taskId = b.taskId || b.id;
           // מסננים IDs וירטואליים
-          if (taskId && !taskId.includes('block') && !taskId.includes('admin')) {
+          if (taskId && typeof taskId === 'string' && !taskId.includes('block') && !taskId.includes('admin')) {
             uniqueTaskIds.add(taskId);
           }
         });
       
+      console.log('📋 Tasks to reschedule:', [...uniqueTaskIds]);
+      
       // עדכון כל משימה
       let successCount = 0;
+      const errors = [];
+      
       for (const taskId of uniqueTaskIds) {
         try {
+          console.log(`📝 Rescheduling task ${taskId} to ${actualDate}`);
           await editTask(taskId, {
             due_date: actualDate,
             start_date: actualDate,
             due_time: null // השעה תחושב מחדש
           });
           successCount++;
+          console.log(`✅ Task ${taskId} rescheduled successfully`);
         } catch (err) {
-          console.error(`שגיאה בהעברת משימה ${taskId}:`, err);
+          console.error(`❌ Error rescheduling task ${taskId}:`, err);
+          errors.push({ taskId, error: err.message });
         }
       }
       
       if (successCount > 0) {
         toast.success(`🎉 ${successCount} משימות הועברו ל-${formatDate(actualDate)}`);
+        if (errors.length > 0) {
+          console.warn('⚠️ Some tasks failed to reschedule:', errors);
+          toast.error(`${errors.length} משימות נכשלו`);
+        }
         onClose();
       } else {
         toast.error('לא הצלחתי להעביר משימות');
+        console.error('❌ All tasks failed to reschedule:', errors);
       }
       
     } catch (err) {

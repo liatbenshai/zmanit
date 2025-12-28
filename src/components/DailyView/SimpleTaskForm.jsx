@@ -20,13 +20,13 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   const { addTask, editTask } = useTasks();
   const isEditing = !!task;
 
-  // סטייט הטופס
+  // סטייט הטופס - עם שימוש ב-defaultDate
   const [formData, setFormData] = useState({
     title: '',
     taskType: 'transcription',
     inputValue: '', // משך הקלטה / עמודים / דקות ישירות
-    startDate: '', // תאריך התחלה - מתי אפשר להתחיל
-    dueDate: '',   // תאריך יעד - דדליין
+    startDate: defaultDate || '', // תאריך התחלה - מתי אפשר להתחיל
+    dueDate: defaultDate || '',   // תאריך יעד - דדליין
     description: '',
     priority: 'normal' // ברירת מחדל: רגיל (לא דחוף!)
   });
@@ -120,12 +120,15 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null
       };
 
-      console.log('📝 Saving task:', {
+      console.log('📝 SimpleTaskForm - Saving task:', {
         taskType: formData.taskType,
         inputType: currentTaskType.inputType,
         inputValue: formData.inputValue,
         calculatedDuration,
-        taskData
+        startDate: taskData.start_date,
+        dueDate: taskData.due_date,
+        formData: { startDate: formData.startDate, dueDate: formData.dueDate },
+        isEditing
       });
 
       if (isEditing) {

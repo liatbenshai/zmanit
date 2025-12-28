@@ -195,22 +195,39 @@ export function TaskProvider({ children }) {
   };
 
   // עדכון משימה
+  // תמיכה גם ב-snake_case וגם ב-camelCase לשמות משתנים
   const editTask = async (taskId, updates) => {
     try {
+      // חישוב ערכים עם תמיכה בשני הפורמטים
+      const startDate = updates.startDate ?? updates.start_date ?? null;
+      const dueDate = updates.dueDate ?? updates.due_date ?? null;
+      const dueTime = updates.dueTime ?? updates.due_time ?? null;
+      const estimatedDuration = updates.estimatedDuration ?? updates.estimated_duration ?? null;
+      const reminderMinutes = updates.reminderMinutes ?? updates.reminder_minutes ?? null;
+      const taskType = updates.taskType ?? updates.task_type ?? null;
+      const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
+      
+      console.log('📝 editTask called with:', { 
+        taskId, 
+        updates,
+        resolved: { startDate, dueDate, dueTime }
+      });
+      
       const updatedTask = await updateTask(taskId, {
         title: updates.title,
         description: updates.description || null,
-        estimated_duration: updates.estimatedDuration ? parseInt(updates.estimatedDuration) : null,
+        estimated_duration: estimatedDuration ? parseInt(estimatedDuration) : null,
         quadrant: updates.quadrant,
-        start_date: updates.startDate || null,
-        due_date: updates.dueDate || null,
-        due_time: updates.dueTime || null,
-        reminder_minutes: updates.reminderMinutes ? parseInt(updates.reminderMinutes) : null,
-        task_type: updates.taskType || null,
-        task_parameter: updates.taskParameter ? parseInt(updates.taskParameter) : null,
+        start_date: startDate,
+        due_date: dueDate,
+        due_time: dueTime,
+        reminder_minutes: reminderMinutes ? parseInt(reminderMinutes) : null,
+        task_type: taskType,
+        task_parameter: taskParameter ? parseInt(taskParameter) : null,
         priority: updates.priority || 'normal'
       });
       
+      console.log('✅ Task updated:', updatedTask);
       setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
       return updatedTask;
     } catch (err) {
