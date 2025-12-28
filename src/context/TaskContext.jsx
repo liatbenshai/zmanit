@@ -15,7 +15,6 @@ import {
   uncompleteInterval,
   getTaskIntervals,
   getIntervalProgress,
-  isInterval,
   hasIntervals
 } from '../services/taskIntervals';
 import { useAuth } from '../hooks/useAuth';
@@ -125,6 +124,13 @@ export function TaskProvider({ children }) {
       }
       
       const duration = taskToCreate.estimated_duration || 0;
+      
+      console.log('⏱️ זמנים:', { 
+        duration, 
+        due_time: taskToCreate.due_time,
+        due_date: taskToCreate.due_date,
+        currentTime: new Date().toLocaleTimeString('he-IL')
+      });
       
       // אם המשימה ארוכה מ-45 דקות - פיצול אוטומטי
       if (duration > INTERVAL_DURATION) {
@@ -280,21 +286,38 @@ export function TaskProvider({ children }) {
    * - מסמנים אותה ישירות
    */
   const toggleComplete = async (taskId) => {
+    console.log('🔄 toggleComplete נקרא:', taskId);
+    
     const task = tasks.find(t => t.id === taskId);
-    if (!task) return;
+    if (!task) {
+      console.error('❌ לא נמצאה משימה:', taskId);
+      return;
+    }
+    
+    console.log('📋 משימה נמצאה:', { 
+      id: task.id, 
+      title: task.title, 
+      is_completed: task.is_completed,
+      parent_task_id: task.parent_task_id,
+      isInterval: !!task.parent_task_id
+    });
 
     try {
       const newCompleteStatus = !task.is_completed;
+      console.log('🎯 סטטוס חדש:', newCompleteStatus ? 'הושלם' : 'לא הושלם');
       
       // בדיקה אם זה אינטרוול (משימה עם הורה)
-      if (isInterval(task)) {
+      if (task.parent_task_id) {
+        console.log('📦 זה אינטרוול - קורא ל-completeInterval/uncompleteInterval');
+        
         if (newCompleteStatus) {
           // מסמנים כהושלם
           const { interval, parentCompleted, parentId } = await completeInterval(taskId);
+          console.log('✅ אינטרוול הושלם:', { interval, parentCompleted, parentId });
           
           // עדכון ה-state
           setTasks(prev => {
-            let updated = prev.map(t => t.id === taskId ? interval : t);
+            let updated = prev.map(t => t.id === taskId ? { ...t, is_completed: true, completed_at: new Date().toISOString() } : t);
             
             // אם ההורה הושלם - מעדכנים גם אותו
             if (parentCompleted && parentId) {
@@ -305,6 +328,7 @@ export function TaskProvider({ children }) {
               );
             }
             
+            console.log('📊 State עודכן:', updated.filter(t => t.id === taskId || t.id === parentId));
             return updated;
           });
           
@@ -316,9 +340,10 @@ export function TaskProvider({ children }) {
         } else {
           // מבטלים השלמה
           const { interval, parentUncompleted } = await uncompleteInterval(taskId);
+          console.log('↩️ השלמה בוטלה:', { interval, parentUncompleted });
           
           setTasks(prev => {
-            let updated = prev.map(t => t.id === taskId ? interval : t);
+            let updated = prev.map(t => t.id === taskId ? { ...t, is_completed: false, completed_at: null } : t);
             
             // אם ההורה בוטל
             if (parentUncompleted) {
@@ -337,12 +362,20 @@ export function TaskProvider({ children }) {
       }
       
       // משימה רגילה (לא אינטרוול)
+      console.log('📝 משימה רגילה - קורא ל-toggleTaskComplete');
       const updatedTask = await toggleTaskComplete(taskId, newCompleteStatus);
-      setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+      console.log('✅ משימה עודכנה:', updatedTask);
+      
+      setTasks(prev => {
+        const updated = prev.map(t => t.id === taskId ? updatedTask : t);
+        console.log('📊 State עודכן');
+        return updated;
+      });
+      
       return updatedTask;
       
     } catch (err) {
-      console.error('שגיאה בעדכון סטטוס:', err);
+      console.error('❌ שגיאה בעדכון סטטוס:', err);
       throw new Error('שגיאה בעדכון סטטוס');
     }
   };
@@ -365,7 +398,7 @@ export function TaskProvider({ children }) {
    * בדיקה אם משימה היא אינטרוול
    */
   const isTaskInterval = (task) => {
-    return isInterval(task);
+    return !!task?.parent_task_id;
   };
 
   /**

@@ -89,8 +89,29 @@ export async function createTaskWithIntervals(task) {
   
   // חישוב זמנים לכל אינטרוול
   const intervals = [];
-  let currentTime = task.due_time ? parseTime(task.due_time) : { hours: 9, minutes: 0 };
-  let currentDate = task.due_date || new Date().toISOString().split('T')[0];
+  const now = new Date();
+  
+  // אם יש שעה מוגדרת - משתמשים בה, אחרת משתמשים בשעה הנוכחית
+  let currentTime;
+  if (task.due_time) {
+    currentTime = parseTime(task.due_time);
+    console.log('⏰ משתמש בשעה מוגדרת:', task.due_time);
+  } else {
+    // שעה נוכחית + עיגול ל-5 דקות
+    currentTime = { 
+      hours: now.getHours(), 
+      minutes: Math.ceil(now.getMinutes() / 5) * 5 
+    };
+    // אם עברנו שעה - מתקנים
+    if (currentTime.minutes >= 60) {
+      currentTime.hours++;
+      currentTime.minutes = 0;
+    }
+    console.log('⏰ משתמש בשעה נוכחית:', formatTime(currentTime));
+  }
+  
+  let currentDate = task.due_date || now.toISOString().split('T')[0];
+  console.log('📅 תאריך:', currentDate);
   
   for (let i = 0; i < numIntervals; i++) {
     // אורך האינטרוול הנוכחי
