@@ -133,6 +133,13 @@ export function smartScheduleWeek(weekStart, allTasks) {
     return true;
   });
   
+  // 🔍 DEBUG: הצגת המשימות שמתקבלות
+  console.log('🔍 DEBUG - allTasks received:', allTasks.length);
+  console.log('🔍 DEBUG - pendingTasks after filter:', pendingTasks.length);
+  pendingTasks.forEach(t => {
+    console.log(`  📌 Task: "${t.title}" | id: ${t.id} | parent_task_id: ${t.parent_task_id || 'none'} | duration: ${t.estimated_duration}`);
+  });
+  
   // אם זה שבוע עתידי (לא השבוע הנוכחי), לא משבצים
   // המשימות ישובצו כשנגיע לשבוע הזה
   const isCurrentWeek = weekStartISO <= todayISO && todayISO <= weekEndISO;
@@ -416,20 +423,19 @@ function scheduleTask(task, days, taskProgress, config) {
   
   const isMorningTask = isMorningTaskType(task, config);
   
-  // 🆕 אם זו משימה שכבר פוצלה (יש לה parent_task_id) - לא לפצל שוב!
-  // היא כבר interval בודד, אז totalBlocks = 1
-  const isAlreadySplit = task.parent_task_id != null;
-  const totalBlocks = isAlreadySplit ? 1 : Math.ceil(progress.total / config.blockDuration);
+  // 🆕 לא מפצלים! כל משימה = בלוק אחד
+  // הפיצול האמיתי קורה ב-taskIntervals.js שיוצר תתי-משימות בדאטהבייס
+  const totalBlocks = 1;
   
   // עובר על כל הימים - ממלא כל יום למקסימום לפני מעבר להבא
   for (const day of days) {
     if (!day.isWorkDay) continue;
     if (progress.remaining <= 0) break;
     
-    // 🆕 בדיקת תאריך התחלה - לא לשבץ לפני start_date!
+    // בדיקת תאריך התחלה - לא לשבץ לפני start_date!
     if (task.start_date && day.date < task.start_date) {
       console.log(`📅 דילוג על ${day.date} - משימה "${task.title}" מתחילה רק ב-${task.start_date}`);
-      continue; // דילוג על ימים לפני תאריך ההתחלה
+      continue;
     }
     
     // שיבוץ בחלון המועדף
@@ -457,21 +463,18 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
   // מציאת סלוטים פנויים בחלון
   const freeSlots = findFreeSlots(day.blocks, window.start, window.end, config);
   
-  // 🆕 אם זו משימה שכבר פוצלה (interval) - לשבץ את כולה כבלוק אחד
-  const isAlreadySplit = task.parent_task_id != null;
-  const effectiveBlockDuration = isAlreadySplit ? progress.remaining : config.blockDuration;
-  
   for (const slot of freeSlots) {
     if (progress.remaining <= 0) break;
     
     let currentStart = slot.start;
     
-    // שיבוץ בלוקים בסלוט
-    while (progress.remaining > 0 && currentStart + Math.min(progress.remaining, effectiveBlockDuration) <= slot.end) {
-      const blockDuration = Math.min(progress.remaining, effectiveBlockDuration);
+    // 🆕 שיבוץ המשימה כולה כבלוק אחד (לא מפצלים!)
+    // בודקים אם יש מספיק מקום למשימה
+    if (progress.remaining > 0 && currentStart + progress.remaining <= slot.end) {
+      const blockDuration = progress.remaining; // כל המשימה
       const blockEnd = currentStart + blockDuration;
       
-      const blockIndex = progress.blocks.length + 1;
+      const blockIndex = 1; // תמיד בלוק אחד
       
       const block = {
         id: `${task.id}-block-${blockIndex}`,
@@ -479,18 +482,15 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
         task: task,
         type: task.task_type || 'other',
         taskType: task.task_type || 'other',
-        priority: task.priority || 'normal',  // העברת עדיפות מהמשימה!
-        // בדיקה אם המשימה כבר פוצלה (יש לה מספור) - לא מוסיפים שוב
-        title: (totalBlocks > 1 && !task.title.includes('/')) 
-          ? `${task.title} (${blockIndex}/${totalBlocks})` 
-          : task.title,
+        priority: task.priority || 'normal',
+        title: task.title, // השם כמו שהוא - כבר יש מספור מ-taskIntervals
         startMinute: currentStart,
         endMinute: blockEnd,
         startTime: minutesToTime(currentStart),
         endTime: minutesToTime(blockEnd),
         duration: blockDuration,
         blockIndex,
-        totalBlocks,
+        totalBlocks: 1,
         dayDate: day.date,
         isCompleted: task.is_completed || false,
         timeSpent: task.time_spent || 0
@@ -508,8 +508,6 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
       } else {
         day.afternoonMinutesUsed += blockDuration;
       }
-      
-      currentStart = blockEnd + config.breakDuration;
     }
   }
   
