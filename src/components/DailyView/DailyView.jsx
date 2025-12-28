@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
@@ -184,6 +184,28 @@ function DailyView() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  
+  // שעה נוכחית - מתעדכנת כל דקה
+  const [currentTime, setCurrentTime] = useState(() => {
+    const now = new Date();
+    return {
+      minutes: now.getHours() * 60 + now.getMinutes(),
+      dateISO: now.toISOString().split('T')[0]
+    };
+  });
+  
+  // עדכון השעה כל דקה
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      setCurrentTime({
+        minutes: now.getHours() * 60 + now.getMinutes(),
+        dateISO: now.toISOString().split('T')[0]
+      });
+    }, 60 * 1000); // כל דקה
+    
+    return () => clearInterval(interval);
+  }, []);
 
   // ניווט בין ימים
   const goToPreviousDay = () => {
@@ -231,16 +253,32 @@ function DailyView() {
     };
   }, [weekPlan, selectedDate]);
 
-  // חישוב זמנים מעודכן
+  // חישוב זמנים מעודכן - רק משימות עתידיות נספרות כמתוכננות
+  const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;
+  
   const timeStats = useMemo(() => {
     const blocks = selectedDayData.blocks || [];
+    
+    // פונקציה לבדיקה אם בלוק עבר
+    const blockHasPassed = (block) => {
+      if (!isViewingToday) return false;
+      if (!block.endTime) return false;
+      const [hour, min] = block.endTime.split(':').map(Number);
+      return (hour * 60 + (min || 0)) < currentTime.minutes;
+    };
     
     const completedMinutes = blocks
       .filter(b => b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
+    // רק משימות עתידיות נספרות כמתוכננות
     const plannedMinutes = blocks
-      .filter(b => !b.isCompleted)
+      .filter(b => !b.isCompleted && !blockHasPassed(b))
+      .reduce((sum, b) => sum + (b.duration || 0), 0);
+    
+    // משימות באיחור
+    const overdueMinutes = blocks
+      .filter(b => !b.isCompleted && blockHasPassed(b))
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
     const inProgressMinutes = blocks
@@ -252,13 +290,14 @@ function DailyView() {
     return {
       completed: completedMinutes,
       planned: plannedMinutes,
+      overdue: overdueMinutes,
       inProgress: inProgressMinutes,
       remaining: Math.max(0, remainingWorkMinutes),
       total: WORK_HOURS.totalMinutes,
       usedPercent: Math.round(((completedMinutes + inProgressMinutes) / WORK_HOURS.totalMinutes) * 100),
       canFitAll: plannedMinutes <= remainingWorkMinutes
     };
-  }, [selectedDayData]);
+  }, [selectedDayData, isViewingToday, currentTime.minutes]);
 
   // handlers
   const handleAddTask = () => {
@@ -300,9 +339,38 @@ function DailyView() {
     );
   }
 
-  // הפרדת בלוקים לפעילים ומושלמים
-  const activeBlocks = selectedDayData.blocks.filter(b => !b.isCompleted);
-  const completedBlocks = selectedDayData.blocks.filter(b => b.isCompleted);
+  // === סינון לפי זמן ===
+  // בלוקים שעברו ולא הושלמו = "באיחור"
+  // בלוקים שעברו והושלמו = לא מוצגים (כבר בוצעו)
+  // בלוקים עתידיים = מוצגים רגיל
+  
+  // פונקציה לבדיקה אם בלוק עבר (משתמשת ב-currentTime מה-state)
+  const isBlockPast = (block) => {
+    if (!isViewingToday) return false; // אם לא היום, הכל רלוונטי
+    if (!block.endTime) return false;
+    
+    const [hour, min] = block.endTime.split(':').map(Number);
+    const blockEndMinutes = hour * 60 + (min || 0);
+    return blockEndMinutes < currentTime.minutes;
+  };
+  
+  // הפרדת בלוקים
+  const allBlocks = selectedDayData.blocks || [];
+  
+  // בלוקים פעילים: לא הושלמו + (עתידיים או באיחור)
+  const activeBlocks = allBlocks.filter(b => {
+    if (b.isCompleted) return false;
+    return true; // כל מה שלא הושלם מוצג (כולל איחורים)
+  });
+  
+  // בלוקים שהושלמו
+  const completedBlocks = allBlocks.filter(b => b.isCompleted);
+  
+  // בלוקים באיחור (עברו אבל לא הושלמו) - לסימון מיוחד
+  const overdueBlocks = activeBlocks.filter(b => isBlockPast(b));
+  
+  // בלוקים עתידיים (לא עברו ולא הושלמו)
+  const upcomingBlocks = activeBlocks.filter(b => !isBlockPast(b));
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -444,7 +512,7 @@ function DailyView() {
         transition={{ delay: 0.3 }}
         className="space-y-3"
       >
-        {selectedDayData.blocks.length === 0 ? (
+        {allBlocks.length === 0 ? (
           <div className="card p-8 text-center">
             <span className="text-4xl mb-4 block">📝</span>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
@@ -456,30 +524,74 @@ function DailyView() {
           </div>
         ) : (
           <>
-            {/* משימות פעילות */}
-            {activeBlocks.map((block, index) => (
-              <DailyTaskCard 
-                key={block.id || `block-${index}`} 
-                task={{
-                  id: block.taskId || block.id,
-                  title: block.title,
-                  estimated_duration: block.duration,
-                  time_spent: block.timeSpent || 0,
-                  is_completed: block.isCompleted,
-                  task_type: block.taskType,
-                  due_time: block.startTime,
-                  priority: block.priority,
-                  // מידע על הבלוק
-                  blockIndex: block.blockIndex,
-                  totalBlocks: block.totalBlocks,
-                  startTime: block.startTime,
-                  endTime: block.endTime
-                }} 
-                onEdit={() => handleEditTask(block)}
-                onUpdate={loadTasks}
-                showTime={true}
-              />
-            ))}
+            {/* משימות באיחור - בלוקים שהזמן שלהם עבר ולא הושלמו */}
+            {overdueBlocks.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
+                  🔴 באיחור ({overdueBlocks.length})
+                </h3>
+                <div className="space-y-2 border-r-4 border-red-500 pr-2">
+                  {overdueBlocks.map((block, index) => (
+                    <DailyTaskCard 
+                      key={block.id || `overdue-${index}`} 
+                      task={{
+                        id: block.taskId || block.id,
+                        title: block.title,
+                        estimated_duration: block.duration,
+                        time_spent: block.timeSpent || 0,
+                        is_completed: block.isCompleted,
+                        task_type: block.taskType,
+                        due_time: block.startTime,
+                        priority: 'urgent',
+                        blockIndex: block.blockIndex,
+                        totalBlocks: block.totalBlocks,
+                        startTime: block.startTime,
+                        endTime: block.endTime,
+                        isOverdue: true
+                      }} 
+                      onEdit={() => handleEditTask(block)}
+                      onUpdate={loadTasks}
+                      showTime={true}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* משימות עתידיות - בלוקים שעוד לא הגיע הזמן שלהם */}
+            {upcomingBlocks.length > 0 && (
+              <div className="mb-4">
+                {overdueBlocks.length > 0 && (
+                  <h3 className="text-sm font-medium text-gray-600 dark:text-gray-400 mb-2">
+                    📋 ממתינות ({upcomingBlocks.length})
+                  </h3>
+                )}
+                <div className="space-y-2">
+                  {upcomingBlocks.map((block, index) => (
+                    <DailyTaskCard 
+                      key={block.id || `block-${index}`} 
+                      task={{
+                        id: block.taskId || block.id,
+                        title: block.title,
+                        estimated_duration: block.duration,
+                        time_spent: block.timeSpent || 0,
+                        is_completed: block.isCompleted,
+                        task_type: block.taskType,
+                        due_time: block.startTime,
+                        priority: block.priority,
+                        blockIndex: block.blockIndex,
+                        totalBlocks: block.totalBlocks,
+                        startTime: block.startTime,
+                        endTime: block.endTime
+                      }} 
+                      onEdit={() => handleEditTask(block)}
+                      onUpdate={loadTasks}
+                      showTime={true}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
             
             {/* משימות שהושלמו */}
             {completedBlocks.length > 0 && (

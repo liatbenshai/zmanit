@@ -129,8 +129,11 @@ export async function createTaskWithIntervals(task) {
     
     const intervalData = {
       user_id: task.user_id,
-      title: `${task.title} (${i + 1}/${numIntervals})`,
-      description: `אינטרוול ${i + 1} מתוך ${numIntervals}`,
+      // רק אם יש יותר מאינטרוול אחד - מוסיפים מספור (ורק אם אין כבר)
+      title: numIntervals > 1 && !task.title.includes('/')
+        ? `${task.title} (${i + 1}/${numIntervals})`
+        : task.title,
+      description: numIntervals > 1 ? `אינטרוול ${i + 1} מתוך ${numIntervals}` : (task.description || null),
       quadrant: task.quadrant || 1,
       start_date: task.start_date || null,
       due_date: currentDate,
