@@ -45,6 +45,7 @@ export async function createTaskWithIntervals(task) {
         estimated_duration: duration || null,
         task_type: task.task_type || 'other',
         task_parameter: task.task_parameter || null,
+        priority: task.priority || 'normal',
         is_project: false,
         parent_task_id: null,
         is_completed: false
@@ -78,6 +79,7 @@ export async function createTaskWithIntervals(task) {
       estimated_duration: duration,
       task_type: task.task_type || 'other',
       task_parameter: task.task_parameter || null,
+      priority: task.priority || 'normal',
       is_project: true,  // סימון כפרויקט כי יש לה ילדים
       parent_task_id: null,
       is_completed: false
@@ -158,6 +160,7 @@ export async function createTaskWithIntervals(task) {
       estimated_duration: intervalDuration,
       task_type: task.task_type || 'other',
       task_parameter: task.task_parameter || null,
+      priority: task.priority || 'normal',
       is_project: false,
       parent_task_id: parentTask.id,  // קישור להורה
       is_completed: false
