@@ -222,6 +222,9 @@ function filterTasksForDate(tasks, date) {
     // רק משימות פעילות
     if (task.is_completed) return false;
     
+    // לא מציגים משימות-הורה (הילדים שלהן יוצגו במקום)
+    if (task.is_project) return false;
+    
     // משימה עם תאריך התחלה או יעד שמתאים
     if (task.start_date === dateISO) return true;
     if (task.due_date === dateISO && !task.start_date) return true;

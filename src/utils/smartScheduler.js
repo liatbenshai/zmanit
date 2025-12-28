@@ -124,7 +124,14 @@ export function smartScheduleWeek(weekStart, allTasks) {
   }
   
   // שלב 3: סינון משימות
-  const pendingTasks = allTasks.filter(t => !t.is_completed);
+  // סינון משימות שהושלמו ומשימות-הורה (is_project) שיש להן ילדים
+  const pendingTasks = allTasks.filter(t => {
+    // לא מציגים משימות שהושלמו
+    if (t.is_completed) return false;
+    // לא מציגים משימות-הורה (הילדים שלהן יוצגו במקום)
+    if (t.is_project) return false;
+    return true;
+  });
   
   // אם זה שבוע עתידי (לא השבוע הנוכחי), לא משבצים
   // המשימות ישובצו כשנגיע לשבוע הזה
@@ -465,7 +472,10 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
         type: task.task_type || 'other',
         taskType: task.task_type || 'other',
         priority: task.priority || 'normal',  // העברת עדיפות מהמשימה!
-        title: totalBlocks > 1 ? `${task.title} (${blockIndex}/${totalBlocks})` : task.title,
+        // בדיקה אם המשימה כבר פוצלה (יש לה מספור) - לא מוסיפים שוב
+        title: (totalBlocks > 1 && !task.title.includes('/')) 
+          ? `${task.title} (${blockIndex}/${totalBlocks})` 
+          : task.title,
         startMinute: currentStart,
         endMinute: blockEnd,
         startTime: minutesToTime(currentStart),
