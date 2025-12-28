@@ -402,6 +402,12 @@ function scheduleTask(task, days, taskProgress, config) {
     if (!day.isWorkDay) continue;
     if (progress.remaining <= 0) break;
     
+    // 🆕 בדיקת תאריך התחלה - לא לשבץ לפני start_date!
+    if (task.start_date && day.date < task.start_date) {
+      console.log(`📅 דילוג על ${day.date} - משימה "${task.title}" מתחילה רק ב-${task.start_date}`);
+      continue; // דילוג על ימים לפני תאריך ההתחלה
+    }
+    
     // שיבוץ בחלון המועדף
     const preferredWindow = isMorningTask 
       ? { start: config.morningStart, end: config.morningEnd }
