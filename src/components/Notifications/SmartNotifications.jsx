@@ -1,7 +1,8 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { TASK_TYPES } from '../DailyView/DailyView';
+import { useNotifications } from '../../hooks/useNotifications';
 import toast from 'react-hot-toast';
 
 /**
@@ -17,27 +18,26 @@ const WORK_HOURS = {
  */
 function SmartNotifications({ onTaskClick }) {
   const { tasks } = useTasks();
+  const { permission, requestPermission, sendNotification, scheduleTasksNotifications } = useNotifications();
   const [dismissed, setDismissed] = useState(new Set());
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const notifiedTasksRef = useRef(new Set()); // מניעת התראות כפולות
 
   // בקשת הרשאה להתראות
-  useEffect(() => {
-    if ('Notification' in window) {
-      if (Notification.permission === 'granted') {
-        setNotificationsEnabled(true);
-      }
-    }
-  }, []);
-
-  const requestPermission = async () => {
-    if ('Notification' in window) {
-      const permission = await Notification.requestPermission();
-      setNotificationsEnabled(permission === 'granted');
-      if (permission === 'granted') {
-        toast.success('התראות הופעלו!');
-      }
+  const handleRequestPermission = async () => {
+    const granted = await requestPermission();
+    if (granted) {
+      toast.success('התראות הופעלו!');
+    } else {
+      toast.error('ההתראות לא אושרו');
     }
   };
+
+  // תזמון התראות למשימות כשהן נטענות
+  useEffect(() => {
+    if (permission === 'granted' && tasks.length > 0) {
+      scheduleTasksNotifications(tasks);
+    }
+  }, [tasks, permission, scheduleTasksNotifications]);
 
   // חישוב התראות
   const notifications = useMemo(() => {
@@ -154,24 +154,33 @@ function SmartNotifications({ onTaskClick }) {
     }
   };
 
-  // שליחת התראת מערכת
-  const sendSystemNotification = (title, body) => {
-    if (notificationsEnabled && document.hidden) {
-      new Notification(title, {
-        body,
-        icon: '/icon.svg',
-        tag: 'task-reminder'
-      });
-    }
-  };
-
-  // אפקט לשליחת התראות מערכת
+  // שליחת התראות מערכת למשימות קרובות
   useEffect(() => {
-    const upcomingAlerts = notifications.filter(n => n.type === 'upcoming');
+    if (permission !== 'granted') return;
+
+    const upcomingAlerts = notifications.filter(n => n.type === 'upcoming' || n.type === 'overdue');
+    
     upcomingAlerts.forEach(alert => {
-      sendSystemNotification(alert.title, alert.message);
+      // מניעת התראות כפולות
+      if (notifiedTasksRef.current.has(alert.id)) return;
+      notifiedTasksRef.current.add(alert.id);
+
+      // שליחת התראת מערכת
+      sendNotification(alert.title, {
+        body: alert.message,
+        tag: alert.id,
+        requireInteraction: alert.type === 'overdue'
+      });
     });
-  }, [notifications, notificationsEnabled]);
+
+    // ניקוי התראות ישנות מה-ref
+    const currentIds = new Set(upcomingAlerts.map(a => a.id));
+    notifiedTasksRef.current.forEach(id => {
+      if (!currentIds.has(id)) {
+        notifiedTasksRef.current.delete(id);
+      }
+    });
+  }, [notifications, permission, sendNotification]);
 
   if (notifications.length === 0) {
     return null;
@@ -186,9 +195,9 @@ function SmartNotifications({ onTaskClick }) {
           התראות ({notifications.length})
         </h3>
         
-        {!notificationsEnabled && 'Notification' in window && (
+        {permission !== 'granted' && (
           <button
-            onClick={requestPermission}
+            onClick={handleRequestPermission}
             className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
           >
             הפעל התראות מערכת
