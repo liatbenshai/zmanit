@@ -7,6 +7,7 @@ import toast from 'react-hot-toast';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Modal from '../components/UI/Modal';
+import NotificationSettings from '../components/Notifications/NotificationSettings';
 
 /**
  * דף הגדרות מקיף
@@ -37,9 +38,10 @@ function Settings() {
     }
   };
 
-  // טאבים
+  // טאבים - עם התראות!
   const tabs = [
     { id: 'work', label: 'עבודה', icon: '💼' },
+    { id: 'notifications', label: 'התראות', icon: '🔔' },
     { id: 'taskTypes', label: 'סוגי משימות', icon: '📋' },
     { id: 'profile', label: 'פרופיל', icon: '👤' },
     { id: 'appearance', label: 'תצוגה', icon: '🎨' },
@@ -78,6 +80,7 @@ function Settings() {
         {/* תוכן */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
           {activeTab === 'work' && <WorkSettings user={user} />}
+          {activeTab === 'notifications' && <NotificationSettings />}
           {activeTab === 'taskTypes' && <TaskTypesSettings user={user} />}
           {activeTab === 'profile' && <ProfileSettings user={user} loading={loading} setLoading={setLoading} />}
           {activeTab === 'appearance' && (
@@ -241,70 +244,71 @@ function TaskTypesSettings({ user }) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">סוגי משימות</h2>
-        <Button size="sm" onClick={() => setShowAddForm(true)}>+ הוסף סוג</Button>
+        <Button size="sm" onClick={() => setShowAddForm(true)}>
+          + הוסף סוג
+        </Button>
       </div>
-      
-      <p className="text-sm text-gray-500">
-        סוגי משימות מוגדרים מראש. ניתן להוסיף סוגים מותאמים אישית.
-      </p>
 
       {/* רשימת סוגים */}
-      <div className="space-y-2">
-        {allTypes.map((type) => (
-          <div
-            key={type.id}
+      <div className="grid gap-3">
+        {Object.entries(TASK_TYPES).map(([key, type]) => (
+          <div 
+            key={key}
             className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
           >
             <div className="flex items-center gap-3">
               <span className="text-2xl">{type.icon}</span>
               <div>
-                <div className="font-medium text-gray-900 dark:text-white">{type.name}</div>
-                <div className="text-xs text-gray-500">
-                  {type.defaultDuration ? `${type.defaultDuration} דק' ברירת מחדל` : ''}
-                  {type.timeRatio && type.timeRatio !== 1 ? ` • יחס ${type.timeRatio}x` : ''}
-                </div>
+                <p className="font-medium text-gray-900 dark:text-white">{type.name}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {type.avgDuration} דקות בממוצע
+                </p>
               </div>
             </div>
-            {customTypes.find(t => t.id === type.id) && (
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setEditingType(type)}
-                  className="p-1 text-gray-400 hover:text-blue-600"
-                >
-                  ✏️
-                </button>
-                <button
-                  onClick={() => deleteCustomType(type.id)}
-                  className="p-1 text-gray-400 hover:text-red-600"
-                >
-                  🗑️
-                </button>
+            <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">
+              מובנה
+            </span>
+          </div>
+        ))}
+
+        {/* סוגים מותאמים אישית */}
+        {customTypes.map(type => (
+          <div 
+            key={type.id}
+            className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{type.icon}</span>
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">{type.name}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">
+                  {type.avgDuration} דקות בממוצע
+                </p>
               </div>
-            )}
+            </div>
+            <button
+              onClick={() => deleteCustomType(type.id)}
+              className="text-red-500 hover:text-red-700"
+            >
+              🗑️
+            </button>
           </div>
         ))}
       </div>
 
-      {/* מודל הוספה/עריכה */}
+      {/* טופס הוספה */}
       <Modal
-        isOpen={showAddForm || !!editingType}
-        onClose={() => { setShowAddForm(false); setEditingType(null); }}
-        title={editingType ? 'עריכת סוג משימה' : 'הוספת סוג משימה'}
+        isOpen={showAddForm}
+        onClose={() => setShowAddForm(false)}
+        title="הוסף סוג משימה"
       >
-        <TaskTypeForm
-          type={editingType}
+        <TaskTypeForm 
           onSave={(newType) => {
-            if (editingType) {
-              const updated = customTypes.map(t => t.id === editingType.id ? newType : t);
-              saveCustomTypes(updated);
-            } else {
-              saveCustomTypes([...customTypes, { ...newType, id: `custom_${Date.now()}` }]);
-            }
+            saveCustomTypes([...customTypes, { ...newType, id: Date.now().toString() }]);
             setShowAddForm(false);
-            setEditingType(null);
-            toast.success('נשמר בהצלחה');
+            toast.success('סוג המשימה נוסף');
           }}
-          onCancel={() => { setShowAddForm(false); setEditingType(null); }}
+          onClose={() => setShowAddForm(false)}
         />
       </Modal>
     </div>
@@ -312,38 +316,48 @@ function TaskTypesSettings({ user }) {
 }
 
 /**
- * טופס סוג משימה
+ * טופס הוספת סוג משימה
  */
-function TaskTypeForm({ type, onSave, onCancel }) {
+function TaskTypeForm({ onSave, onClose, initialData = {} }) {
   const [form, setForm] = useState({
-    name: type?.name || '',
-    icon: type?.icon || '📌',
-    defaultDuration: type?.defaultDuration || 30,
-    timeRatio: type?.timeRatio || 1,
-    category: type?.category || 'work'
+    name: initialData.name || '',
+    icon: initialData.icon || '📌',
+    avgDuration: initialData.avgDuration || 30
   });
 
-  const icons = ['📌', '📝', '📞', '💼', '🎯', '⚡', '🔧', '💡', '📊', '🎨', '🏠', '🚗', '💰', '📚', '🏋️'];
+  const icons = ['📌', '📝', '💻', '📞', '📧', '🎯', '📊', '🔧', '📚', '🎨', '🏃', '🧹'];
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!form.name.trim()) {
+      toast.error('יש להזין שם');
+      return;
+    }
+    onSave(form);
+  };
 
   return (
-    <div className="space-y-4">
+    <form onSubmit={handleSubmit} className="space-y-4">
       <Input
-        label="שם"
+        label="שם הסוג"
         value={form.name}
         onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-        placeholder="שם סוג המשימה"
+        placeholder="לדוגמה: שיחות לקוחות"
       />
 
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">אייקון</label>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+          אייקון
+        </label>
         <div className="flex flex-wrap gap-2">
           {icons.map(icon => (
             <button
               key={icon}
+              type="button"
               onClick={() => setForm(f => ({ ...f, icon }))}
               className={`w-10 h-10 rounded-lg text-xl ${
                 form.icon === icon 
-                  ? 'bg-blue-100 dark:bg-blue-900 ring-2 ring-blue-500' 
+                  ? 'bg-blue-100 dark:bg-blue-900 border-2 border-blue-500' 
                   : 'bg-gray-100 dark:bg-gray-700'
               }`}
             >
@@ -353,59 +367,54 @@ function TaskTypeForm({ type, onSave, onCancel }) {
         </div>
       </div>
 
-      <Input
-        label="זמן ברירת מחדל (דקות)"
-        type="number"
-        value={form.defaultDuration}
-        onChange={(e) => setForm(f => ({ ...f, defaultDuration: parseInt(e.target.value) || 30 }))}
-      />
-
       <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">יחס זמן</label>
-        <p className="text-xs text-gray-500 mb-2">אם תמלול לוקח 3.5x מהקלטה, הזן 3.5</p>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+          זמן ממוצע (דקות)
+        </label>
         <input
           type="number"
-          step="0.1"
-          value={form.timeRatio}
-          onChange={(e) => setForm(f => ({ ...f, timeRatio: parseFloat(e.target.value) || 1 }))}
-          className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          value={form.avgDuration}
+          onChange={(e) => setForm(f => ({ ...f, avgDuration: parseInt(e.target.value) || 30 }))}
+          className="input-field w-24"
+          min="1"
         />
       </div>
 
-      <div className="flex gap-2 pt-4">
-        <Button onClick={() => onSave(form)} disabled={!form.name}>שמור</Button>
-        <Button variant="secondary" onClick={onCancel}>ביטול</Button>
+      <div className="flex gap-3 pt-4">
+        <Button type="submit">שמור</Button>
+        <Button type="button" variant="secondary" onClick={onClose}>
+          ביטול
+        </Button>
       </div>
-    </div>
+    </form>
   );
 }
 
 /**
- * הגדרות תצוגה + התקנת אפליקציה
+ * הגדרות תצוגה
  */
 function AppearanceSettings({ darkMode, toggleDarkMode }) {
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   useEffect(() => {
-    // בדיקה אם האפליקציה כבר מותקנת
+    // בדיקה אם מותקן
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true);
     }
-
+    
     // בדיקת iOS
     const userAgent = navigator.userAgent || navigator.vendor;
     setIsIOS(/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream);
 
-    // האזנה ל-beforeinstallprompt
-    const handleBeforeInstallPrompt = (e) => {
+    // האזנה לאירוע התקנה
+    const handler = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
     };
-
-    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
-    return () => window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
 
   const handleInstall = async () => {
@@ -651,4 +660,3 @@ function AccountSettings({ user, logout, loading, setLoading }) {
 }
 
 export default Settings;
-

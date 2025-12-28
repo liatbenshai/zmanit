@@ -8,18 +8,8 @@ import { TaskProvider } from './context/TaskContext';
 import { NotificationProvider } from './context/NotificationContext';
 import './styles/globals.css';
 
-// רישום Service Worker להתראות Push
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('/sw.js')
-      .then(registration => {
-        console.log('✅ Service Worker registered:', registration.scope);
-      })
-      .catch(error => {
-        console.log('❌ Service Worker registration failed:', error);
-      });
-  });
-}
+// Service Worker נרשם ב-index.html
+// כאן רק מוודאים שאין חסימות
 
 console.log('🚀 Starting app render...');
 
