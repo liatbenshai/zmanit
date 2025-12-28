@@ -362,7 +362,7 @@ export function calculateOptimalSplit(task, existingTasks = [], options = {}) {
       
       if (durationForPart >= CONFIG.MIN_TASK_DURATION) {
         splitTasks.push({
-          title: `${task.title} (חלק ${partIndex})`,
+          title: task.title, // נעדכן את ה-title אחר כך עם מספור מלא
           description: task.description || '',
           quadrant: quadrant,
           task_type: task.task_type || 'other',
@@ -388,7 +388,12 @@ export function calculateOptimalSplit(task, existingTasks = [], options = {}) {
   // עדכון totalParts בכל המשימות
   const totalParts = splitTasks.length;
   splitTasks.forEach((t, i) => {
-    t.title = `${task.title} (${i + 1}/${totalParts})`;
+    // רק אם אין כבר מספור בשם
+    if (!task.title.includes('/') && !task.title.includes('חלק')) {
+      t.title = `${task.title} (${i + 1}/${totalParts})`;
+    } else {
+      t.title = task.title;
+    }
     t.totalParts = totalParts;
   });
   

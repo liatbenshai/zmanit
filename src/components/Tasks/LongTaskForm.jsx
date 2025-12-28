@@ -128,9 +128,11 @@ function LongTaskForm({ onClose }) {
   const handleDeleteSession = (index) => {
     const sessions = editedSessions || [...preview.sessions];
     sessions.splice(index, 1);
-    // עדכון מספרי החלקים
+    // עדכון מספרי החלקים - רק אם אין כבר מספור
     sessions.forEach((s, i) => {
-      s.title = `${formData.title} (${i + 1}/${sessions.length})`;
+      if (!formData.title.includes('/') && !formData.title.includes('חלק')) {
+        s.title = `${formData.title} (${i + 1}/${sessions.length})`;
+      }
     });
     setEditedSessions(sessions);
   };
@@ -139,17 +141,22 @@ function LongTaskForm({ onClose }) {
   const handleAddSession = () => {
     const sessions = editedSessions || [...preview.sessions];
     const lastSession = sessions[sessions.length - 1];
+    const titleForNew = (!formData.title.includes('/') && !formData.title.includes('חלק'))
+      ? `${formData.title} (${sessions.length + 1}/${sessions.length + 1})`
+      : formData.title;
     const newSession = {
-      title: `${formData.title} (${sessions.length + 1}/${sessions.length + 1})`,
+      title: titleForNew,
       dueDate: lastSession?.dueDate || formData.startDate,
       dueTime: '09:00',
       estimatedDuration: parseInt(formData.maxSessionMinutes) || 45,
       description: ''
     };
     sessions.push(newSession);
-    // עדכון מספרי החלקים
+    // עדכון מספרי החלקים - רק אם אין כבר מספור
     sessions.forEach((s, i) => {
-      s.title = `${formData.title} (${i + 1}/${sessions.length})`;
+      if (!formData.title.includes('/') && !formData.title.includes('חלק')) {
+        s.title = `${formData.title} (${i + 1}/${sessions.length})`;
+      }
     });
     setEditedSessions(sessions);
   };

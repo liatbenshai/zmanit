@@ -196,21 +196,27 @@ function TaskTypeInsights() {
         const partDuration = Math.round(task.estimated_duration / numParts);
         
         // עדכון המשימה המקורית
+        const newTitle = (!task.title.includes('/') && !task.title.includes('חלק'))
+          ? `${task.title} (חלק 1)`
+          : task.title;
         await supabase
           .from('tasks')
           .update({ 
-            title: `${task.title} (חלק 1)`,
+            title: newTitle,
             estimated_duration: partDuration 
           })
           .eq('id', task.id);
         
         // יצירת חלקים נוספים
         for (let i = 2; i <= numParts; i++) {
+          const partTitle = (!task.title.includes('/') && !task.title.includes('חלק'))
+            ? `${task.title} (חלק ${i})`
+            : task.title;
           const { error } = await supabase
             .from('tasks')
             .insert({
               user_id: user.id,
-              title: `${task.title} (חלק ${i})`,
+              title: partTitle,
               description: task.description,
               task_type: task.task_type,
               priority: task.priority,

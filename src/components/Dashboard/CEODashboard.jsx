@@ -239,7 +239,9 @@ function CEODashboard() {
         : chunkDuration;
 
       await addTask({
-        title: `${task.title} (חלק ${i + 1}/${chunks})`,
+        title: (!task.title.includes('/') && !task.title.includes('חלק'))
+          ? `${task.title} (חלק ${i + 1}/${chunks})`
+          : task.title,
         description: task.description,
         taskType: task.task_type,
         estimatedDuration: duration,
