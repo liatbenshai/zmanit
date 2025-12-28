@@ -68,3 +68,77 @@ self.addEventListener('message', (event) => {
     self.skipWaiting();
   }
 });
+
+// ============================================
+// Push Notifications Support
+// ============================================
+
+// קבלת התראת Push מהשרת
+self.addEventListener('push', (event) => {
+  console.log('📬 Push received:', event);
+  
+  let data = {
+    title: 'זמנית - תזכורת',
+    body: 'יש לך משימה להיום',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png'
+  };
+
+  // ניסיון לקרוא את המידע מההתראה
+  if (event.data) {
+    try {
+      data = { ...data, ...event.data.json() };
+    } catch (e) {
+      data.body = event.data.text();
+    }
+  }
+
+  const options = {
+    body: data.body,
+    icon: data.icon || '/icon-192.png',
+    badge: data.badge || '/icon-192.png',
+    dir: 'rtl',
+    lang: 'he',
+    vibrate: [200, 100, 200],
+    tag: data.tag || 'default',
+    data: data.data || {},
+    requireInteraction: data.requireInteraction || false,
+    actions: data.actions || []
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title, options)
+  );
+});
+
+// לחיצה על התראה
+self.addEventListener('notificationclick', (event) => {
+  console.log('🖱️ Notification clicked:', event);
+  
+  event.notification.close();
+
+  // פתיחת האפליקציה בלחיצה על ההתראה
+  const urlToOpen = event.notification.data?.url || '/dashboard';
+
+  event.waitUntil(
+    clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((clientList) => {
+        // אם האפליקציה כבר פתוחה - מתמקדים בה
+        for (const client of clientList) {
+          if (client.url.includes(self.location.origin) && 'focus' in client) {
+            client.navigate(urlToOpen);
+            return client.focus();
+          }
+        }
+        // אחרת - פותחים חלון חדש
+        if (clients.openWindow) {
+          return clients.openWindow(urlToOpen);
+        }
+      })
+  );
+});
+
+// סגירת התראה (החלקה הצידה)
+self.addEventListener('notificationclose', (event) => {
+  console.log('❌ Notification closed:', event);
+});
