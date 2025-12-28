@@ -1,25 +1,21 @@
 import { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { supabase } from '../services/supabase';
 import { 
   isNotificationSupported,
   requestNotificationPermission,
   getNotificationPermission,
-  scheduleNotification,
-  cancelScheduledNotification,
   sendLocalNotification
 } from '../services/pushNotifications';
 
 // יצירת קונטקסט
 export const NotificationContext = createContext(null);
 
-// הגדרות ברירת מחדל
+// הגדרות ברירת מחדל - 5 דקות לפני
 const DEFAULT_SETTINGS = {
-  pushEnabled: false,
-  emailEnabled: false,
-  reminderMinutes: 15,
-  dailySummaryEnabled: false,
-  dailySummaryTime: '08:00'
+  pushEnabled: true,
+  reminderMinutes: 5,
+  notifyOnTime: true,
+  soundEnabled: true
 };
 
 /**
@@ -39,33 +35,19 @@ export function NotificationProvider({ children }) {
     }
   }, []);
 
-  // טעינת הגדרות מהשרת
+  // טעינת הגדרות מ-localStorage
   useEffect(() => {
-    const loadSettings = async () => {
-      if (!user?.id) return;
+    if (!user?.id) return;
 
-      try {
-        const { data } = await supabase
-          .from('notification_settings')
-          .select('*')
-          .eq('user_id', user.id)
-          .single();
-
-        if (data) {
-          setSettings({
-            pushEnabled: data.push_enabled,
-            emailEnabled: data.email_enabled,
-            reminderMinutes: data.reminder_minutes,
-            dailySummaryEnabled: data.daily_summary_enabled,
-            dailySummaryTime: data.daily_summary_time
-          });
-        }
-      } catch (err) {
-        console.log('אין הגדרות קיימות, משתמש בברירת מחדל');
+    try {
+      const saved = localStorage.getItem(`notification_settings_${user.id}`);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        setSettings({ ...DEFAULT_SETTINGS, ...parsed });
       }
-    };
-
-    loadSettings();
+    } catch (err) {
+      console.log('משתמש בהגדרות ברירת מחדל');
+    }
   }, [user?.id]);
 
   // בקשת הרשאה להתראות
@@ -81,25 +63,14 @@ export function NotificationProvider({ children }) {
     return granted;
   };
 
-  // שמירת הגדרות
+  // שמירת הגדרות ב-localStorage
   const saveSettings = async (newSettings) => {
     if (!user?.id) return;
 
     try {
-      const { error } = await supabase
-        .from('notification_settings')
-        .upsert({
-          user_id: user.id,
-          push_enabled: newSettings.pushEnabled,
-          email_enabled: newSettings.emailEnabled,
-          reminder_minutes: newSettings.reminderMinutes,
-          daily_summary_enabled: newSettings.dailySummaryEnabled,
-          daily_summary_time: newSettings.dailySummaryTime,
-          updated_at: new Date().toISOString()
-        });
-
-      if (error) throw error;
+      localStorage.setItem(`notification_settings_${user.id}`, JSON.stringify(newSettings));
       setSettings(newSettings);
+      console.log('✅ הגדרות התראות נשמרו');
       return true;
     } catch (err) {
       console.error('שגיאה בשמירת הגדרות:', err);
@@ -107,43 +78,139 @@ export function NotificationProvider({ children }) {
     }
   };
 
-  // תזמון התראה למשימה
+  // השמעת צליל התראה
+  const playNotificationSound = useCallback(() => {
+    if (!settings.soundEnabled) return;
+    
+    try {
+      // יצירת צליל באמצעות Web Audio API
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const oscillator = audioContext.createOscillator();
+      const gainNode = audioContext.createGain();
+      
+      oscillator.connect(gainNode);
+      gainNode.connect(audioContext.destination);
+      
+      oscillator.frequency.value = 800;
+      oscillator.type = 'sine';
+      
+      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      
+      oscillator.start(audioContext.currentTime);
+      oscillator.stop(audioContext.currentTime + 0.5);
+      
+      // צליל שני אחרי רבע שנייה
+      setTimeout(() => {
+        const osc2 = audioContext.createOscillator();
+        const gain2 = audioContext.createGain();
+        osc2.connect(gain2);
+        gain2.connect(audioContext.destination);
+        osc2.frequency.value = 1000;
+        osc2.type = 'sine';
+        gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+        gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+        osc2.start(audioContext.currentTime);
+        osc2.stop(audioContext.currentTime + 0.5);
+      }, 250);
+      
+    } catch (e) {
+      console.log('לא ניתן להשמיע צליל:', e);
+    }
+  }, [settings.soundEnabled]);
+
+  // שליחת התראה עם צליל
+  const sendNotificationWithSound = useCallback((title, options = {}) => {
+    if (permission !== 'granted') return null;
+    
+    // השמעת צליל
+    playNotificationSound();
+    
+    // שליחת התראה
+    return sendLocalNotification(title, {
+      ...options,
+      requireInteraction: true
+    });
+  }, [permission, playNotificationSound]);
+
+  // תזמון התראות למשימה (5 דקות לפני + בזמן)
   const scheduleTaskNotification = useCallback((task) => {
-    // בדיקת תנאים בסיסיים
     if (permission !== 'granted') {
       console.log('⚠️ אין הרשאה להתראות');
       return;
     }
     
-    if (!task.due_date) {
-      return; // אין תאריך - אין מה לתזמן
+    if (!task.due_date || !task.due_time) {
+      return;
     }
 
-    // ביטול התראה קיימת אם יש
+    // ביטול התראות קיימות למשימה זו
     if (scheduledNotificationsRef.current[task.id]) {
-      cancelScheduledNotification(scheduledNotificationsRef.current[task.id]);
+      scheduledNotificationsRef.current[task.id].forEach(id => clearTimeout(id));
       delete scheduledNotificationsRef.current[task.id];
     }
 
-    // תזמון התראה חדשה
-    const reminderMinutes = task.reminder_minutes || settings.reminderMinutes || 15;
-    const timeoutId = scheduleNotification(task, reminderMinutes);
+    const dueDateTime = new Date(`${task.due_date}T${task.due_time}`);
+    const now = new Date();
     
-    if (timeoutId) {
-      scheduledNotificationsRef.current[task.id] = timeoutId;
-      console.log(`✅ תוזמנה התראה למשימה "${task.title}"`);
+    if (dueDateTime <= now) return; // המשימה כבר עברה
+
+    const timeoutIds = [];
+    const reminderMinutes = settings.reminderMinutes || 5;
+
+    // התראה X דקות לפני
+    const reminderTime = new Date(dueDateTime.getTime() - reminderMinutes * 60 * 1000);
+    if (reminderTime > now) {
+      const delay = reminderTime.getTime() - now.getTime();
+      
+      // הגבלה ל-24 שעות
+      if (delay < 24 * 60 * 60 * 1000) {
+        const timeoutId = setTimeout(() => {
+          sendNotificationWithSound(`⏰ ${task.title}`, {
+            body: `מתחיל בעוד ${reminderMinutes} דקות!`,
+            tag: `task-reminder-${task.id}`,
+            icon: '/icon-192.png'
+          });
+        }, delay);
+        timeoutIds.push(timeoutId);
+        console.log(`⏰ תוזמנה התראה ל-"${task.title}" בעוד ${Math.round(delay / 60000)} דקות`);
+      }
     }
-  }, [permission, settings.reminderMinutes]);
+
+    // התראה בזמן המשימה
+    if (settings.notifyOnTime) {
+      const onTimeDelay = dueDateTime.getTime() - now.getTime();
+      
+      if (onTimeDelay > 0 && onTimeDelay < 24 * 60 * 60 * 1000) {
+        const timeoutId = setTimeout(() => {
+          sendNotificationWithSound(`🔔 ${task.title}`, {
+            body: 'הגיע הזמן להתחיל!',
+            tag: `task-ontime-${task.id}`,
+            icon: '/icon-192.png'
+          });
+        }, onTimeDelay);
+        timeoutIds.push(timeoutId);
+        console.log(`🔔 תוזמנה התראה ל-"${task.title}" בזמן המשימה`);
+      }
+    }
+
+    if (timeoutIds.length > 0) {
+      scheduledNotificationsRef.current[task.id] = timeoutIds;
+    }
+  }, [permission, settings.reminderMinutes, settings.notifyOnTime, sendNotificationWithSound]);
 
   // תזמון התראות לרשימת משימות
   const scheduleTasksNotifications = useCallback((tasks) => {
     if (permission !== 'granted') return;
     
     const today = new Date().toISOString().split('T')[0];
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    
     const tasksToSchedule = tasks.filter(task => 
       !task.is_completed && 
       task.due_date && 
-      task.due_date >= today
+      task.due_time &&
+      (task.due_date === today || task.due_date === tomorrow)
     );
 
     console.log(`🔔 מתזמן התראות ל-${tasksToSchedule.length} משימות`);
@@ -156,36 +223,34 @@ export function NotificationProvider({ children }) {
   // ביטול התראה למשימה
   const cancelTaskNotification = useCallback((taskId) => {
     if (scheduledNotificationsRef.current[taskId]) {
-      cancelScheduledNotification(scheduledNotificationsRef.current[taskId]);
+      scheduledNotificationsRef.current[taskId].forEach(id => clearTimeout(id));
       delete scheduledNotificationsRef.current[taskId];
-      console.log(`❌ בוטלה התראה למשימה ${taskId}`);
+      console.log(`❌ בוטלו התראות למשימה ${taskId}`);
     }
   }, []);
 
   // ביטול כל ההתראות
   const cancelAllNotifications = useCallback(() => {
     Object.keys(scheduledNotificationsRef.current).forEach(taskId => {
-      cancelScheduledNotification(scheduledNotificationsRef.current[taskId]);
+      scheduledNotificationsRef.current[taskId].forEach(id => clearTimeout(id));
     });
     scheduledNotificationsRef.current = {};
     console.log('❌ בוטלו כל ההתראות');
   }, []);
 
-  // שליחת התראה מיידית
-  const sendNotification = useCallback((title, options = {}) => {
-    if (permission !== 'granted') {
-      console.warn('אין הרשאה להתראות');
-      return null;
-    }
-    return sendLocalNotification(title, options);
-  }, [permission]);
+  // בדיקת התראות - לדיבוג
+  const testNotification = useCallback(() => {
+    sendNotificationWithSound('🧪 בדיקת התראות', {
+      body: 'ההתראות עובדות!',
+      tag: 'test-notification'
+    });
+  }, [sendNotificationWithSound]);
 
   // ניקוי בעת יציאה
   useEffect(() => {
     return () => {
-      // ביטול כל ההתראות המתוזמנות בעת unmount
-      Object.values(scheduledNotificationsRef.current).forEach(timeoutId => {
-        cancelScheduledNotification(timeoutId);
+      Object.values(scheduledNotificationsRef.current).forEach(timeoutIds => {
+        timeoutIds.forEach(id => clearTimeout(id));
       });
     };
   }, []);
@@ -200,7 +265,8 @@ export function NotificationProvider({ children }) {
     scheduleTasksNotifications,
     cancelTaskNotification,
     cancelAllNotifications,
-    sendNotification
+    sendNotification: sendNotificationWithSound,
+    testNotification
   };
 
   return (

@@ -3,18 +3,18 @@ import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../services/supabase';
 import { TASK_TYPES } from '../config/taskTypes';
+import { useNotifications } from '../hooks/useNotifications';
 import toast from 'react-hot-toast';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Modal from '../components/UI/Modal';
-import NotificationSettings from '../components/Notifications/NotificationSettings';
 
 /**
  * דף הגדרות מקיף
  */
 function Settings() {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('work');
+  const [activeTab, setActiveTab] = useState('notifications');
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
@@ -38,10 +38,10 @@ function Settings() {
     }
   };
 
-  // טאבים - עם התראות!
+  // טאבים - התראות ראשון!
   const tabs = [
-    { id: 'work', label: 'עבודה', icon: '💼' },
     { id: 'notifications', label: 'התראות', icon: '🔔' },
+    { id: 'work', label: 'עבודה', icon: '💼' },
     { id: 'taskTypes', label: 'סוגי משימות', icon: '📋' },
     { id: 'profile', label: 'פרופיל', icon: '👤' },
     { id: 'appearance', label: 'תצוגה', icon: '🎨' },
@@ -79,8 +79,8 @@ function Settings() {
 
         {/* תוכן */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
-          {activeTab === 'work' && <WorkSettings user={user} />}
           {activeTab === 'notifications' && <NotificationSettings />}
+          {activeTab === 'work' && <WorkSettings user={user} />}
           {activeTab === 'taskTypes' && <TaskTypesSettings user={user} />}
           {activeTab === 'profile' && <ProfileSettings user={user} loading={loading} setLoading={setLoading} />}
           {activeTab === 'appearance' && (
@@ -89,6 +89,179 @@ function Settings() {
           {activeTab === 'account' && <AccountSettings user={user} logout={logout} loading={loading} setLoading={setLoading} />}
         </div>
       </motion.div>
+    </div>
+  );
+}
+
+/**
+ * הגדרות התראות - פשוט ועובד!
+ */
+function NotificationSettings() {
+  const { 
+    settings, 
+    permission, 
+    isSupported, 
+    requestPermission, 
+    saveSettings,
+    testNotification
+  } = useNotifications();
+  
+  const [localSettings, setLocalSettings] = useState(settings);
+  const [saving, setSaving] = useState(false);
+
+  // עדכון כשההגדרות משתנות
+  useEffect(() => {
+    setLocalSettings(settings);
+  }, [settings]);
+
+  // שינוי הגדרה
+  const handleChange = (key, value) => {
+    setLocalSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  // שמירת הגדרות
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      await saveSettings(localSettings);
+      toast.success('ההגדרות נשמרו! ✅');
+    } catch (err) {
+      toast.error('שגיאה בשמירת ההגדרות');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // בקשת הרשאה
+  const handleRequestPermission = async () => {
+    const granted = await requestPermission();
+    if (granted) {
+      toast.success('🔔 התראות הופעלו!');
+    } else {
+      toast.error('ההתראות לא אושרו בדפדפן');
+    }
+  };
+
+  // בדיקת התראה
+  const handleTest = () => {
+    testNotification();
+    toast.success('נשלחה התראת בדיקה');
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-lg font-bold text-gray-900 dark:text-white">🔔 הגדרות התראות</h2>
+
+      {/* סטטוס הרשאות */}
+      <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="font-medium text-gray-900 dark:text-white">התראות דפדפן</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              {!isSupported && 'הדפדפן לא תומך בהתראות'}
+              {isSupported && permission === 'granted' && '✅ התראות מופעלות'}
+              {isSupported && permission === 'denied' && '❌ התראות חסומות בדפדפן'}
+              {isSupported && permission === 'default' && 'יש לאשר התראות'}
+            </p>
+          </div>
+          
+          {isSupported && permission !== 'granted' && (
+            <Button onClick={handleRequestPermission}>
+              🔔 אפשר התראות
+            </Button>
+          )}
+          
+          {permission === 'granted' && (
+            <Button variant="secondary" onClick={handleTest}>
+              🧪 בדיקה
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {/* הגדרות - רק אם יש הרשאה */}
+      {permission === 'granted' && (
+        <div className="space-y-4">
+          
+          {/* התראה לפני */}
+          <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">⏰ התראה לפני המשימה</p>
+                <p className="text-sm text-gray-500">קבל התראה X דקות לפני</p>
+              </div>
+            </div>
+            <select
+              value={localSettings.reminderMinutes}
+              onChange={(e) => handleChange('reminderMinutes', parseInt(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value={1}>דקה לפני</option>
+              <option value={2}>2 דקות לפני</option>
+              <option value={5}>5 דקות לפני</option>
+              <option value={10}>10 דקות לפני</option>
+              <option value={15}>15 דקות לפני</option>
+              <option value={30}>30 דקות לפני</option>
+              <option value={60}>שעה לפני</option>
+            </select>
+          </div>
+
+          {/* התראה בזמן */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">🔔 התראה בזמן המשימה</p>
+              <p className="text-sm text-gray-500">קבל התראה כשמגיע הזמן</p>
+            </div>
+            <button
+              onClick={() => handleChange('notifyOnTime', !localSettings.notifyOnTime)}
+              className={`relative w-14 h-8 rounded-full transition-colors ${
+                localSettings.notifyOnTime ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+            >
+              <span 
+                className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+                  localSettings.notifyOnTime ? 'right-1' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* צליל */}
+          <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">🔊 צליל התראה</p>
+              <p className="text-sm text-gray-500">השמע צליל עם ההתראה</p>
+            </div>
+            <button
+              onClick={() => handleChange('soundEnabled', !localSettings.soundEnabled)}
+              className={`relative w-14 h-8 rounded-full transition-colors ${
+                localSettings.soundEnabled ? 'bg-blue-600' : 'bg-gray-300'
+              }`}
+            >
+              <span 
+                className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${
+                  localSettings.soundEnabled ? 'right-1' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+
+          {/* כפתור שמירה */}
+          <Button onClick={handleSave} loading={saving} className="w-full">
+            💾 שמור הגדרות
+          </Button>
+        </div>
+      )}
+
+      {/* הודעה אם חסום */}
+      {permission === 'denied' && (
+        <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-300">
+          <p className="font-medium">ההתראות חסומות בדפדפן</p>
+          <p className="text-sm mt-1">
+            כדי להפעיל התראות, לחצי על הסמל 🔒 ליד שורת הכתובת ואפשרי התראות.
+          </p>
+        </div>
+      )}
     </div>
   );
 }
@@ -218,7 +391,6 @@ function WorkSettings({ user }) {
 function TaskTypesSettings({ user }) {
   const [customTypes, setCustomTypes] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
-  const [editingType, setEditingType] = useState(null);
 
   useEffect(() => {
     const saved = localStorage.getItem(`custom_task_types_${user?.id}`);
@@ -237,8 +409,6 @@ function TaskTypesSettings({ user }) {
     saveCustomTypes(newTypes);
     toast.success('סוג המשימה נמחק');
   };
-
-  const allTypes = [...Object.values(TASK_TYPES), ...customTypes];
 
   return (
     <div className="space-y-6">
