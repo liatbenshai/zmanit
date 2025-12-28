@@ -1,4 +1,4 @@
-const CACHE_NAME = 'time-manager-v1';
+const CACHE_NAME = 'time-manager-v2';
 const urlsToCache = [
   '/',
   '/index.html',
@@ -10,6 +10,7 @@ const urlsToCache = [
 
 // Install - cache basic files
 self.addEventListener('install', (event) => {
+  console.log('🔧 Service Worker installing...');
   event.waitUntil(
     caches.open(CACHE_NAME)
       .then((cache) => cache.addAll(urlsToCache))
@@ -19,6 +20,7 @@ self.addEventListener('install', (event) => {
 
 // Activate - clean old caches
 self.addEventListener('activate', (event) => {
+  console.log('✅ Service Worker activated');
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
@@ -32,10 +34,8 @@ self.addEventListener('activate', (event) => {
 
 // Fetch - network first, fallback to cache
 self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
   
-  // Skip API requests (supabase, etc.)
   const url = new URL(event.request.url);
   if (url.hostname.includes('supabase') || 
       url.pathname.includes('/api/') ||
@@ -47,7 +47,6 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // Clone and cache successful responses
         if (response && response.status === 200) {
           const responseToCache = response.clone();
           caches.open(CACHE_NAME)
@@ -55,90 +54,65 @@ self.addEventListener('fetch', (event) => {
         }
         return response;
       })
-      .catch(() => {
-        // Fallback to cache
-        return caches.match(event.request);
-      })
+      .catch(() => caches.match(event.request))
   );
 });
 
-// Handle messages from the app
-self.addEventListener('message', (event) => {
-  if (event.data === 'skipWaiting') {
-    self.skipWaiting();
-  }
-});
-
-// ============================================
-// Push Notifications Support
-// ============================================
-
-// קבלת התראת Push מהשרת
+// Push notifications
 self.addEventListener('push', (event) => {
-  console.log('📬 Push received:', event);
+  console.log('📩 Push received');
   
-  let data = {
-    title: 'זמנית - תזכורת',
-    body: 'יש לך משימה להיום',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png'
-  };
-
-  // ניסיון לקרוא את המידע מההתראה
+  let data = { title: 'זמנית', body: 'יש לך התראה חדשה' };
+  
   if (event.data) {
     try {
-      data = { ...data, ...event.data.json() };
+      data = event.data.json();
     } catch (e) {
       data.body = event.data.text();
     }
   }
 
   const options = {
-    body: data.body,
-    icon: data.icon || '/icon-192.png',
-    badge: data.badge || '/icon-192.png',
+    body: data.body || data.message || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
     dir: 'rtl',
     lang: 'he',
-    vibrate: [200, 100, 200],
+    requireInteraction: true,
     tag: data.tag || 'default',
-    data: data.data || {},
-    requireInteraction: data.requireInteraction || false,
-    actions: data.actions || []
+    data: data
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title, options)
+    self.registration.showNotification(data.title || 'זמנית', options)
   );
 });
 
-// לחיצה על התראה
+// Notification click
 self.addEventListener('notificationclick', (event) => {
-  console.log('🖱️ Notification clicked:', event);
-  
+  console.log('🖱️ Notification clicked');
   event.notification.close();
-
-  // פתיחת האפליקציה בלחיצה על ההתראה
-  const urlToOpen = event.notification.data?.url || '/dashboard';
 
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true })
       .then((clientList) => {
-        // אם האפליקציה כבר פתוחה - מתמקדים בה
+        // Focus existing window
         for (const client of clientList) {
-          if (client.url.includes(self.location.origin) && 'focus' in client) {
-            client.navigate(urlToOpen);
+          if ('focus' in client) {
             return client.focus();
           }
         }
-        // אחרת - פותחים חלון חדש
+        // Open new window
         if (clients.openWindow) {
-          return clients.openWindow(urlToOpen);
+          return clients.openWindow('/');
         }
       })
   );
 });
 
-// סגירת התראה (החלקה הצידה)
-self.addEventListener('notificationclose', (event) => {
-  console.log('❌ Notification closed:', event);
+// Handle messages
+self.addEventListener('message', (event) => {
+  if (event.data === 'skipWaiting') {
+    self.skipWaiting();
+  }
 });

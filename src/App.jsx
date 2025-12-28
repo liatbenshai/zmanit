@@ -19,6 +19,7 @@ import InstallPrompt from './components/PWA/InstallPrompt';
 import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import DailySummary from './components/Productivity/DailySummary';
+import NotificationChecker from './components/Notifications/NotificationChecker';
 
 function App() {
   const { user, loading } = useAuth();
@@ -59,6 +60,9 @@ function App() {
 
       {/* סיכום יומי */}
       {user && <DailySummary />}
+
+      {/* בודק התראות - חדש! */}
+      {user && <NotificationChecker />}
 
       {/* כותרת עליונה */}
       {user && <Header />}

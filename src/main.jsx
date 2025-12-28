@@ -8,9 +8,6 @@ import { TaskProvider } from './context/TaskContext';
 import { NotificationProvider } from './context/NotificationContext';
 import './styles/globals.css';
 
-// Service Worker נרשם ב-index.html
-// כאן רק מוודאים שאין חסימות
-
 console.log('🚀 Starting app render...');
 
 ReactDOM.createRoot(document.getElementById('root')).render(

@@ -9,9 +9,6 @@ import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Modal from '../components/UI/Modal';
 
-/**
- * דף הגדרות מקיף
- */
 function Settings() {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('notifications');
@@ -26,7 +23,6 @@ function Settings() {
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
-    
     if (newMode) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
@@ -52,9 +48,7 @@ function Settings() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.3 }}
       >
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">
-          ⚙️ הגדרות
-        </h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">⚙️ הגדרות</h1>
 
         <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
           {tabs.map(tab => (
@@ -78,9 +72,7 @@ function Settings() {
           {activeTab === 'work' && <WorkSettings user={user} />}
           {activeTab === 'taskTypes' && <TaskTypesSettings user={user} />}
           {activeTab === 'profile' && <ProfileSettings user={user} loading={loading} setLoading={setLoading} />}
-          {activeTab === 'appearance' && (
-            <AppearanceSettings darkMode={darkMode} toggleDarkMode={toggleDarkMode} />
-          )}
+          {activeTab === 'appearance' && <AppearanceSettings darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}
           {activeTab === 'account' && <AccountSettings user={user} logout={logout} loading={loading} setLoading={setLoading} />}
         </div>
       </motion.div>
@@ -88,19 +80,8 @@ function Settings() {
   );
 }
 
-/**
- * הגדרות התראות
- */
 function NotificationSettings() {
-  const { 
-    settings, 
-    permission, 
-    isSupported, 
-    requestPermission, 
-    saveSettings,
-    testNotification
-  } = useNotifications();
-  
+  const { settings, permission, isSupported, requestPermission, saveSettings, testNotification } = useNotifications();
   const [localSettings, setLocalSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
 
@@ -142,7 +123,6 @@ function NotificationSettings() {
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">🔔 הגדרות התראות</h2>
 
-      {/* סטטוס */}
       <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700">
         <div className="flex items-center justify-between">
           <div>
@@ -156,30 +136,19 @@ function NotificationSettings() {
           </div>
           
           {isSupported && permission !== 'granted' && (
-            <Button onClick={handleRequestPermission}>
-              🔔 אפשר התראות
-            </Button>
+            <Button onClick={handleRequestPermission}>🔔 אפשר התראות</Button>
           )}
           
           {permission === 'granted' && (
-            <Button variant="secondary" onClick={handleTest}>
-              🧪 בדיקה
-            </Button>
+            <Button variant="secondary" onClick={handleTest}>🧪 בדיקה</Button>
           )}
         </div>
       </div>
 
       {permission === 'granted' && (
         <div className="space-y-4">
-          
-          {/* התראה לפני */}
           <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">⏰ התראה לפני המשימה</p>
-                <p className="text-sm text-gray-500">כמה זמן לפני לקבל התראה</p>
-              </div>
-            </div>
+            <p className="font-medium text-gray-900 dark:text-white mb-2">⏰ התראה לפני המשימה</p>
             <select
               value={localSettings.reminderMinutes}
               onChange={(e) => handleChange('reminderMinutes', parseInt(e.target.value))}
@@ -194,34 +163,21 @@ function NotificationSettings() {
             </select>
           </div>
 
-          {/* התראה בזמן */}
           <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-600">
             <div>
               <p className="font-medium text-gray-900 dark:text-white">🔔 התראה בזמן המשימה</p>
-              <p className="text-sm text-gray-500">קבל התראה כשמגיע הזמן</p>
+              <p className="text-sm text-gray-500">התראה כשמגיע הזמן</p>
             </div>
             <button
               onClick={() => handleChange('notifyOnTime', !localSettings.notifyOnTime)}
-              className={`relative w-14 h-8 rounded-full transition-colors ${
-                localSettings.notifyOnTime ? 'bg-blue-600' : 'bg-gray-300'
-              }`}
+              className={`relative w-14 h-8 rounded-full transition-colors ${localSettings.notifyOnTime ? 'bg-blue-600' : 'bg-gray-300'}`}
             >
-              <span 
-                className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-                  localSettings.notifyOnTime ? 'right-1' : 'left-1'
-                }`}
-              />
+              <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${localSettings.notifyOnTime ? 'right-1' : 'left-1'}`} />
             </button>
           </div>
 
-          {/* תזכורת חוזרת */}
           <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-            <div className="flex items-center justify-between mb-3">
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">🔴 תזכורת חוזרת למשימות באיחור</p>
-                <p className="text-sm text-gray-500">כל כמה זמן להזכיר על משימה שלא הושלמה</p>
-              </div>
-            </div>
+            <p className="font-medium text-gray-900 dark:text-white mb-2">🔴 תזכורת חוזרת למשימות באיחור</p>
             <select
               value={localSettings.repeatEveryMinutes || 10}
               onChange={(e) => handleChange('repeatEveryMinutes', parseInt(e.target.value))}
@@ -235,7 +191,6 @@ function NotificationSettings() {
             </select>
           </div>
 
-          {/* צליל */}
           <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-600">
             <div>
               <p className="font-medium text-gray-900 dark:text-white">🔊 צליל התראה</p>
@@ -243,49 +198,28 @@ function NotificationSettings() {
             </div>
             <button
               onClick={() => handleChange('soundEnabled', !localSettings.soundEnabled)}
-              className={`relative w-14 h-8 rounded-full transition-colors ${
-                localSettings.soundEnabled ? 'bg-blue-600' : 'bg-gray-300'
-              }`}
+              className={`relative w-14 h-8 rounded-full transition-colors ${localSettings.soundEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
             >
-              <span 
-                className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${
-                  localSettings.soundEnabled ? 'right-1' : 'left-1'
-                }`}
-              />
+              <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${localSettings.soundEnabled ? 'right-1' : 'left-1'}`} />
             </button>
           </div>
 
-          <Button onClick={handleSave} loading={saving} className="w-full">
-            💾 שמור הגדרות
-          </Button>
+          <Button onClick={handleSave} loading={saving} className="w-full">💾 שמור הגדרות</Button>
         </div>
       )}
 
       {permission === 'denied' && (
         <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-300">
           <p className="font-medium">ההתראות חסומות בדפדפן</p>
-          <p className="text-sm mt-1">
-            לחצי על 🔒 ליד שורת הכתובת ← אפשרי התראות ← רעננו את הדף
-          </p>
+          <p className="text-sm mt-1">לחצי על 🔒 ליד שורת הכתובת ← אפשרי התראות ← רעננו את הדף</p>
         </div>
       )}
     </div>
   );
 }
 
-/**
- * הגדרות עבודה
- */
 function WorkSettings({ user }) {
-  const [workHours, setWorkHours] = useState({
-    startHour: 8,
-    endHour: 16,
-    workDays: [0, 1, 2, 3, 4]
-  });
-  const [preferences, setPreferences] = useState({
-    bufferMinutes: 0,
-    preferMorning: true
-  });
+  const [workHours, setWorkHours] = useState({ startHour: 8, endHour: 16, workDays: [0, 1, 2, 3, 4] });
 
   useEffect(() => {
     const saved = localStorage.getItem(`work_settings_${user?.id}`);
@@ -293,26 +227,16 @@ function WorkSettings({ user }) {
       try {
         const parsed = JSON.parse(saved);
         if (parsed.workHours) setWorkHours(parsed.workHours);
-        if (parsed.preferences) setPreferences(parsed.preferences);
       } catch (e) {}
     }
   }, [user?.id]);
 
   const handleSave = () => {
-    localStorage.setItem(`work_settings_${user?.id}`, JSON.stringify({ workHours, preferences }));
+    localStorage.setItem(`work_settings_${user?.id}`, JSON.stringify({ workHours }));
     toast.success('הגדרות העבודה נשמרו');
   };
 
   const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
-
-  const toggleDay = (day) => {
-    setWorkHours(w => ({
-      ...w,
-      workDays: w.workDays.includes(day) 
-        ? w.workDays.filter(d => d !== day)
-        : [...w.workDays, day].sort()
-    }));
-  };
 
   return (
     <div className="space-y-6">
@@ -355,11 +279,12 @@ function WorkSettings({ user }) {
           {dayNames.map((name, i) => (
             <button
               key={i}
-              onClick={() => toggleDay(i)}
+              onClick={() => setWorkHours(w => ({
+                ...w,
+                workDays: w.workDays.includes(i) ? w.workDays.filter(d => d !== i) : [...w.workDays, i].sort()
+              }))}
               className={`w-10 h-10 rounded-full font-medium transition-colors ${
-                workHours.workDays.includes(i)
-                  ? 'bg-blue-600 text-white'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+                workHours.workDays.includes(i) ? 'bg-blue-600 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
               }`}
             >
               {name}
@@ -373,9 +298,6 @@ function WorkSettings({ user }) {
   );
 }
 
-/**
- * הגדרות סוגי משימות
- */
 function TaskTypesSettings({ user }) {
   const [customTypes, setCustomTypes] = useState([]);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -392,228 +314,83 @@ function TaskTypesSettings({ user }) {
     localStorage.setItem(`custom_task_types_${user?.id}`, JSON.stringify(types));
   };
 
-  const deleteCustomType = (id) => {
-    const newTypes = customTypes.filter(t => t.id !== id);
-    saveCustomTypes(newTypes);
-    toast.success('סוג המשימה נמחק');
-  };
-
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-bold text-gray-900 dark:text-white">סוגי משימות</h2>
-        <Button size="sm" onClick={() => setShowAddForm(true)}>
-          + הוסף סוג
-        </Button>
+        <Button size="sm" onClick={() => setShowAddForm(true)}>+ הוסף סוג</Button>
       </div>
 
       <div className="grid gap-3">
         {Object.entries(TASK_TYPES).map(([key, type]) => (
-          <div 
-            key={key}
-            className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg"
-          >
+          <div key={key} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
             <div className="flex items-center gap-3">
               <span className="text-2xl">{type.icon}</span>
               <div>
                 <p className="font-medium text-gray-900 dark:text-white">{type.name}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {type.avgDuration} דקות בממוצע
-                </p>
+                <p className="text-sm text-gray-500">{type.avgDuration} דקות</p>
               </div>
             </div>
-            <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">
-              מובנה
-            </span>
+            <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">מובנה</span>
           </div>
         ))}
-
         {customTypes.map(type => (
-          <div 
-            key={type.id}
-            className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800"
-          >
+          <div key={type.id} className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200">
             <div className="flex items-center gap-3">
               <span className="text-2xl">{type.icon}</span>
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">{type.name}</p>
-                <p className="text-sm text-gray-500 dark:text-gray-400">
-                  {type.avgDuration} דקות בממוצע
-                </p>
-              </div>
+              <p className="font-medium text-gray-900 dark:text-white">{type.name}</p>
             </div>
-            <button
-              onClick={() => deleteCustomType(type.id)}
-              className="text-red-500 hover:text-red-700"
-            >
-              🗑️
-            </button>
+            <button onClick={() => saveCustomTypes(customTypes.filter(t => t.id !== type.id))} className="text-red-500">🗑️</button>
           </div>
         ))}
       </div>
 
-      <Modal
-        isOpen={showAddForm}
-        onClose={() => setShowAddForm(false)}
-        title="הוסף סוג משימה"
-      >
-        <TaskTypeForm 
-          onSave={(newType) => {
-            saveCustomTypes([...customTypes, { ...newType, id: Date.now().toString() }]);
-            setShowAddForm(false);
-            toast.success('סוג המשימה נוסף');
-          }}
-          onClose={() => setShowAddForm(false)}
-        />
+      <Modal isOpen={showAddForm} onClose={() => setShowAddForm(false)} title="הוסף סוג משימה">
+        <TaskTypeForm onSave={(newType) => {
+          saveCustomTypes([...customTypes, { ...newType, id: Date.now().toString() }]);
+          setShowAddForm(false);
+          toast.success('סוג המשימה נוסף');
+        }} onClose={() => setShowAddForm(false)} />
       </Modal>
     </div>
   );
 }
 
-function TaskTypeForm({ onSave, onClose, initialData = {} }) {
-  const [form, setForm] = useState({
-    name: initialData.name || '',
-    icon: initialData.icon || '📌',
-    avgDuration: initialData.avgDuration || 30
-  });
-
-  const icons = ['📌', '📝', '💻', '📞', '📧', '🎯', '📊', '🔧', '📚', '🎨', '🏃', '🧹'];
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    if (!form.name.trim()) {
-      toast.error('יש להזין שם');
-      return;
-    }
-    onSave(form);
-  };
+function TaskTypeForm({ onSave, onClose }) {
+  const [form, setForm] = useState({ name: '', icon: '📌', avgDuration: 30 });
+  const icons = ['📌', '📝', '💻', '📞', '📧', '🎯', '📊', '🔧', '📚', '🎨'];
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Input
-        label="שם הסוג"
-        value={form.name}
-        onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))}
-        placeholder="לדוגמה: שיחות לקוחות"
-      />
-
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-          אייקון
-        </label>
-        <div className="flex flex-wrap gap-2">
-          {icons.map(icon => (
-            <button
-              key={icon}
-              type="button"
-              onClick={() => setForm(f => ({ ...f, icon }))}
-              className={`w-10 h-10 rounded-lg text-xl ${
-                form.icon === icon 
-                  ? 'bg-blue-100 dark:bg-blue-900 border-2 border-blue-500' 
-                  : 'bg-gray-100 dark:bg-gray-700'
-              }`}
-            >
-              {icon}
-            </button>
-          ))}
-        </div>
+    <form onSubmit={(e) => { e.preventDefault(); if (form.name) onSave(form); }} className="space-y-4">
+      <Input label="שם" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} />
+      <div className="flex flex-wrap gap-2">
+        {icons.map(icon => (
+          <button key={icon} type="button" onClick={() => setForm(f => ({ ...f, icon }))}
+            className={`w-10 h-10 rounded-lg text-xl ${form.icon === icon ? 'bg-blue-100 border-2 border-blue-500' : 'bg-gray-100'}`}>
+            {icon}
+          </button>
+        ))}
       </div>
-
-      <div className="flex gap-3 pt-4">
+      <div className="flex gap-3">
         <Button type="submit">שמור</Button>
-        <Button type="button" variant="secondary" onClick={onClose}>
-          ביטול
-        </Button>
+        <Button type="button" variant="secondary" onClick={onClose}>ביטול</Button>
       </div>
     </form>
   );
 }
 
 function AppearanceSettings({ darkMode, toggleDarkMode }) {
-  const [isInstalled, setIsInstalled] = useState(false);
-  const [isIOS, setIsIOS] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-
-  useEffect(() => {
-    if (window.matchMedia('(display-mode: standalone)').matches) {
-      setIsInstalled(true);
-    }
-    
-    const userAgent = navigator.userAgent || navigator.vendor;
-    setIsIOS(/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream);
-
-    const handler = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-
-  const handleInstall = async () => {
-    if (deferredPrompt) {
-      deferredPrompt.prompt();
-      const { outcome } = await deferredPrompt.userChoice;
-      if (outcome === 'accepted') {
-        toast.success('✅ האפליקציה הותקנה!');
-        setIsInstalled(true);
-      }
-      setDeferredPrompt(null);
-    } else if (isIOS) {
-      toast((t) => (
-        <div className="text-right">
-          <p className="font-bold mb-2">להתקנה ב-iPhone/iPad:</p>
-          <p>1. לחצי על כפתור השיתוף ⬆️</p>
-          <p>2. בחרי "הוסף למסך הבית"</p>
-          <button 
-            onClick={() => toast.dismiss(t.id)}
-            className="mt-2 px-3 py-1 bg-blue-500 text-white rounded"
-          >
-            הבנתי
-          </button>
-        </div>
-      ), { duration: 10000 });
-    }
-  };
-
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">הגדרות תצוגה</h2>
-      
       <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
         <div>
           <p className="font-medium text-gray-900 dark:text-white">מצב כהה</p>
-          <p className="text-sm text-gray-500 dark:text-gray-400">החלף בין ערכת צבעים בהירה לכהה</p>
+          <p className="text-sm text-gray-500">החלף בין ערכת צבעים בהירה לכהה</p>
         </div>
-        <button
-          onClick={toggleDarkMode}
-          className={`relative w-14 h-8 rounded-full transition-colors ${darkMode ? 'bg-blue-600' : 'bg-gray-300'}`}
-        >
+        <button onClick={toggleDarkMode} className={`relative w-14 h-8 rounded-full transition-colors ${darkMode ? 'bg-blue-600' : 'bg-gray-300'}`}>
           <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${darkMode ? 'right-1' : 'left-1'}`} />
         </button>
-      </div>
-
-      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-        <div className="flex items-center gap-3 mb-3">
-          <span className="text-2xl">📱</span>
-          <div>
-            <p className="font-medium text-gray-900 dark:text-white">התקנת אפליקציה</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {isInstalled ? 'האפליקציה מותקנת!' : 'התקן את זמנית על המכשיר שלך'}
-            </p>
-          </div>
-        </div>
-        
-        {isInstalled ? (
-          <div className="text-green-600 dark:text-green-400 flex items-center gap-2">
-            <span>✓</span>
-            <span>האפליקציה מותקנת</span>
-          </div>
-        ) : (
-          <Button onClick={handleInstall} className="w-full">
-            {isIOS ? '📲 איך להתקין?' : '📲 התקן עכשיו'}
-          </Button>
-        )}
       </div>
     </div>
   );
@@ -621,22 +398,14 @@ function AppearanceSettings({ darkMode, toggleDarkMode }) {
 
 function ProfileSettings({ user, loading, setLoading }) {
   const [fullName, setFullName] = useState(user?.profile?.full_name || '');
-  const [saved, setSaved] = useState(false);
 
   const handleSave = async () => {
     setLoading(true);
     try {
-      const { error } = await supabase
-        .from('users')
-        .update({ full_name: fullName })
-        .eq('id', user.id);
-
-      if (error) throw error;
-      toast.success('הפרופיל נשמר בהצלחה');
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
+      await supabase.from('users').update({ full_name: fullName }).eq('id', user.id);
+      toast.success('הפרופיל נשמר');
     } catch (err) {
-      toast.error('שגיאה בשמירת הפרופיל');
+      toast.error('שגיאה בשמירה');
     } finally {
       setLoading(false);
     }
@@ -645,120 +414,49 @@ function ProfileSettings({ user, loading, setLoading }) {
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">פרטי פרופיל</h2>
-      
-      <div className="space-y-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-            אימייל
-          </label>
-          <p className="text-gray-900 dark:text-white">{user?.email}</p>
-        </div>
-
-        <Input
-          label="שם מלא"
-          value={fullName}
-          onChange={(e) => setFullName(e.target.value)}
-          placeholder="הזן את שמך המלא"
-        />
-
-        <Button onClick={handleSave} loading={loading}>
-          {saved ? '✓ נשמר' : 'שמור שינויים'}
-        </Button>
-      </div>
+      <div><p className="text-sm text-gray-500">אימייל</p><p className="text-gray-900 dark:text-white">{user?.email}</p></div>
+      <Input label="שם מלא" value={fullName} onChange={(e) => setFullName(e.target.value)} />
+      <Button onClick={handleSave} loading={loading}>שמור</Button>
     </div>
   );
 }
 
 function AccountSettings({ user, logout, loading, setLoading }) {
   const [showPasswordForm, setShowPasswordForm] = useState(false);
-  const [passwords, setPasswords] = useState({
-    current: '',
-    new: '',
-    confirm: ''
-  });
+  const [passwords, setPasswords] = useState({ new: '', confirm: '' });
 
   const handleChangePassword = async () => {
-    if (passwords.new !== passwords.confirm) {
-      toast.error('הסיסמאות אינן תואמות');
-      return;
-    }
-    if (passwords.new.length < 6) {
-      toast.error('הסיסמה חייבת להכיל לפחות 6 תווים');
-      return;
-    }
-
+    if (passwords.new !== passwords.confirm) { toast.error('הסיסמאות לא תואמות'); return; }
+    if (passwords.new.length < 6) { toast.error('סיסמה קצרה מדי'); return; }
     setLoading(true);
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: passwords.new
-      });
-
-      if (error) throw error;
-      toast.success('הסיסמה שונתה בהצלחה');
+      await supabase.auth.updateUser({ password: passwords.new });
+      toast.success('הסיסמה שונתה');
       setShowPasswordForm(false);
-      setPasswords({ current: '', new: '', confirm: '' });
     } catch (err) {
-      toast.error('שגיאה בשינוי הסיסמה');
+      toast.error('שגיאה');
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleLogout = async () => {
-    try {
-      await logout();
-      toast.success('התנתקת בהצלחה');
-    } catch (err) {
-      toast.error('שגיאה בהתנתקות');
     }
   };
 
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">הגדרות חשבון</h2>
-      
       <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <p className="font-medium text-gray-900 dark:text-white">סיסמה</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">שנה את הסיסמה שלך</p>
-          </div>
-          <Button 
-            variant="secondary"
-            onClick={() => setShowPasswordForm(!showPasswordForm)}
-          >
-            שנה סיסמה
-          </Button>
+        <div className="flex items-center justify-between">
+          <p className="font-medium text-gray-900 dark:text-white">סיסמה</p>
+          <Button variant="secondary" onClick={() => setShowPasswordForm(!showPasswordForm)}>שנה סיסמה</Button>
         </div>
-
         {showPasswordForm && (
-          <div className="space-y-4 pt-4 border-t border-gray-200 dark:border-gray-700">
-            <Input
-              type="password"
-              label="סיסמה חדשה"
-              value={passwords.new}
-              onChange={(e) => setPasswords(p => ({ ...p, new: e.target.value }))}
-              placeholder="הזן סיסמה חדשה"
-            />
-            <Input
-              type="password"
-              label="אימות סיסמה"
-              value={passwords.confirm}
-              onChange={(e) => setPasswords(p => ({ ...p, confirm: e.target.value }))}
-              placeholder="הזן שוב את הסיסמה"
-            />
-            <Button onClick={handleChangePassword} loading={loading}>
-              שמור סיסמה חדשה
-            </Button>
+          <div className="mt-4 space-y-4 pt-4 border-t">
+            <Input type="password" label="סיסמה חדשה" value={passwords.new} onChange={(e) => setPasswords(p => ({ ...p, new: e.target.value }))} />
+            <Input type="password" label="אימות" value={passwords.confirm} onChange={(e) => setPasswords(p => ({ ...p, confirm: e.target.value }))} />
+            <Button onClick={handleChangePassword} loading={loading}>שמור</Button>
           </div>
         )}
       </div>
-
-      <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
-        <Button variant="danger" onClick={handleLogout}>
-          צא מהמערכת
-        </Button>
-      </div>
+      <Button variant="danger" onClick={logout}>צא מהמערכת</Button>
     </div>
   );
 }

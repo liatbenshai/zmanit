@@ -9,10 +9,22 @@ import {
   toggleTaskComplete,
   supabase
 } from '../services/supabase';
+import { 
+  createTaskWithIntervals, 
+  completeInterval, 
+  uncompleteInterval,
+  getTaskIntervals,
+  getIntervalProgress,
+  isInterval,
+  hasIntervals
+} from '../services/taskIntervals';
 import { useAuth } from '../hooks/useAuth';
 
 // יצירת קונטקסט
 export const TaskContext = createContext(null);
+
+// קונפיגורציה - אורך אינטרוול בדקות
+const INTERVAL_DURATION = 45;
 
 /**
  * ספק משימות
@@ -28,14 +40,11 @@ export function TaskProvider({ children }) {
   const [filter, setFilter] = useState('all'); // all, active, completed
   const [sortBy, setSortBy] = useState('created_at'); // created_at, due_date, title
   
-  // מניעת race conditions - שמירת עדכונים בתהליך
-  // במקום Set פשוט, נשתמש ב-Map עם Promise לכל משימה
-  const updatingTasksRef = useRef(new Map()); // Map<taskId, Promise>
-
-  // מניעת טעינות כפולות
+  // מניעת race conditions
+  const updatingTasksRef = useRef(new Map());
   const loadingRef = useRef(false);
   
-  // טעינת משימות - פשוט וישיר
+  // טעינת משימות
   const loadTasks = useCallback(async () => {
     if (authLoading || !user?.id || loadingRef.current) {
       return;
@@ -47,19 +56,13 @@ export function TaskProvider({ children }) {
     
     try {
       const data = await getTasks(user.id);
-      console.log('📥 טעינת משימות מה-DB:', { count: data?.length, sample: data?.[0] });
-      const safeData = (data || []).map(task => {
-        const taskWithTime = {
-          ...task,
-          time_spent: task.time_spent || 0,
-          estimated_duration: task.estimated_duration || null
-        };
-        if (task.time_spent > 0) {
-          console.log('⏱️ משימה עם זמן:', { id: task.id, title: task.title, time_spent: task.time_spent });
-        }
-        return taskWithTime;
-      });
-      console.log('✅ משימות נטענו:', { count: safeData.length, tasksWithTime: safeData.filter(t => (t.time_spent || 0) > 0).length });
+      console.log('📥 טעינת משימות מה-DB:', { count: data?.length });
+      const safeData = (data || []).map(task => ({
+        ...task,
+        time_spent: task.time_spent || 0,
+        estimated_duration: task.estimated_duration || null
+      }));
+      console.log('✅ משימות נטענו:', { count: safeData.length });
       setTasks(safeData);
     } catch (err) {
       console.error('שגיאה בטעינת משימות:', err);
@@ -70,47 +73,40 @@ export function TaskProvider({ children }) {
     }
   }, [user?.id, authLoading]);
 
-  // טעינה ראשונית - רק אחרי שהאותנטיקציה נטענה
+  // טעינה ראשונית
   useEffect(() => {
     if (!authLoading && user?.id) {
       loadTasks();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user?.id, authLoading]); // לא loadTasks כדי למנוע לולאה
+  }, [user?.id, authLoading]);
 
-  // הוספת משימה
-  // חשוב: אין הגבלה על הוספת משימות - ניתן להוסיף משימות חדשות תמיד,
-  // גם אם יש משימות פעילות, לא הושלמו, או טיימרים פועלים
+  /**
+   * הוספת משימה עם פיצול אוטומטי לאינטרוולים של 45 דקות
+   * =====================================================
+   * 
+   * אם המשימה ארוכה מ-45 דקות, היא מתפצלת אוטומטית למשימות-ילד.
+   */
   const addTask = async (taskData) => {
     console.log('🟢 TaskContext.addTask נקרא עם:', taskData);
-    console.log('🔑 User ID:', user?.id);
-    console.log('🔑 Auth Loading:', authLoading);
     
-    // בדיקה מפורטת יותר של משתמש
     if (authLoading) {
-      const error = new Error('⏳ ממתין לאימות משתמש...');
-      console.error(error);
-      throw error;
+      throw new Error('⏳ ממתין לאימות משתמש...');
     }
     
-    if (!user?.id) {
-      // ננסה לטעון את המשתמש מחדש לפני שנזרוק שגיאה
-      console.warn('⚠️ אין משתמש, מנסה לטעון מחדש...');
+    let userId = user?.id;
+    
+    if (!userId) {
       const { data: { session } } = await supabase.auth.getSession();
       if (session?.user) {
-        console.log('✅ נמצא סשן, ממשיך...');
-        // נמשיך עם session.user.id במקום user.id
-        taskData.user_id = session.user.id;
+        userId = session.user.id;
       } else {
-        const error = new Error('❌ אין משתמש מחובר! אנא התחברי מחדש.');
-        console.error(error);
-        throw error;
+        throw new Error('❌ אין משתמש מחובר! אנא התחברי מחדש.');
       }
     }
     
     try {
       const taskToCreate = {
-        user_id: user?.id || taskData.user_id,
+        user_id: userId,
         title: taskData.title?.trim(),
         description: taskData.description?.trim() || null,
         quadrant: taskData.quadrant || 1,
@@ -121,58 +117,48 @@ export function TaskProvider({ children }) {
         estimated_duration: taskData.estimatedDuration || taskData.estimated_duration ? parseInt(taskData.estimatedDuration || taskData.estimated_duration) : null,
         task_type: taskData.taskType || taskData.task_type || 'other',
         task_parameter: taskData.taskParameter || taskData.task_parameter ? parseInt(taskData.taskParameter || taskData.task_parameter) : null,
-        priority: taskData.priority || 'normal',
-        recording_duration: taskData.recording_duration ? parseFloat(taskData.recording_duration) : null,
-        page_count: taskData.page_count ? parseFloat(taskData.page_count) : null,
-        is_project: false,
-        parent_task_id: null,
-        is_completed: false
+        priority: taskData.priority || 'normal'
       };
-      
-      // בדיקה אחרונה לפני שליחה
-      if (!taskToCreate.user_id) {
-        throw new Error('❌ חסר user_id! לא ניתן לשמור משימה.');
-      }
       
       if (!taskToCreate.title || taskToCreate.title.length === 0) {
         throw new Error('❌ חסרה כותרת משימה!');
       }
       
-      console.log('📤 שולח ל-createTask:', taskToCreate);
+      const duration = taskToCreate.estimated_duration || 0;
       
+      // אם המשימה ארוכה מ-45 דקות - פיצול אוטומטי
+      if (duration > INTERVAL_DURATION) {
+        console.log(`🔄 משימה של ${duration} דקות - מפצלת ל-${Math.ceil(duration / INTERVAL_DURATION)} אינטרוולים של ${INTERVAL_DURATION} דקות`);
+        
+        const { parentTask, intervals } = await createTaskWithIntervals(taskToCreate);
+        
+        console.log(`✅ נוצרה משימה הורית + ${intervals.length} אינטרוולים`);
+        
+        // טעינה מחדש
+        await loadTasks();
+        return parentTask;
+      }
+      
+      // משימה קצרה - יצירה רגילה
+      console.log('📤 יוצר משימה רגילה (קצרה מ-45 דקות)');
       const newTask = await createTask(taskToCreate);
       
       if (!newTask || !newTask.id) {
-        throw new Error('❌ המשימה לא נוצרה - אין תגובה מהשרת');
+        throw new Error('❌ המשימה לא נוצרה');
       }
       
       console.log('✅ משימה נוצרה:', newTask);
-      
-      // טעינה מחדש כדי לוודא שהכל מעודכן
-      console.log('🔄 טוען משימות מחדש...');
       await loadTasks();
-      
-      console.log('✨ הכל הצליח!');
       return newTask;
       
     } catch (err) {
       console.error('❌ שגיאה בהוספת משימה:', err);
-      console.error('📋 פרטי שגיאה מלאים:', {
-        message: err.message,
-        code: err.code,
-        details: err.details,
-        hint: err.hint,
-        taskData
-      });
       
-      // הודעת שגיאה ידידותית יותר
       let errorMessage = err.message || 'שגיאה בהוספת משימה';
       if (err.code === '42501') {
         errorMessage = '❌ אין הרשאות לשמירה. אנא התחברי מחדש.';
       } else if (err.code === 'PGRST301' || err.message?.includes('JWT')) {
         errorMessage = '❌ סשן פג. אנא התחברי מחדש.';
-      } else if (err.message?.includes('user_id')) {
-        errorMessage = '❌ בעיית התחברות. אנא רענני את הדף והתחברי מחדש.';
       }
       
       throw new Error(errorMessage);
@@ -194,7 +180,6 @@ export function TaskProvider({ children }) {
         subtasks: projectData.subtasks || []
       });
       
-      // טעינה מחדש של כל המשימות כדי לכלול את השלבים שנוצרו
       await loadTasks();
       return newProject;
     } catch (err) {
@@ -231,8 +216,18 @@ export function TaskProvider({ children }) {
   // מחיקת משימה
   const removeTask = async (taskId) => {
     try {
+      // אם זו משימה הורית - מוחקים גם את הילדים
+      const task = tasks.find(t => t.id === taskId);
+      if (task && hasIntervals(task)) {
+        // מחיקת כל הילדים קודם
+        const children = tasks.filter(t => t.parent_task_id === taskId);
+        for (const child of children) {
+          await deleteTask(child.id);
+        }
+      }
+      
       await deleteTask(taskId);
-      setTasks(prev => prev.filter(t => t.id !== taskId));
+      setTasks(prev => prev.filter(t => t.id !== taskId && t.parent_task_id !== taskId));
     } catch (err) {
       console.error('שגיאה במחיקת משימה:', err);
       throw new Error('שגיאה במחיקת משימה');
@@ -251,73 +246,151 @@ export function TaskProvider({ children }) {
     }
   };
 
-  // עדכון זמן שבוצע למשימה (מ-TaskTimer) - שומר גם ב-DB וגם ב-state
+  // עדכון זמן שבוצע למשימה
   const updateTaskTime = useCallback(async (taskId, timeSpent) => {
     const timeSpentInt = parseInt(timeSpent) || 0;
     
-    console.log('🔄 updateTaskTime נקרא:', { taskId, timeSpent, timeSpentInt });
-    
     try {
-      // עדכון ב-DB דרך updateTaskTimeSpent
       const { updateTaskTimeSpent } = await import('../services/supabase');
-      console.log('📤 שומר זמן ב-DB...');
       const updatedTask = await updateTaskTimeSpent(taskId, timeSpentInt);
-      console.log('✅ זמן נשמר ב-DB:', updatedTask);
       
-      // עדכון ב-state
-      setTasks(prev => {
-        const updated = prev.map(t => 
-          t.id === taskId 
-            ? { ...t, time_spent: timeSpentInt }
-            : t
-        );
-        console.log('✅ State עודכן:', { taskId, timeSpent: timeSpentInt, updatedTask: updated.find(t => t.id === taskId) });
-        return updated;
-      });
+      setTasks(prev => prev.map(t => 
+        t.id === taskId ? { ...t, time_spent: timeSpentInt } : t
+      ));
       
-      console.log('✅ זמן עודכן בהצלחה ב-DB וב-state:', { taskId, timeSpent: timeSpentInt });
       return updatedTask || { id: taskId, time_spent: timeSpentInt };
     } catch (err) {
       console.error('❌ שגיאה בעדכון זמן:', err);
-      console.error('❌ פרטי שגיאה:', {
-        message: err.message,
-        stack: err.stack,
-        taskId,
-        timeSpentInt
-      });
-      // עדכון מקומי גם אם השמירה ב-DB נכשלה
       setTasks(prev => prev.map(t => 
-        t.id === taskId 
-          ? { ...t, time_spent: timeSpentInt }
-          : t
+        t.id === taskId ? { ...t, time_spent: timeSpentInt } : t
       ));
       throw err;
     }
   }, []);
 
-  // סימון כהושלם/לא הושלם
+  /**
+   * סימון כהושלם/לא הושלם
+   * ======================
+   * 
+   * אם זה אינטרוול (יש parent_task_id):
+   * - מסמנים רק אותו
+   * - אם כל האחים הושלמו - מסמנים גם את ההורה
+   * 
+   * אם זו משימה רגילה או הורית:
+   * - מסמנים אותה ישירות
+   */
   const toggleComplete = async (taskId) => {
     const task = tasks.find(t => t.id === taskId);
     if (!task) return;
 
     try {
-      const updatedTask = await toggleTaskComplete(taskId, !task.is_completed);
+      const newCompleteStatus = !task.is_completed;
+      
+      // בדיקה אם זה אינטרוול (משימה עם הורה)
+      if (isInterval(task)) {
+        if (newCompleteStatus) {
+          // מסמנים כהושלם
+          const { interval, parentCompleted, parentId } = await completeInterval(taskId);
+          
+          // עדכון ה-state
+          setTasks(prev => {
+            let updated = prev.map(t => t.id === taskId ? interval : t);
+            
+            // אם ההורה הושלם - מעדכנים גם אותו
+            if (parentCompleted && parentId) {
+              updated = updated.map(t => 
+                t.id === parentId 
+                  ? { ...t, is_completed: true, completed_at: new Date().toISOString() }
+                  : t
+              );
+            }
+            
+            return updated;
+          });
+          
+          if (parentCompleted) {
+            console.log('🎉 כל האינטרוולים הושלמו! המשימה כולה סומנה כהושלמה.');
+          }
+          
+          return interval;
+        } else {
+          // מבטלים השלמה
+          const { interval, parentUncompleted } = await uncompleteInterval(taskId);
+          
+          setTasks(prev => {
+            let updated = prev.map(t => t.id === taskId ? interval : t);
+            
+            // אם ההורה בוטל
+            if (parentUncompleted) {
+              updated = updated.map(t => 
+                t.id === task.parent_task_id 
+                  ? { ...t, is_completed: false, completed_at: null }
+                  : t
+              );
+            }
+            
+            return updated;
+          });
+          
+          return interval;
+        }
+      }
+      
+      // משימה רגילה (לא אינטרוול)
+      const updatedTask = await toggleTaskComplete(taskId, newCompleteStatus);
       setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
       return updatedTask;
+      
     } catch (err) {
       console.error('שגיאה בעדכון סטטוס:', err);
       throw new Error('שגיאה בעדכון סטטוס');
     }
   };
 
+  /**
+   * קבלת התקדמות אינטרוולים למשימה
+   */
+  const getTaskProgress = async (taskId) => {
+    return await getIntervalProgress(taskId);
+  };
+
+  /**
+   * קבלת אינטרוולים של משימה
+   */
+  const getIntervals = (parentTaskId) => {
+    return tasks.filter(t => t.parent_task_id === parentTaskId);
+  };
+
+  /**
+   * בדיקה אם משימה היא אינטרוול
+   */
+  const isTaskInterval = (task) => {
+    return isInterval(task);
+  };
+
+  /**
+   * בדיקה אם למשימה יש אינטרוולים
+   */
+  const taskHasIntervals = (task) => {
+    return hasIntervals(task) || tasks.some(t => t.parent_task_id === task.id);
+  };
+
   // קבלת משימות לפי רבע (ללא משימות שהושלמו)
+  // מציג רק אינטרוולים, לא את ההורה
   const getTasksByQuadrant = (quadrant) => {
     return tasks
-      .filter(t => t.quadrant === quadrant && !t.is_completed)
-      .sort((a, b) => {
-        // מיון לפי תאריך יצירה (חדשות יותר למעלה)
-        return new Date(b.created_at) - new Date(a.created_at);
-      });
+      .filter(t => {
+        // רק משימות מהרבע הנכון
+        if (t.quadrant !== quadrant) return false;
+        // רק משימות לא הושלמו
+        if (t.is_completed) return false;
+        // לא להציג משימות הורה אם יש להן ילדים (האינטרוולים יוצגו במקומן)
+        if (t.is_project && tasks.some(child => child.parent_task_id === t.id)) {
+          return false;
+        }
+        return true;
+      })
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   };
 
   // קבלת משימות מסוננות וממוינות
@@ -358,25 +431,23 @@ export function TaskProvider({ children }) {
   const getCompletedTasks = () => {
     return tasks
       .filter(t => t.is_completed)
-      .sort((a, b) => {
-        // מיון לפי תאריך השלמה (החדשות ביותר ראשונות)
-        if (!a.completed_at) return 1;
-        if (!b.completed_at) return -1;
-        return new Date(b.completed_at) - new Date(a.completed_at);
-      });
+      .sort((a, b) => new Date(b.completed_at) - new Date(a.completed_at));
   };
 
-  // סטטיסטיקות
+  // קבלת סטטיסטיקות
   const getStats = () => {
+    const activeTasks = tasks.filter(t => !t.is_completed);
+    const completedTasks = tasks.filter(t => t.is_completed);
+    
     return {
       total: tasks.length,
-      completed: tasks.filter(t => t.is_completed).length,
-      active: tasks.filter(t => !t.is_completed).length,
+      active: activeTasks.length,
+      completed: completedTasks.length,
       byQuadrant: {
-        1: tasks.filter(t => t.quadrant === 1).length,
-        2: tasks.filter(t => t.quadrant === 2).length,
-        3: tasks.filter(t => t.quadrant === 3).length,
-        4: tasks.filter(t => t.quadrant === 4).length
+        1: tasks.filter(t => t.quadrant === 1 && !t.is_completed).length,
+        2: tasks.filter(t => t.quadrant === 2 && !t.is_completed).length,
+        3: tasks.filter(t => t.quadrant === 3 && !t.is_completed).length,
+        4: tasks.filter(t => t.quadrant === 4 && !t.is_completed).length
       }
     };
   };
@@ -400,7 +471,13 @@ export function TaskProvider({ children }) {
     getTasksByQuadrant,
     getCompletedTasks,
     getFilteredTasks,
-    getStats
+    getStats,
+    // פונקציות חדשות לאינטרוולים
+    getTaskProgress,
+    getIntervals,
+    isTaskInterval,
+    taskHasIntervals,
+    INTERVAL_DURATION
   };
 
   return (
@@ -411,4 +488,3 @@ export function TaskProvider({ children }) {
 }
 
 export default TaskContext;
-
