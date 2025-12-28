@@ -217,8 +217,8 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
     return mins > 0 ? `${hours}:${mins.toString().padStart(2, '0')}` : `${hours} שעות`;
   };
 
-  // שם תצוגה עם אינדקס בלוק
-  const displayTitle = isBlock 
+  // שם תצוגה עם אינדקס בלוק - רק אם אין כבר מספור בשם
+  const displayTitle = (isBlock && !currentTask.title.includes('/'))
     ? `${currentTask.title} (${currentTask.blockIndex}/${currentTask.totalBlocks})`
     : currentTask.title;
 

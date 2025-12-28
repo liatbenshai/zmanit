@@ -351,8 +351,11 @@ function SmartWorkIntake({ onClose, onCreated }) {
     try {
       // יצירת הבלוקים כמשימות
       for (const block of proposedSchedule) {
+        const blockTitle = (proposedSchedule.length > 1 && !formData.title.includes('/'))
+          ? `${formData.title} (${block.blockIndex}/${proposedSchedule.length})`
+          : formData.title;
         await addTask({
-          title: `${formData.title} (${block.blockIndex}/${proposedSchedule.length})`,
+          title: blockTitle,
           description: formData.description || null,
           taskType: formData.taskType,
           estimatedDuration: block.duration,

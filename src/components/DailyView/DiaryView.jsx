@@ -187,8 +187,8 @@ function DiaryView({ date, tasks, onEditTask, onAddTask, onUpdate }) {
     const isNow = isTodayView && currentMinutes >= startMinutes && currentMinutes < endMinutes;
     const isPast = isTodayView && currentMinutes >= endMinutes;
 
-    // שם תצוגה עם אינדקס בלוק
-    const displayTitle = task.totalBlocks > 1 
+    // שם תצוגה עם אינדקס בלוק - רק אם אין כבר מספור בשם
+    const displayTitle = (task.totalBlocks > 1 && !task.title.includes('/'))
       ? `${task.title} (${task.blockIndex}/${task.totalBlocks})`
       : task.title;
 

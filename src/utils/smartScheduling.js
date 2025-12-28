@@ -552,7 +552,7 @@ export function splitAndScheduleWork({
           blocks.push({
             blockIndex,
             totalBlocks: numBlocks,
-            title: `${title} (${blockIndex}/${numBlocks})`,
+            title: (numBlocks > 1 && !title.includes('/')) ? `${title} (${blockIndex}/${numBlocks})` : title,
             taskType,
             priority,
             description,
