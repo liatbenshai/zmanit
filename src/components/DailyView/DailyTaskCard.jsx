@@ -263,15 +263,21 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
             `}>
               {displayTitle}
             </h3>
-            {/* תגית דחיפות */}
-            {currentTask.priority === 'urgent' && (
+            {/* תגית באיחור - מוצגת רק אם המשימה באיחור */}
+            {currentTask.isOverdue && (
+              <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full">
+                ⏰ באיחור
+              </span>
+            )}
+            {/* תגית דחוף - רק אם זה באמת דחוף ולא רק באיחור */}
+            {currentTask.priority === 'urgent' && !currentTask.isOverdue && (
               <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full">
                 🔴 דחוף
               </span>
             )}
             {currentTask.priority === 'high' && (
               <span className="text-xs px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
-                🟡 בינוני
+                🟠 גבוה
               </span>
             )}
             {/* שעות הבלוק */}

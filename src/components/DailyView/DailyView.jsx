@@ -5,6 +5,7 @@ import { useAuth } from '../../hooks/useAuth';
 import { smartScheduleWeek } from '../../utils/smartScheduler';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
+import RescheduleModal from './RescheduleModal';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
@@ -185,6 +186,7 @@ function DailyView() {
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   
   // שעה נוכחית - מתעדכנת כל דקה
   const [currentTime, setCurrentTime] = useState(() => {
@@ -546,12 +548,12 @@ function DailyView() {
               </ul>
             </div>
             
-            {/* כפתור להעברה למחר */}
+            {/* כפתור לפתיחת מודל ארגון מחדש */}
             <button
-              onClick={() => toast('🚧 פיצ\'ר בפיתוח - בקרוב תוכלי להעביר משימות בלחיצה!')}
-              className="mt-2 w-full py-1.5 text-xs bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200 rounded hover:bg-red-200 dark:hover:bg-red-700 transition-colors"
+              onClick={() => setShowRescheduleModal(true)}
+              className="mt-2 w-full py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
             >
-              📅 העבר משימות באיחור למחר
+              📅 ארגון מחדש - בחרי מה להעביר
             </button>
           </div>
         )}
@@ -606,14 +608,14 @@ function DailyView() {
                         is_completed: block.isCompleted,
                         task_type: block.taskType,
                         due_time: block.startTime,
-                        priority: 'urgent',
+                        priority: block.priority || 'normal', // שומר על העדיפות המקורית!
                         blockIndex: block.blockIndex,
                         totalBlocks: block.totalBlocks,
                         startTime: block.startTime,
                         endTime: block.endTime,
                         originalStartTime: block.originalStartTime,
                         originalEndTime: block.originalEndTime,
-                        isOverdue: true,
+                        isOverdue: true, // זה מה שמסמן שהמשימה באיחור
                         isRescheduled: block.isRescheduled
                       }} 
                       onEdit={() => handleEditTask(block)}
@@ -709,6 +711,18 @@ function DailyView() {
           defaultDate={getDateISO(selectedDate)}
         />
       </Modal>
+      
+      {/* מודל ארגון מחדש */}
+      <RescheduleModal
+        isOpen={showRescheduleModal}
+        onClose={() => {
+          setShowRescheduleModal(false);
+          loadTasks(); // רענון אחרי שינויים
+        }}
+        overdueBlocks={overdueBlocks}
+        allBlocks={rescheduledBlocks}
+        selectedDate={selectedDate}
+      />
     </div>
   );
 }

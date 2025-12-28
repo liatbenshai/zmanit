@@ -444,6 +444,8 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
         taskId: task.id,
         task: task,
         type: task.task_type || 'other',
+        taskType: task.task_type || 'other',
+        priority: task.priority || 'normal',  // העברת עדיפות מהמשימה!
         title: totalBlocks > 1 ? `${task.title} (${blockIndex}/${totalBlocks})` : task.title,
         startMinute: currentStart,
         endMinute: blockEnd,
@@ -452,7 +454,9 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
         duration: blockDuration,
         blockIndex,
         totalBlocks,
-        dayDate: day.date
+        dayDate: day.date,
+        isCompleted: task.is_completed || false,
+        timeSpent: task.time_spent || 0
       };
       
       day.blocks.push(block);
