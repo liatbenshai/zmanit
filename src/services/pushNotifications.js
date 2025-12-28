@@ -4,7 +4,12 @@
 
 // בדיקה אם הדפדפן תומך בהתראות
 export function isNotificationSupported() {
-  return 'Notification' in window && 'serviceWorker' in navigator;
+  return 'Notification' in window;
+}
+
+// בדיקה אם Service Worker נתמך
+export function isPushSupported() {
+  return 'serviceWorker' in navigator && 'PushManager' in window;
 }
 
 // בדיקת סטטוס הרשאה
@@ -95,6 +100,15 @@ export function scheduleNotification(task, minutesBefore = 15) {
 
   const delay = notifyAt.getTime() - now.getTime();
 
+  // הגבלת delay ל-24 שעות מקסימום (מגבלת דפדפן)
+  const maxDelay = 24 * 60 * 60 * 1000;
+  if (delay > maxDelay) {
+    console.log(`⏰ התראה למשימה "${task.title}" רחוקה מדי, תתוזמן מחדש`);
+    return null;
+  }
+
+  console.log(`⏰ מתזמן התראה למשימה "${task.title}" בעוד ${Math.round(delay / 60000)} דקות`);
+
   // שמירת ה-timeout ID לביטול אפשרי
   const timeoutId = setTimeout(() => {
     notifyTask(task);
@@ -116,41 +130,13 @@ export function cancelScheduledNotification(timeoutId) {
  * רישום ל-Push Notifications דרך Service Worker
  */
 export async function subscribeToPush() {
-  if (!isNotificationSupported()) return null;
+  if (!isPushSupported()) {
+    console.log('ℹ️ Push Notifications לא נתמכים בדפדפן זה');
+    return null;
+  }
 
   try {
-    // בדיקה שאין Service Workers - אם יש, לא נמשיך
-    // נשתמש בפונקציה המקורית אם יש, אחרת נבדוק ישירות
-    if ('serviceWorker' in navigator) {
-      let registrations = [];
-      try {
-        // ננסה להשתמש בפונקציה המקורית אם יש
-        if (window._originalGetRegistrations) {
-          registrations = await window._originalGetRegistrations.call(navigator.serviceWorker);
-        } else {
-          // אם אין, ננסה דרך אחרת
-          registrations = await navigator.serviceWorker.getRegistrations();
-        }
-      } catch (e) {
-        // אם יש שגיאה, אין Service Workers
-        console.log('ℹ️ אין Service Worker - Push Notifications לא זמינים');
-        return null;
-      }
-      
-      if (registrations.length === 0) {
-        console.log('ℹ️ אין Service Worker - Push Notifications לא זמינים');
-        return null;
-      }
-    }
-    
-    // ננסה לגשת ל-ready - אם זה נחסם, נחזיר null
-    let registration;
-    try {
-      registration = await navigator.serviceWorker.ready;
-    } catch (e) {
-      console.log('ℹ️ Service Worker לא זמין - Push Notifications לא זמינים');
-      return null;
-    }
+    const registration = await navigator.serviceWorker.ready;
     
     // בדיקה אם כבר רשום
     let subscription = await registration.pushManager.getSubscription();
@@ -160,7 +146,7 @@ export async function subscribeToPush() {
       const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
       
       if (!vapidPublicKey) {
-        console.warn('חסר VAPID public key');
+        console.warn('חסר VAPID public key - Push Notifications לא יעבדו מהשרת');
         return null;
       }
 
@@ -168,6 +154,8 @@ export async function subscribeToPush() {
         userVisibleOnly: true,
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
       });
+      
+      console.log('✅ נרשם ל-Push Notifications');
     }
 
     return subscription;
@@ -181,38 +169,15 @@ export async function subscribeToPush() {
  * ביטול רישום Push
  */
 export async function unsubscribeFromPush() {
+  if (!isPushSupported()) return false;
+  
   try {
-    // בדיקה שאין Service Workers
-    if ('serviceWorker' in navigator) {
-      let registrations = [];
-      try {
-        // ננסה להשתמש בפונקציה המקורית אם יש
-        if (window._originalGetRegistrations) {
-          registrations = await window._originalGetRegistrations.call(navigator.serviceWorker);
-        } else {
-          registrations = await navigator.serviceWorker.getRegistrations();
-        }
-      } catch (e) {
-        // אם יש שגיאה, אין Service Workers
-        return false;
-      }
-      
-      if (registrations.length === 0) {
-        return false;
-      }
-    }
-    
-    // ננסה לגשת ל-ready - אם זה נחסם, נחזיר false
-    let registration;
-    try {
-      registration = await navigator.serviceWorker.ready;
-    } catch (e) {
-      return false;
-    }
+    const registration = await navigator.serviceWorker.ready;
     const subscription = await registration.pushManager.getSubscription();
     
     if (subscription) {
       await subscription.unsubscribe();
+      console.log('✅ בוטל רישום Push');
       return true;
     }
     
@@ -242,6 +207,7 @@ function urlBase64ToUint8Array(base64String) {
 
 export default {
   isNotificationSupported,
+  isPushSupported,
   getNotificationPermission,
   requestNotificationPermission,
   sendLocalNotification,
@@ -251,4 +217,3 @@ export default {
   subscribeToPush,
   unsubscribeFromPush
 };
-
