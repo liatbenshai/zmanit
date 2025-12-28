@@ -26,6 +26,21 @@
 import { WORK_HOURS } from '../config/workSchedule';
 
 // ============================================
+// פונקציית עזר לתאריך מקומי
+// ============================================
+
+/**
+ * המרת תאריך לפורמט ISO מקומי (לא UTC!)
+ * זה קריטי כי toISOString() מחזיר UTC שיכול להיות יום אחר בישראל
+ */
+function getLocalDateISO(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+// ============================================
 // הגדרות
 // ============================================
 
@@ -78,17 +93,15 @@ export const SMART_SCHEDULE_CONFIG = {
 export function smartScheduleWeek(weekStart, allTasks) {
   const config = SMART_SCHEDULE_CONFIG;
   
-  // תאריך היום
+  // תאריך היום - בשעון מקומי!
   const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const todayISO = today.toISOString().split('T')[0];
+  const todayISO = getLocalDateISO(today);
   
   // סוף השבוע המבוקש
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
-  weekEnd.setHours(23, 59, 59, 999);
-  const weekEndISO = weekEnd.toISOString().split('T')[0];
-  const weekStartISO = weekStart.toISOString().split('T')[0];
+  const weekEndISO = getLocalDateISO(weekEnd);
+  const weekStartISO = getLocalDateISO(weekStart);
   
   console.log('🚀 Smart Scheduler v3 - Starting week planning');
   console.log(`📅 Week: ${weekStartISO} - ${weekEndISO}`);
@@ -186,7 +199,7 @@ function initializeDays(weekStart, config) {
     date.setDate(date.getDate() + i);
     date.setHours(12, 0, 0, 0);
     
-    const dateISO = date.toISOString().split('T')[0];
+    const dateISO = getLocalDateISO(date);
     const dayOfWeek = date.getDay();
     const dayConfig = WORK_HOURS[dayOfWeek];
     const isWorkDay = dayConfig?.enabled || false;
@@ -589,7 +602,7 @@ function minutesToTime(minutes) {
 }
 
 function isSameDay(date1, date2) {
-  return date1.toISOString().split('T')[0] === date2.toISOString().split('T')[0];
+  return getLocalDateISO(date1) === getLocalDateISO(date2);
 }
 
 function daysBetween(date1, date2) {
@@ -618,7 +631,7 @@ export function smartScheduleDay(date, allTasks) {
   weekStart.setHours(12, 0, 0, 0);
   
   const weekPlan = smartScheduleWeek(weekStart, allTasks);
-  const dateISO = date.toISOString().split('T')[0];
+  const dateISO = getLocalDateISO(date);
   
   return weekPlan.days.find(d => d.date === dateISO) || {
     date: dateISO,
