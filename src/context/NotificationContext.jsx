@@ -1,4 +1,4 @@
-import { createContext, useState, useEffect, useCallback } from 'react';
+import { createContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../services/supabase';
 import { 
@@ -6,7 +6,8 @@ import {
   requestNotificationPermission,
   getNotificationPermission,
   scheduleNotification,
-  cancelScheduledNotification
+  cancelScheduledNotification,
+  sendLocalNotification
 } from '../services/pushNotifications';
 
 // יצירת קונטקסט
@@ -29,7 +30,7 @@ export function NotificationProvider({ children }) {
   const { user } = useAuth();
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [permission, setPermission] = useState('default');
-  const [scheduledNotifications, setScheduledNotifications] = useState({});
+  const scheduledNotificationsRef = useRef({});
 
   // בדיקת הרשאות בעליה
   useEffect(() => {
@@ -71,6 +72,12 @@ export function NotificationProvider({ children }) {
   const requestPermission = async () => {
     const granted = await requestNotificationPermission();
     setPermission(granted ? 'granted' : 'denied');
+    
+    if (granted) {
+      // שמירת ההגדרה
+      await saveSettings({ ...settings, pushEnabled: true });
+    }
+    
     return granted;
   };
 
@@ -102,44 +109,86 @@ export function NotificationProvider({ children }) {
 
   // תזמון התראה למשימה
   const scheduleTaskNotification = useCallback((task) => {
-    if (!settings.pushEnabled || permission !== 'granted') return;
-    if (!task.due_date || !task.reminder_minutes) return;
+    // בדיקת תנאים בסיסיים
+    if (permission !== 'granted') {
+      console.log('⚠️ אין הרשאה להתראות');
+      return;
+    }
+    
+    if (!task.due_date) {
+      return; // אין תאריך - אין מה לתזמן
+    }
 
     // ביטול התראה קיימת אם יש
-    if (scheduledNotifications[task.id]) {
-      cancelScheduledNotification(scheduledNotifications[task.id]);
+    if (scheduledNotificationsRef.current[task.id]) {
+      cancelScheduledNotification(scheduledNotificationsRef.current[task.id]);
+      delete scheduledNotificationsRef.current[task.id];
     }
 
     // תזמון התראה חדשה
-    const timeoutId = scheduleNotification(task, task.reminder_minutes);
+    const reminderMinutes = task.reminder_minutes || settings.reminderMinutes || 15;
+    const timeoutId = scheduleNotification(task, reminderMinutes);
     
     if (timeoutId) {
-      setScheduledNotifications(prev => ({
-        ...prev,
-        [task.id]: timeoutId
-      }));
+      scheduledNotificationsRef.current[task.id] = timeoutId;
+      console.log(`✅ תוזמנה התראה למשימה "${task.title}"`);
     }
-  }, [settings.pushEnabled, permission, scheduledNotifications]);
+  }, [permission, settings.reminderMinutes]);
+
+  // תזמון התראות לרשימת משימות
+  const scheduleTasksNotifications = useCallback((tasks) => {
+    if (permission !== 'granted') return;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const tasksToSchedule = tasks.filter(task => 
+      !task.is_completed && 
+      task.due_date && 
+      task.due_date >= today
+    );
+
+    console.log(`🔔 מתזמן התראות ל-${tasksToSchedule.length} משימות`);
+    
+    tasksToSchedule.forEach(task => {
+      scheduleTaskNotification(task);
+    });
+  }, [permission, scheduleTaskNotification]);
 
   // ביטול התראה למשימה
   const cancelTaskNotification = useCallback((taskId) => {
-    if (scheduledNotifications[taskId]) {
-      cancelScheduledNotification(scheduledNotifications[taskId]);
-      setScheduledNotifications(prev => {
-        const next = { ...prev };
-        delete next[taskId];
-        return next;
-      });
+    if (scheduledNotificationsRef.current[taskId]) {
+      cancelScheduledNotification(scheduledNotificationsRef.current[taskId]);
+      delete scheduledNotificationsRef.current[taskId];
+      console.log(`❌ בוטלה התראה למשימה ${taskId}`);
     }
-  }, [scheduledNotifications]);
+  }, []);
 
   // ביטול כל ההתראות
   const cancelAllNotifications = useCallback(() => {
-    Object.values(scheduledNotifications).forEach(timeoutId => {
-      cancelScheduledNotification(timeoutId);
+    Object.keys(scheduledNotificationsRef.current).forEach(taskId => {
+      cancelScheduledNotification(scheduledNotificationsRef.current[taskId]);
     });
-    setScheduledNotifications({});
-  }, [scheduledNotifications]);
+    scheduledNotificationsRef.current = {};
+    console.log('❌ בוטלו כל ההתראות');
+  }, []);
+
+  // שליחת התראה מיידית
+  const sendNotification = useCallback((title, options = {}) => {
+    if (permission !== 'granted') {
+      console.warn('אין הרשאה להתראות');
+      return null;
+    }
+    return sendLocalNotification(title, options);
+  }, [permission]);
+
+  // ניקוי בעת יציאה
+  useEffect(() => {
+    return () => {
+      // ביטול כל ההתראות המתוזמנות בעת unmount
+      Object.values(scheduledNotificationsRef.current).forEach(timeoutId => {
+        cancelScheduledNotification(timeoutId);
+      });
+    };
+  }, []);
 
   const value = {
     settings,
@@ -148,8 +197,10 @@ export function NotificationProvider({ children }) {
     requestPermission,
     saveSettings,
     scheduleTaskNotification,
+    scheduleTasksNotifications,
     cancelTaskNotification,
-    cancelAllNotifications
+    cancelAllNotifications,
+    sendNotification
   };
 
   return (
@@ -160,4 +211,3 @@ export function NotificationProvider({ children }) {
 }
 
 export default NotificationContext;
-
