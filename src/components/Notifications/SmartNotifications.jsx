@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { TASK_TYPES } from '../DailyView/DailyView';
@@ -10,36 +10,44 @@ import toast from 'react-hot-toast';
  */
 const WORK_HOURS = {
   start: 8,
-  end: 16
+  end: 18
 };
 
 /**
- * התראות חכמות
+ * התראות חכמות - מציג התראות ומעדכן את מערכת ההתראות
  */
 function SmartNotifications({ onTaskClick }) {
   const { tasks } = useTasks();
-  const { permission, requestPermission, sendNotification, scheduleTasksNotifications } = useNotifications();
+  const { 
+    permission, 
+    requestPermission, 
+    updateTasks,
+    checkTasksAndNotify 
+  } = useNotifications();
   const [dismissed, setDismissed] = useState(new Set());
-  const notifiedTasksRef = useRef(new Set()); // מניעת התראות כפולות
+
+  // עדכון המשימות במערכת ההתראות
+  useEffect(() => {
+    if (tasks && tasks.length > 0) {
+      updateTasks(tasks);
+      // בדיקה מיידית כשמשימות משתנות
+      if (permission === 'granted') {
+        checkTasksAndNotify();
+      }
+    }
+  }, [tasks, updateTasks, checkTasksAndNotify, permission]);
 
   // בקשת הרשאה להתראות
   const handleRequestPermission = async () => {
     const granted = await requestPermission();
     if (granted) {
-      toast.success('התראות הופעלו!');
+      toast.success('🔔 התראות הופעלו!');
     } else {
       toast.error('ההתראות לא אושרו');
     }
   };
 
-  // תזמון התראות למשימות כשהן נטענות
-  useEffect(() => {
-    if (permission === 'granted' && tasks.length > 0) {
-      scheduleTasksNotifications(tasks);
-    }
-  }, [tasks, permission, scheduleTasksNotifications]);
-
-  // חישוב התראות
+  // חישוב התראות לתצוגה בממשק
   const notifications = useMemo(() => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -51,7 +59,7 @@ function SmartNotifications({ onTaskClick }) {
       if (task.is_completed) return;
       if (dismissed.has(task.id)) return;
 
-      const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
+      const taskType = TASK_TYPES?.[task.task_type] || { icon: '📌', name: 'אחר' };
 
       // משימה שמתחילה בקרוב (תוך 15 דקות)
       if (task.due_date === today && task.due_time) {
@@ -73,16 +81,26 @@ function SmartNotifications({ onTaskClick }) {
           });
         }
 
-        // משימה שהגיע זמנה (איחור)
-        if (diff < 0 && diff > -60) {
+        // משימה באיחור
+        if (diff < 0) {
+          const overdueMinutes = Math.abs(diff);
+          let overdueText;
+          if (overdueMinutes >= 60) {
+            const hours = Math.floor(overdueMinutes / 60);
+            const mins = overdueMinutes % 60;
+            overdueText = mins > 0 ? `${hours} שעות ו-${mins} דקות` : `${hours} שעות`;
+          } else {
+            overdueText = `${overdueMinutes} דקות`;
+          }
+
           alerts.push({
             id: `overdue-${task.id}`,
             taskId: task.id,
             type: 'overdue',
             priority: 0,
             icon: '🔴',
-            title: 'משימה באיחור',
-            message: `${taskType.icon} ${task.title} - היה אמור להתחיל לפני ${Math.abs(diff)} דקות`,
+            title: 'משימה באיחור!',
+            message: `${taskType.icon} ${task.title} - לפני ${overdueText}`,
             task,
             color: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
           });
@@ -105,7 +123,7 @@ function SmartNotifications({ onTaskClick }) {
       }
     });
 
-    // בדיקת זמן פנוי - אם יש הרבה זמן פנוי ויש משימות לא משובצות
+    // בדיקת זמן פנוי
     const todayTasks = tasks.filter(t => t.due_date === today && !t.is_completed);
     const scheduledMinutes = todayTasks.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
     const totalWorkMinutes = (WORK_HOURS.end - WORK_HOURS.start) * 60;
@@ -141,7 +159,7 @@ function SmartNotifications({ onTaskClick }) {
       });
     }
 
-    // מיון לפי עדיפות
+    // מיון לפי עדיפות (איחורים קודם)
     return alerts.sort((a, b) => a.priority - b.priority);
   }, [tasks, dismissed]);
 
@@ -154,35 +172,17 @@ function SmartNotifications({ onTaskClick }) {
     }
   };
 
-  // שליחת התראות מערכת למשימות קרובות
+  // רענון התראות (איפוס dismissed)
   useEffect(() => {
-    if (permission !== 'granted') return;
+    // כל 5 דקות, איפוס ההתראות שנסגרו
+    const interval = setInterval(() => {
+      setDismissed(new Set());
+    }, 5 * 60 * 1000);
 
-    const upcomingAlerts = notifications.filter(n => n.type === 'upcoming' || n.type === 'overdue');
-    
-    upcomingAlerts.forEach(alert => {
-      // מניעת התראות כפולות
-      if (notifiedTasksRef.current.has(alert.id)) return;
-      notifiedTasksRef.current.add(alert.id);
+    return () => clearInterval(interval);
+  }, []);
 
-      // שליחת התראת מערכת
-      sendNotification(alert.title, {
-        body: alert.message,
-        tag: alert.id,
-        requireInteraction: alert.type === 'overdue'
-      });
-    });
-
-    // ניקוי התראות ישנות מה-ref
-    const currentIds = new Set(upcomingAlerts.map(a => a.id));
-    notifiedTasksRef.current.forEach(id => {
-      if (!currentIds.has(id)) {
-        notifiedTasksRef.current.delete(id);
-      }
-    });
-  }, [notifications, permission, sendNotification]);
-
-  if (notifications.length === 0) {
+  if (notifications.length === 0 && permission === 'granted') {
     return null;
   }
 
@@ -198,12 +198,21 @@ function SmartNotifications({ onTaskClick }) {
         {permission !== 'granted' && (
           <button
             onClick={handleRequestPermission}
-            className="text-xs text-blue-600 dark:text-blue-400 hover:underline"
+            className="text-xs bg-blue-600 text-white px-3 py-1 rounded-full hover:bg-blue-700"
           >
-            הפעל התראות מערכת
+            🔔 הפעל התראות
           </button>
         )}
       </div>
+
+      {/* הודעה אם אין הרשאה */}
+      {permission !== 'granted' && (
+        <div className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+          <p className="text-sm text-yellow-800 dark:text-yellow-200">
+            ⚠️ התראות לא מופעלות - לא תקבלי התראות על משימות!
+          </p>
+        </div>
+      )}
 
       {/* רשימת התראות */}
       <AnimatePresence>

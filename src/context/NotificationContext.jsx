@@ -10,12 +10,13 @@ import {
 // יצירת קונטקסט
 export const NotificationContext = createContext(null);
 
-// הגדרות ברירת מחדל - 5 דקות לפני
+// הגדרות ברירת מחדל
 const DEFAULT_SETTINGS = {
   pushEnabled: true,
   reminderMinutes: 5,
   notifyOnTime: true,
-  soundEnabled: true
+  soundEnabled: true,
+  repeatEveryMinutes: 10 // תזכורת חוזרת כל 10 דקות למשימות באיחור
 };
 
 /**
@@ -26,7 +27,11 @@ export function NotificationProvider({ children }) {
   const { user } = useAuth();
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [permission, setPermission] = useState('default');
-  const scheduledNotificationsRef = useRef({});
+  
+  // מעקב אחרי התראות שנשלחו (למניעת ספאם)
+  const lastNotifiedRef = useRef({}); // { taskId: { before: timestamp, onTime: timestamp, overdue: timestamp } }
+  const checkIntervalRef = useRef(null);
+  const tasksRef = useRef([]); // המשימות הנוכחיות
 
   // בדיקת הרשאות בעליה
   useEffect(() => {
@@ -56,7 +61,6 @@ export function NotificationProvider({ children }) {
     setPermission(granted ? 'granted' : 'denied');
     
     if (granted) {
-      // שמירת ההגדרה
       await saveSettings({ ...settings, pushEnabled: true });
     }
     
@@ -83,39 +87,38 @@ export function NotificationProvider({ children }) {
     if (!settings.soundEnabled) return;
     
     try {
-      // יצירת צליל באמצעות Web Audio API
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
-      const oscillator = audioContext.createOscillator();
-      const gainNode = audioContext.createGain();
       
-      oscillator.connect(gainNode);
-      gainNode.connect(audioContext.destination);
+      // צליל ראשון
+      const osc1 = audioContext.createOscillator();
+      const gain1 = audioContext.createGain();
+      osc1.connect(gain1);
+      gain1.connect(audioContext.destination);
+      osc1.frequency.value = 800;
+      osc1.type = 'sine';
+      gain1.gain.setValueAtTime(0.3, audioContext.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+      osc1.start(audioContext.currentTime);
+      osc1.stop(audioContext.currentTime + 0.5);
       
-      oscillator.frequency.value = 800;
-      oscillator.type = 'sine';
-      
-      gainNode.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-      
-      oscillator.start(audioContext.currentTime);
-      oscillator.stop(audioContext.currentTime + 0.5);
-      
-      // צליל שני אחרי רבע שנייה
+      // צליל שני
       setTimeout(() => {
-        const osc2 = audioContext.createOscillator();
-        const gain2 = audioContext.createGain();
-        osc2.connect(gain2);
-        gain2.connect(audioContext.destination);
-        osc2.frequency.value = 1000;
-        osc2.type = 'sine';
-        gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-        gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-        osc2.start(audioContext.currentTime);
-        osc2.stop(audioContext.currentTime + 0.5);
+        try {
+          const osc2 = audioContext.createOscillator();
+          const gain2 = audioContext.createGain();
+          osc2.connect(gain2);
+          gain2.connect(audioContext.destination);
+          osc2.frequency.value = 1000;
+          osc2.type = 'sine';
+          gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
+          osc2.start(audioContext.currentTime);
+          osc2.stop(audioContext.currentTime + 0.5);
+        } catch (e) {}
       }, 250);
       
     } catch (e) {
-      console.log('לא ניתן להשמיע צליל:', e);
+      console.log('לא ניתן להשמיע צליל');
     }
   }, [settings.soundEnabled]);
 
@@ -123,120 +126,128 @@ export function NotificationProvider({ children }) {
   const sendNotificationWithSound = useCallback((title, options = {}) => {
     if (permission !== 'granted') return null;
     
-    // השמעת צליל
     playNotificationSound();
     
-    // שליחת התראה
     return sendLocalNotification(title, {
       ...options,
       requireInteraction: true
     });
   }, [permission, playNotificationSound]);
 
-  // תזמון התראות למשימה (5 דקות לפני + בזמן)
-  const scheduleTaskNotification = useCallback((task) => {
-    if (permission !== 'granted') {
-      console.log('⚠️ אין הרשאה להתראות');
-      return;
-    }
+  // בדיקה אם עבר מספיק זמן מההתראה האחרונה
+  const canNotify = useCallback((taskId, type, minIntervalMinutes = 10) => {
+    const now = Date.now();
+    const lastNotified = lastNotifiedRef.current[taskId]?.[type];
     
-    if (!task.due_date || !task.due_time) {
-      return;
-    }
-
-    // ביטול התראות קיימות למשימה זו
-    if (scheduledNotificationsRef.current[task.id]) {
-      scheduledNotificationsRef.current[task.id].forEach(id => clearTimeout(id));
-      delete scheduledNotificationsRef.current[task.id];
-    }
-
-    const dueDateTime = new Date(`${task.due_date}T${task.due_time}`);
-    const now = new Date();
+    if (!lastNotified) return true;
     
-    if (dueDateTime <= now) return; // המשימה כבר עברה
+    const minutesSinceLastNotification = (now - lastNotified) / (1000 * 60);
+    return minutesSinceLastNotification >= minIntervalMinutes;
+  }, []);
 
-    const timeoutIds = [];
-    const reminderMinutes = settings.reminderMinutes || 5;
-
-    // התראה X דקות לפני
-    const reminderTime = new Date(dueDateTime.getTime() - reminderMinutes * 60 * 1000);
-    if (reminderTime > now) {
-      const delay = reminderTime.getTime() - now.getTime();
-      
-      // הגבלה ל-24 שעות
-      if (delay < 24 * 60 * 60 * 1000) {
-        const timeoutId = setTimeout(() => {
-          sendNotificationWithSound(`⏰ ${task.title}`, {
-            body: `מתחיל בעוד ${reminderMinutes} דקות!`,
-            tag: `task-reminder-${task.id}`,
-            icon: '/icon-192.png'
-          });
-        }, delay);
-        timeoutIds.push(timeoutId);
-        console.log(`⏰ תוזמנה התראה ל-"${task.title}" בעוד ${Math.round(delay / 60000)} דקות`);
-      }
+  // סימון שנשלחה התראה
+  const markNotified = useCallback((taskId, type) => {
+    if (!lastNotifiedRef.current[taskId]) {
+      lastNotifiedRef.current[taskId] = {};
     }
+    lastNotifiedRef.current[taskId][type] = Date.now();
+  }, []);
 
-    // התראה בזמן המשימה
-    if (settings.notifyOnTime) {
-      const onTimeDelay = dueDateTime.getTime() - now.getTime();
-      
-      if (onTimeDelay > 0 && onTimeDelay < 24 * 60 * 60 * 1000) {
-        const timeoutId = setTimeout(() => {
-          sendNotificationWithSound(`🔔 ${task.title}`, {
-            body: 'הגיע הזמן להתחיל!',
-            tag: `task-ontime-${task.id}`,
-            icon: '/icon-192.png'
-          });
-        }, onTimeDelay);
-        timeoutIds.push(timeoutId);
-        console.log(`🔔 תוזמנה התראה ל-"${task.title}" בזמן המשימה`);
-      }
-    }
-
-    if (timeoutIds.length > 0) {
-      scheduledNotificationsRef.current[task.id] = timeoutIds;
-    }
-  }, [permission, settings.reminderMinutes, settings.notifyOnTime, sendNotificationWithSound]);
-
-  // תזמון התראות לרשימת משימות
-  const scheduleTasksNotifications = useCallback((tasks) => {
+  // בדיקת משימות ושליחת התראות
+  const checkTasksAndNotify = useCallback(() => {
     if (permission !== 'granted') return;
     
-    const today = new Date().toISOString().split('T')[0];
-    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0];
-    
-    const tasksToSchedule = tasks.filter(task => 
-      !task.is_completed && 
-      task.due_date && 
-      task.due_time &&
-      (task.due_date === today || task.due_date === tomorrow)
-    );
+    const tasks = tasksRef.current;
+    if (!tasks || tasks.length === 0) return;
 
-    console.log(`🔔 מתזמן התראות ל-${tasksToSchedule.length} משימות`);
-    
-    tasksToSchedule.forEach(task => {
-      scheduleTaskNotification(task);
+    const now = new Date();
+    const today = now.toISOString().split('T')[0];
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    console.log(`🔍 בודק ${tasks.length} משימות...`);
+
+    tasks.forEach(task => {
+      if (task.is_completed) return;
+      if (!task.due_date || !task.due_time) return;
+      if (task.due_date !== today) return; // רק משימות של היום
+
+      const [hour, min] = task.due_time.split(':').map(Number);
+      const taskMinutes = hour * 60 + (min || 0);
+      const diff = taskMinutes - currentMinutes; // חיובי = עתידי, שלילי = עבר
+
+      // התראה X דקות לפני
+      const reminderMinutes = settings.reminderMinutes || 5;
+      if (diff > 0 && diff <= reminderMinutes) {
+        if (canNotify(task.id, 'before', reminderMinutes)) {
+          console.log(`⏰ התראה לפני: ${task.title} (בעוד ${diff} דקות)`);
+          sendNotificationWithSound(`⏰ ${task.title}`, {
+            body: `מתחיל בעוד ${diff} דקות!`,
+            tag: `task-before-${task.id}`
+          });
+          markNotified(task.id, 'before');
+        }
+      }
+
+      // התראה בדיוק בזמן (0-1 דקות)
+      if (settings.notifyOnTime && diff >= -1 && diff <= 0) {
+        if (canNotify(task.id, 'onTime', 5)) {
+          console.log(`🔔 התראה בזמן: ${task.title}`);
+          sendNotificationWithSound(`🔔 ${task.title}`, {
+            body: 'הגיע הזמן להתחיל!',
+            tag: `task-ontime-${task.id}`
+          });
+          markNotified(task.id, 'onTime');
+        }
+      }
+
+      // התראה על איחור (כל X דקות)
+      const repeatEvery = settings.repeatEveryMinutes || 10;
+      if (diff < -1) {
+        if (canNotify(task.id, 'overdue', repeatEvery)) {
+          const overdueMinutes = Math.abs(diff);
+          let overdueText;
+          if (overdueMinutes >= 60) {
+            const hours = Math.floor(overdueMinutes / 60);
+            const mins = overdueMinutes % 60;
+            overdueText = mins > 0 ? `${hours} שעות ו-${mins} דקות` : `${hours} שעות`;
+          } else {
+            overdueText = `${overdueMinutes} דקות`;
+          }
+          
+          console.log(`🔴 התראה על איחור: ${task.title} (${overdueText})`);
+          sendNotificationWithSound(`🔴 באיחור: ${task.title}`, {
+            body: `היה אמור להתחיל לפני ${overdueText}!`,
+            tag: `task-overdue-${task.id}`
+          });
+          markNotified(task.id, 'overdue');
+        }
+      }
     });
-  }, [permission, scheduleTaskNotification]);
+  }, [permission, settings, canNotify, markNotified, sendNotificationWithSound]);
 
-  // ביטול התראה למשימה
-  const cancelTaskNotification = useCallback((taskId) => {
-    if (scheduledNotificationsRef.current[taskId]) {
-      scheduledNotificationsRef.current[taskId].forEach(id => clearTimeout(id));
-      delete scheduledNotificationsRef.current[taskId];
-      console.log(`❌ בוטלו התראות למשימה ${taskId}`);
-    }
+  // עדכון רשימת המשימות (נקרא מבחוץ)
+  const updateTasks = useCallback((tasks) => {
+    tasksRef.current = tasks;
   }, []);
 
-  // ביטול כל ההתראות
-  const cancelAllNotifications = useCallback(() => {
-    Object.keys(scheduledNotificationsRef.current).forEach(taskId => {
-      scheduledNotificationsRef.current[taskId].forEach(id => clearTimeout(id));
-    });
-    scheduledNotificationsRef.current = {};
-    console.log('❌ בוטלו כל ההתראות');
-  }, []);
+  // הפעלת בדיקה תקופתית
+  useEffect(() => {
+    if (permission !== 'granted') return;
+
+    // בדיקה ראשונית
+    checkTasksAndNotify();
+
+    // בדיקה כל 30 שניות
+    checkIntervalRef.current = setInterval(() => {
+      checkTasksAndNotify();
+    }, 30 * 1000);
+
+    return () => {
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+      }
+    };
+  }, [permission, checkTasksAndNotify]);
 
   // בדיקת התראות - לדיבוג
   const testNotification = useCallback(() => {
@@ -246,13 +257,9 @@ export function NotificationProvider({ children }) {
     });
   }, [sendNotificationWithSound]);
 
-  // ניקוי בעת יציאה
-  useEffect(() => {
-    return () => {
-      Object.values(scheduledNotificationsRef.current).forEach(timeoutIds => {
-        timeoutIds.forEach(id => clearTimeout(id));
-      });
-    };
+  // ניקוי התראות ישנות (משימות שהושלמו)
+  const clearTaskNotifications = useCallback((taskId) => {
+    delete lastNotifiedRef.current[taskId];
   }, []);
 
   const value = {
@@ -261,10 +268,9 @@ export function NotificationProvider({ children }) {
     isSupported: isNotificationSupported(),
     requestPermission,
     saveSettings,
-    scheduleTaskNotification,
-    scheduleTasksNotifications,
-    cancelTaskNotification,
-    cancelAllNotifications,
+    updateTasks,
+    checkTasksAndNotify,
+    clearTaskNotifications,
     sendNotification: sendNotificationWithSound,
     testNotification
   };

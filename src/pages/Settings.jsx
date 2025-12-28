@@ -18,13 +18,11 @@ function Settings() {
   const [loading, setLoading] = useState(false);
   const [darkMode, setDarkMode] = useState(false);
 
-  // בדיקת מצב כהה
   useEffect(() => {
     const isDark = document.documentElement.classList.contains('dark');
     setDarkMode(isDark);
   }, []);
 
-  // החלפת מצב כהה/בהיר
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
@@ -38,7 +36,6 @@ function Settings() {
     }
   };
 
-  // טאבים - התראות ראשון!
   const tabs = [
     { id: 'notifications', label: 'התראות', icon: '🔔' },
     { id: 'work', label: 'עבודה', icon: '💼' },
@@ -59,7 +56,6 @@ function Settings() {
           ⚙️ הגדרות
         </h1>
 
-        {/* טאבים */}
         <div className="flex gap-2 overflow-x-auto pb-2 mb-6">
           {tabs.map(tab => (
             <button
@@ -77,7 +73,6 @@ function Settings() {
           ))}
         </div>
 
-        {/* תוכן */}
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
           {activeTab === 'notifications' && <NotificationSettings />}
           {activeTab === 'work' && <WorkSettings user={user} />}
@@ -94,7 +89,7 @@ function Settings() {
 }
 
 /**
- * הגדרות התראות - פשוט ועובד!
+ * הגדרות התראות
  */
 function NotificationSettings() {
   const { 
@@ -109,17 +104,14 @@ function NotificationSettings() {
   const [localSettings, setLocalSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
 
-  // עדכון כשההגדרות משתנות
   useEffect(() => {
     setLocalSettings(settings);
   }, [settings]);
 
-  // שינוי הגדרה
   const handleChange = (key, value) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
   };
 
-  // שמירת הגדרות
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -132,7 +124,6 @@ function NotificationSettings() {
     }
   };
 
-  // בקשת הרשאה
   const handleRequestPermission = async () => {
     const granted = await requestPermission();
     if (granted) {
@@ -142,7 +133,6 @@ function NotificationSettings() {
     }
   };
 
-  // בדיקת התראה
   const handleTest = () => {
     testNotification();
     toast.success('נשלחה התראת בדיקה');
@@ -152,7 +142,7 @@ function NotificationSettings() {
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">🔔 הגדרות התראות</h2>
 
-      {/* סטטוס הרשאות */}
+      {/* סטטוס */}
       <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700">
         <div className="flex items-center justify-between">
           <div>
@@ -160,7 +150,7 @@ function NotificationSettings() {
             <p className="text-sm text-gray-500 dark:text-gray-400">
               {!isSupported && 'הדפדפן לא תומך בהתראות'}
               {isSupported && permission === 'granted' && '✅ התראות מופעלות'}
-              {isSupported && permission === 'denied' && '❌ התראות חסומות בדפדפן'}
+              {isSupported && permission === 'denied' && '❌ התראות חסומות'}
               {isSupported && permission === 'default' && 'יש לאשר התראות'}
             </p>
           </div>
@@ -179,7 +169,6 @@ function NotificationSettings() {
         </div>
       </div>
 
-      {/* הגדרות - רק אם יש הרשאה */}
       {permission === 'granted' && (
         <div className="space-y-4">
           
@@ -188,7 +177,7 @@ function NotificationSettings() {
             <div className="flex items-center justify-between mb-3">
               <div>
                 <p className="font-medium text-gray-900 dark:text-white">⏰ התראה לפני המשימה</p>
-                <p className="text-sm text-gray-500">קבל התראה X דקות לפני</p>
+                <p className="text-sm text-gray-500">כמה זמן לפני לקבל התראה</p>
               </div>
             </div>
             <select
@@ -202,7 +191,6 @@ function NotificationSettings() {
               <option value={10}>10 דקות לפני</option>
               <option value={15}>15 דקות לפני</option>
               <option value={30}>30 דקות לפני</option>
-              <option value={60}>שעה לפני</option>
             </select>
           </div>
 
@@ -226,6 +214,27 @@ function NotificationSettings() {
             </button>
           </div>
 
+          {/* תזכורת חוזרת */}
+          <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">🔴 תזכורת חוזרת למשימות באיחור</p>
+                <p className="text-sm text-gray-500">כל כמה זמן להזכיר על משימה שלא הושלמה</p>
+              </div>
+            </div>
+            <select
+              value={localSettings.repeatEveryMinutes || 10}
+              onChange={(e) => handleChange('repeatEveryMinutes', parseInt(e.target.value))}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+            >
+              <option value={5}>כל 5 דקות</option>
+              <option value={10}>כל 10 דקות</option>
+              <option value={15}>כל 15 דקות</option>
+              <option value={30}>כל 30 דקות</option>
+              <option value={60}>כל שעה</option>
+            </select>
+          </div>
+
           {/* צליל */}
           <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-600">
             <div>
@@ -246,19 +255,17 @@ function NotificationSettings() {
             </button>
           </div>
 
-          {/* כפתור שמירה */}
           <Button onClick={handleSave} loading={saving} className="w-full">
             💾 שמור הגדרות
           </Button>
         </div>
       )}
 
-      {/* הודעה אם חסום */}
       {permission === 'denied' && (
         <div className="p-4 bg-red-50 dark:bg-red-900/20 rounded-lg text-red-700 dark:text-red-300">
           <p className="font-medium">ההתראות חסומות בדפדפן</p>
           <p className="text-sm mt-1">
-            כדי להפעיל התראות, לחצי על הסמל 🔒 ליד שורת הכתובת ואפשרי התראות.
+            לחצי על 🔒 ליד שורת הכתובת ← אפשרי התראות ← רעננו את הדף
           </p>
         </div>
       )}
@@ -311,7 +318,6 @@ function WorkSettings({ user }) {
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">הגדרות עבודה</h2>
       
-      {/* שעות עבודה */}
       <div className="space-y-3">
         <h3 className="font-medium text-gray-700 dark:text-gray-300">שעות עבודה</h3>
         <div className="flex items-center gap-4 flex-wrap">
@@ -343,7 +349,6 @@ function WorkSettings({ user }) {
         </div>
       </div>
 
-      {/* ימי עבודה */}
       <div className="space-y-3">
         <h3 className="font-medium text-gray-700 dark:text-gray-300">ימי עבודה</h3>
         <div className="flex gap-2">
@@ -361,23 +366,6 @@ function WorkSettings({ user }) {
             </button>
           ))}
         </div>
-      </div>
-
-      {/* Buffer */}
-      <div className="space-y-3">
-        <h3 className="font-medium text-gray-700 dark:text-gray-300">Buffer אוטומטי</h3>
-        <p className="text-sm text-gray-500">הוסף זמן נוסף לכל משימה</p>
-        <select
-          value={preferences.bufferMinutes}
-          onChange={(e) => setPreferences(p => ({ ...p, bufferMinutes: parseInt(e.target.value) }))}
-          className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-        >
-          <option value={0}>ללא buffer</option>
-          <option value={5}>5 דקות</option>
-          <option value={10}>10 דקות</option>
-          <option value={15}>15 דקות</option>
-          <option value={20}>20% מהזמן</option>
-        </select>
       </div>
 
       <Button onClick={handleSave}>שמור הגדרות</Button>
@@ -419,7 +407,6 @@ function TaskTypesSettings({ user }) {
         </Button>
       </div>
 
-      {/* רשימת סוגים */}
       <div className="grid gap-3">
         {Object.entries(TASK_TYPES).map(([key, type]) => (
           <div 
@@ -441,7 +428,6 @@ function TaskTypesSettings({ user }) {
           </div>
         ))}
 
-        {/* סוגים מותאמים אישית */}
         {customTypes.map(type => (
           <div 
             key={type.id}
@@ -466,7 +452,6 @@ function TaskTypesSettings({ user }) {
         ))}
       </div>
 
-      {/* טופס הוספה */}
       <Modal
         isOpen={showAddForm}
         onClose={() => setShowAddForm(false)}
@@ -485,9 +470,6 @@ function TaskTypesSettings({ user }) {
   );
 }
 
-/**
- * טופס הוספת סוג משימה
- */
 function TaskTypeForm({ onSave, onClose, initialData = {} }) {
   const [form, setForm] = useState({
     name: initialData.name || '',
@@ -537,19 +519,6 @@ function TaskTypeForm({ onSave, onClose, initialData = {} }) {
         </div>
       </div>
 
-      <div>
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-          זמן ממוצע (דקות)
-        </label>
-        <input
-          type="number"
-          value={form.avgDuration}
-          onChange={(e) => setForm(f => ({ ...f, avgDuration: parseInt(e.target.value) || 30 }))}
-          className="input-field w-24"
-          min="1"
-        />
-      </div>
-
       <div className="flex gap-3 pt-4">
         <Button type="submit">שמור</Button>
         <Button type="button" variant="secondary" onClick={onClose}>
@@ -560,25 +529,19 @@ function TaskTypeForm({ onSave, onClose, initialData = {} }) {
   );
 }
 
-/**
- * הגדרות תצוגה
- */
 function AppearanceSettings({ darkMode, toggleDarkMode }) {
   const [isInstalled, setIsInstalled] = useState(false);
   const [isIOS, setIsIOS] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState(null);
 
   useEffect(() => {
-    // בדיקה אם מותקן
     if (window.matchMedia('(display-mode: standalone)').matches) {
       setIsInstalled(true);
     }
     
-    // בדיקת iOS
     const userAgent = navigator.userAgent || navigator.vendor;
     setIsIOS(/iPad|iPhone|iPod/.test(userAgent) && !window.MSStream);
 
-    // האזנה לאירוע התקנה
     const handler = (e) => {
       e.preventDefault();
       setDeferredPrompt(e);
@@ -613,16 +576,10 @@ function AppearanceSettings({ darkMode, toggleDarkMode }) {
     }
   };
 
-  const clearInstallDismiss = () => {
-    localStorage.removeItem('pwa-install-dismissed');
-    toast.success('ההודעה תופיע שוב בפעם הבאה');
-  };
-
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">הגדרות תצוגה</h2>
       
-      {/* מצב כהה */}
       <div className="flex items-center justify-between p-4 bg-gray-50 dark:bg-gray-700 rounded-lg">
         <div>
           <p className="font-medium text-gray-900 dark:text-white">מצב כהה</p>
@@ -636,7 +593,6 @@ function AppearanceSettings({ darkMode, toggleDarkMode }) {
         </button>
       </div>
 
-      {/* התקנת אפליקציה */}
       <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
         <div className="flex items-center gap-3 mb-3">
           <span className="text-2xl">📱</span>
@@ -654,26 +610,15 @@ function AppearanceSettings({ darkMode, toggleDarkMode }) {
             <span>האפליקציה מותקנת</span>
           </div>
         ) : (
-          <div className="space-y-2">
-            <Button onClick={handleInstall} className="w-full">
-              {isIOS ? '📲 איך להתקין?' : '📲 התקן עכשיו'}
-            </Button>
-            <button 
-              onClick={clearInstallDismiss}
-              className="text-sm text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              לא רואה הודעת התקנה? לחץ כאן
-            </button>
-          </div>
+          <Button onClick={handleInstall} className="w-full">
+            {isIOS ? '📲 איך להתקין?' : '📲 התקן עכשיו'}
+          </Button>
         )}
       </div>
     </div>
   );
 }
 
-/**
- * הגדרות פרופיל
- */
 function ProfileSettings({ user, loading, setLoading }) {
   const [fullName, setFullName] = useState(user?.profile?.full_name || '');
   const [saved, setSaved] = useState(false);
@@ -724,9 +669,6 @@ function ProfileSettings({ user, loading, setLoading }) {
   );
 }
 
-/**
- * הגדרות חשבון
- */
 function AccountSettings({ user, logout, loading, setLoading }) {
   const [showPasswordForm, setShowPasswordForm] = useState(false);
   const [passwords, setPasswords] = useState({
@@ -775,7 +717,6 @@ function AccountSettings({ user, logout, loading, setLoading }) {
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">הגדרות חשבון</h2>
       
-      {/* שינוי סיסמה */}
       <div className="p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
         <div className="flex items-center justify-between mb-4">
           <div>
@@ -813,17 +754,10 @@ function AccountSettings({ user, logout, loading, setLoading }) {
         )}
       </div>
 
-      {/* התנתקות */}
       <div className="pt-6 border-t border-gray-200 dark:border-gray-700">
         <Button variant="danger" onClick={handleLogout}>
           צא מהמערכת
         </Button>
-      </div>
-
-      {/* פרטי חשבון */}
-      <div className="pt-6 border-t border-gray-200 dark:border-gray-700 text-sm text-gray-500 dark:text-gray-400">
-        <p>נוצר: {new Date(user?.profile?.created_at).toLocaleDateString('he-IL')}</p>
-        <p>התחברות אחרונה: {new Date(user?.profile?.last_login).toLocaleDateString('he-IL')}</p>
       </div>
     </div>
   );
