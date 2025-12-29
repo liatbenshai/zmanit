@@ -817,7 +817,9 @@ function DailyView() {
         onClose={handleCloseForm}
         title={editingTask ? 'עריכת משימה' : 'משימה חדשה'}
       >
+        {/* ✅ תיקון: key גורם ל-remount כשעוברים בין הוספה לעריכה */}
         <SimpleTaskForm
+          key={editingTask?.id || 'new-task'}
           task={editingTask}
           onClose={handleCloseForm}
           taskTypes={TASK_TYPES}

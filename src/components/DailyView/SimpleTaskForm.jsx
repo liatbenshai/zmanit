@@ -65,7 +65,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     return Math.ceil(calculatedDuration / 45);
   }, [calculatedDuration]);
 
-  // מילוי נתונים בעריכה
+  // מילוי נתונים בעריכה / איפוס בהוספה
   useEffect(() => {
     if (task) {
       // מציאת הקטגוריה לפי סוג המשימה
@@ -87,8 +87,22 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       if (task.due_time) {
         setShowTimeField(true);
       }
+    } else {
+      // ✅ תיקון: איפוס הטופס כשאין משימה (הוספה חדשה)
+      setFormData({
+        title: '',
+        taskType: 'transcription',
+        inputValue: '',
+        startDate: defaultDate || '',
+        dueDate: defaultDate || '',
+        dueTime: '',
+        description: '',
+        priority: 'normal'
+      });
+      setSelectedCategory('work');
+      setShowTimeField(false);
     }
-  }, [task]);
+  }, [task, defaultDate]);
 
   // עדכון סוג משימה כשמשתנה קטגוריה
   useEffect(() => {
