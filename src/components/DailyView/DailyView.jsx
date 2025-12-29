@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
@@ -9,6 +9,11 @@ import RescheduleModal from './RescheduleModal';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
+
+// ===============================
+// Drag & Drop State
+// ===============================
+let draggedTaskData = null;
 
 /**
  * סוגי משימות מוגדרים - כולם לפי זמן
@@ -183,11 +188,13 @@ function formatMinutes(minutes) {
  */
 function DailyView() {
   const { user } = useAuth();
-  const { tasks, loading, error, loadTasks } = useTasks();
+  const { tasks, loading, error, loadTasks, editTask } = useTasks();
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [dragOverTime, setDragOverTime] = useState(null); // שעה שמעליה גוררים
+  const timelineRef = useRef(null);
   
   // ✅ תיקון: שעה נוכחית - משתמש ב-getDateISO במקום toISOString
   const [currentTime, setCurrentTime] = useState(() => {
@@ -328,6 +335,69 @@ function DailyView() {
     setShowTaskForm(false);
     setEditingTask(null);
     loadTasks();
+  };
+
+  // ===============================
+  // Drag & Drop Handlers
+  // ===============================
+  
+  // התחלת גרירה
+  const handleDragStart = (task, e) => {
+    draggedTaskData = task;
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', task.id);
+  };
+
+  // סיום גרירה
+  const handleDragEnd = () => {
+    draggedTaskData = null;
+    setDragOverTime(null);
+  };
+
+  // גרירה מעל אזור זמן
+  const handleDragOverTimeline = (e) => {
+    e.preventDefault();
+    if (!timelineRef.current || !draggedTaskData) return;
+    
+    const rect = timelineRef.current.getBoundingClientRect();
+    const relativeY = e.clientY - rect.top;
+    const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
+    
+    // המרה לזמן (8:00 - 16:00)
+    const totalMinutes = 8 * 60; // 8 שעות
+    const minutesFromStart = Math.round(percentage * totalMinutes);
+    const roundedMinutes = Math.round(minutesFromStart / 15) * 15; // עיגול ל-15 דקות
+    
+    const hour = 8 + Math.floor(roundedMinutes / 60);
+    const minutes = roundedMinutes % 60;
+    const timeStr = `${String(hour).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+    
+    setDragOverTime(timeStr);
+  };
+
+  // שחרור באזור זמן
+  const handleDropOnTimeline = async (e) => {
+    e.preventDefault();
+    
+    if (!draggedTaskData || !dragOverTime) {
+      handleDragEnd();
+      return;
+    }
+
+    try {
+      await editTask(draggedTaskData.id, {
+        due_time: dragOverTime,
+        due_date: getDateISO(selectedDate)
+      });
+      
+      toast.success(`המשימה הועברה לשעה ${dragOverTime}`);
+      loadTasks();
+    } catch (err) {
+      console.error('שגיאה בהעברת משימה:', err);
+      toast.error('שגיאה בהעברת המשימה');
+    } finally {
+      handleDragEnd();
+    }
   };
 
   // טעינה
@@ -572,13 +642,48 @@ function DailyView() {
         </Button>
       </motion.div>
 
-      {/* רשימת משימות */}
+      {/* רשימת משימות עם ציר זמן לגרירה */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
-        className="space-y-3"
+        className="flex gap-4"
       >
+        {/* ציר זמן לגרירה - מוצג רק כשיש משימות */}
+        {allBlocks.length > 0 && (
+          <div 
+            ref={timelineRef}
+            className={`
+              w-16 flex-shrink-0 rounded-lg border-2 border-dashed transition-all
+              ${dragOverTime 
+                ? 'border-blue-500 bg-blue-50 dark:bg-blue-900/20' 
+                : 'border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-800/50'
+              }
+            `}
+            onDragOver={handleDragOverTimeline}
+            onDragLeave={() => setDragOverTime(null)}
+            onDrop={handleDropOnTimeline}
+          >
+            {/* שעות */}
+            <div className="h-full flex flex-col justify-between py-2 text-xs text-gray-500 dark:text-gray-400">
+              <span className="text-center">08:00</span>
+              <span className="text-center">10:00</span>
+              <span className="text-center">12:00</span>
+              <span className="text-center">14:00</span>
+              <span className="text-center">16:00</span>
+            </div>
+            
+            {/* אינדיקטור זמן בגרירה */}
+            {dragOverTime && (
+              <div className="absolute left-0 right-0 bg-blue-500 text-white text-xs py-1 px-2 rounded text-center font-medium">
+                {dragOverTime}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* רשימת משימות */}
+        <div className="flex-1 space-y-3">
         {allBlocks.length === 0 ? (
           <div className="card p-8 text-center">
             <span className="text-4xl mb-4 block">📝</span>
@@ -616,12 +721,15 @@ function DailyView() {
                         endTime: block.endTime,
                         originalStartTime: block.originalStartTime,
                         originalEndTime: block.originalEndTime,
-                        isPostponed: true, // סימון שהמשימה נדחתה
+                        isPostponed: true,
                         isRescheduled: block.isRescheduled
                       }} 
                       onEdit={() => handleEditTask(block)}
                       onUpdate={loadTasks}
                       showTime={true}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      draggable={true}
                     />
                   ))}
                 </div>
@@ -660,6 +768,9 @@ function DailyView() {
                       onEdit={() => handleEditTask(block)}
                       onUpdate={loadTasks}
                       showTime={true}
+                      onDragStart={handleDragStart}
+                      onDragEnd={handleDragEnd}
+                      draggable={true}
                     />
                   ))}
                 </div>
@@ -697,6 +808,7 @@ function DailyView() {
             )}
           </>
         )}
+        </div>
       </motion.div>
 
       {/* מודל טופס */}

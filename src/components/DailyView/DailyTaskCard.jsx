@@ -31,8 +31,9 @@ function getVirtualBlockKey(id, date) {
 
 /**
  * כרטיס משימה לתצוגה יומית
+ * ✅ עם תמיכה בגרירה
  */
-function DailyTaskCard({ task, onEdit, onUpdate }) {
+function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggable = false }) {
   const { toggleComplete, removeTask, tasks } = useTasks();
   const [showTimer, setShowTimer] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -225,11 +226,23 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
   return (
     <motion.div
       layout
+      draggable={draggable && !isCompleted}
+      onDragStart={(e) => {
+        if (draggable && onDragStart && !isCompleted) {
+          onDragStart(currentTask, e);
+        }
+      }}
+      onDragEnd={() => {
+        if (draggable && onDragEnd) {
+          onDragEnd();
+        }
+      }}
       className={`
         card p-4 transition-all duration-200
         ${isCompleted ? 'opacity-60' : ''}
         ${deleting ? 'opacity-50 scale-95' : ''}
         ${isOverTime ? 'border-l-4 border-l-red-500' : ''}
+        ${draggable && !isCompleted ? 'cursor-grab active:cursor-grabbing hover:shadow-lg' : ''}
       `}
     >
       <div className="flex items-start gap-3">
