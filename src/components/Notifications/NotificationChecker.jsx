@@ -3,8 +3,21 @@ import { useTasks } from '../../hooks/useTasks';
 import { useNotifications } from '../../hooks/useNotifications';
 
 /**
+ * ✅ פונקציית עזר: תאריך מקומי בפורמט ISO
+ */
+function toLocalISODate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * רכיב שבודק התראות - חייב להיות ב-App.jsx!
  * בודק כל 30 שניות אם יש משימות שצריך להתריע עליהן
+ * 
+ * ✅ תיקון: שימוש ב-toLocalISODate במקום toISOString
  */
 function NotificationChecker() {
   const { tasks } = useTasks();
@@ -35,6 +48,7 @@ function NotificationChecker() {
   // בדיקת משימות ושליחת התראות
   const checkAndNotify = useCallback(() => {
     if (permission !== 'granted') {
+      console.log('⚠️ NotificationChecker: אין הרשאה להתראות');
       return;
     }
     
@@ -43,14 +57,15 @@ function NotificationChecker() {
     }
 
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    // ✅ תיקון: שימוש בתאריך מקומי במקום UTC
+    const today = toLocalISODate(now);
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     const reminderMinutes = settings?.reminderMinutes || 5;
     const repeatEveryMinutes = settings?.repeatEveryMinutes || 10;
     const notifyOnTime = settings?.notifyOnTime !== false;
 
-    console.log(`🔔 בודק ${tasks.length} משימות (${now.toLocaleTimeString('he-IL')})`);
+    console.log(`🔔 בודק ${tasks.length} משימות (${now.toLocaleTimeString('he-IL')}) | תאריך: ${today}`);
 
     let notificationsSent = 0;
 
@@ -72,7 +87,7 @@ function NotificationChecker() {
       // === התראה לפני המשימה ===
       if (diff > 0 && diff <= reminderMinutes) {
         if (canNotify(task.id, 'before', reminderMinutes)) {
-          console.log(`⏰ התראה לפני: ${task.title}`);
+          console.log(`⏰ התראה לפני: ${task.title} (בעוד ${diff} דק')`);
           sendNotification(`⏰ ${task.title}`, {
             body: `מתחיל בעוד ${diff} דקות!`,
             tag: `task-before-${task.id}`
@@ -108,9 +123,9 @@ function NotificationChecker() {
             overdueText = `${overdueMinutes} דקות`;
           }
           
-          console.log(`🔴 איחור: ${task.title} (${overdueText})`);
-          sendNotification(`🔴 באיחור: ${task.title}`, {
-            body: `היה אמור להתחיל לפני ${overdueText}!`,
+          console.log(`🔴 נדחה: ${task.title} (${overdueText})`);
+          sendNotification(`🔄 נדחה: ${task.title}`, {
+            body: `היה אמור להתחיל לפני ${overdueText}`,
             tag: `task-overdue-${task.id}`
           });
           markNotified(task.id, 'overdue');
@@ -127,11 +142,11 @@ function NotificationChecker() {
   // הפעלת בדיקה תקופתית
   useEffect(() => {
     if (permission !== 'granted') {
-      console.log('⚠️ אין הרשאה להתראות');
+      console.log('⚠️ NotificationChecker: ממתין להרשאת התראות');
       return;
     }
 
-    console.log('🚀 מתחיל בדיקת התראות תקופתית');
+    console.log('🚀 NotificationChecker: מתחיל בדיקת התראות תקופתית');
 
     // בדיקה ראשונית מיידית
     checkAndNotify();
@@ -144,7 +159,7 @@ function NotificationChecker() {
     return () => {
       if (checkIntervalRef.current) {
         clearInterval(checkIntervalRef.current);
-        console.log('⏹️ הופסקה בדיקת התראות');
+        console.log('⏹️ NotificationChecker: הופסקה בדיקת התראות');
       }
     };
   }, [permission, checkAndNotify]);
