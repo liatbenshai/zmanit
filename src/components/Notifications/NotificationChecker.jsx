@@ -32,6 +32,29 @@ function isTimerRunning(taskId) {
 }
 
 /**
+ * ✅ פונקציית עזר: חישוב כמה זמן עבד על המשימה (בדקות)
+ */
+function getElapsedMinutes(taskId, baseTimeSpent = 0) {
+  try {
+    const key = `timer_v2_${taskId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      if (data.isRunning && data.startTime && !data.isInterrupted) {
+        const startTime = new Date(data.startTime);
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now - startTime) / 1000) - (data.totalInterruptionSeconds || 0);
+        const elapsedMinutes = Math.floor(Math.max(0, elapsedSeconds) / 60);
+        return baseTimeSpent + elapsedMinutes;
+      }
+    }
+  } catch (e) {
+    // התעלם משגיאות
+  }
+  return baseTimeSpent;
+}
+
+/**
  * רכיב שבודק התראות - חייב להיות ב-App.jsx!
  * בודק כל 30 שניות אם יש משימות שצריך להתריע עליהן
  * 
@@ -125,6 +148,53 @@ function NotificationChecker() {
           });
           markNotified(task.id, 'onTime');
           notificationsSent++;
+        }
+      }
+
+      // === התראה על סיום זמן המשימה ===
+      // אם הטיימר רץ ויש זמן מוקצב - בודקים אם הזמן עומד להיגמר
+      if (task.estimated_duration && isTimerRunning(task.id)) {
+        const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
+        const remaining = task.estimated_duration - elapsed;
+        
+        // התראה 5 דקות לפני סיום
+        if (remaining > 0 && remaining <= 5) {
+          if (canNotify(task.id, 'endingSoon', 5)) {
+            console.log(`⏳ הזמן עומד להיגמר: ${task.title} (נשארו ${remaining} דק')`);
+            sendNotification(`⏳ ${task.title}`, {
+              body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
+              tag: `task-ending-${task.id}`
+            });
+            markNotified(task.id, 'endingSoon');
+            notificationsSent++;
+          }
+        }
+        
+        // התראה כשהזמן נגמר (אבל עדיין עובדים)
+        if (remaining <= 0 && remaining > -2) {
+          if (canNotify(task.id, 'timeUp', 5)) {
+            console.log(`🔔 הזמן נגמר: ${task.title}`);
+            sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
+              body: 'הזמן המוקצב הסתיים. לסיים או להמשיך?',
+              tag: `task-timeup-${task.id}`
+            });
+            markNotified(task.id, 'timeUp');
+            notificationsSent++;
+          }
+        }
+        
+        // התראה על חריגה מהזמן (כל 10 דקות)
+        if (remaining < -2) {
+          if (canNotify(task.id, 'overtime', repeatEveryMinutes)) {
+            const overtimeMinutes = Math.abs(remaining);
+            console.log(`⚠️ חריגה מהזמן: ${task.title} (+${overtimeMinutes} דק')`);
+            sendNotification(`⚠️ חריגה: ${task.title}`, {
+              body: `חרגת ב-${overtimeMinutes} דקות מהזמן המוקצב`,
+              tag: `task-overtime-${task.id}`
+            });
+            markNotified(task.id, 'overtime');
+            notificationsSent++;
+          }
         }
       }
 
