@@ -8,6 +8,8 @@
  * 2. משבץ משימות לפי דחיפות ותאריך יעד
  * 3. מתריע על עומס יתר
  * 4. מציע חלופות כשאין מספיק זמן
+ * 
+ * תיקון: שימוש ב-toLocalISODate במקום toISOString לתאריכים מקומיים
  */
 
 import { 
@@ -21,6 +23,7 @@ import {
   formatTime,
   formatDuration
 } from '../config/workSchedule';
+import { toLocalISODate } from './dateHelpers';
 
 /**
  * סטטוס תכנון
@@ -51,7 +54,8 @@ const PRIORITY_ORDER = {
  * @returns {Object} תוצאת התכנון
  */
 export function planDay(date, allTasks) {
-  const dateISO = date.toISOString().split('T')[0];
+  // ✅ תיקון: שימוש ב-toLocalISODate במקום toISOString
+  const dateISO = toLocalISODate(date);
   const dayOfWeek = date.getDay();
   
   // בדיקה אם יום עבודה
@@ -165,6 +169,8 @@ export function planWeek(weekStart, allTasks) {
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + i);
+    // ✅ תיקון: קביעת שעה 12 למניעת בעיות timezone
+    date.setHours(12, 0, 0, 0);
     
     const dayPlan = planDay(date, allTasks);
     days.push(dayPlan);
@@ -196,7 +202,8 @@ export function planWeek(weekStart, allTasks) {
   }
 
   return {
-    weekStart: weekStart.toISOString().split('T')[0],
+    // ✅ תיקון: שימוש ב-toLocalISODate
+    weekStart: toLocalISODate(weekStart),
     status,
     message,
     days,
@@ -216,7 +223,8 @@ export function planWeek(weekStart, allTasks) {
  * סינון משימות לתאריך מסוים
  */
 function filterTasksForDate(tasks, date) {
-  const dateISO = date.toISOString().split('T')[0];
+  // ✅ תיקון: שימוש ב-toLocalISODate
+  const dateISO = toLocalISODate(date);
   
   return tasks.filter(task => {
     // רק משימות פעילות
@@ -238,7 +246,8 @@ function filterTasksForDate(tasks, date) {
     }
     
     // משימה ללא תאריך - תופיע רק היום
-    const today = new Date().toISOString().split('T')[0];
+    // ✅ תיקון: שימוש ב-toLocalISODate
+    const today = toLocalISODate(new Date());
     if (!task.due_date && !task.start_date && dateISO === today) return true;
     
     return false;
@@ -293,31 +302,39 @@ function scheduleTasks(tasks, workHours, availableMinutes) {
       const taskEndMinute = taskStartMinute + duration;
       
       // בדיקה שלא חורג משעות העבודה
-      if (taskEndMinute <= endMinute) {
-        scheduledBlocks.push({
-          taskId: task.id,
-          task,
-          startMinute: taskStartMinute,
-          endMinute: taskEndMinute,
-          startTime: formatTime(hours, mins || 0),
-          endTime: minutesToTime(taskEndMinute),
-          duration,
-          isFixed: true
-        });
-        scheduledMinutes += duration;
-        continue;
+      if (taskStartMinute >= workHours.start * 60 && taskEndMinute <= endMinute) {
+        // בדיקה שאין חפיפה עם משימות קיימות
+        const hasOverlap = scheduledBlocks.some(block => 
+          (taskStartMinute < block.endMinute && taskEndMinute > block.startMinute)
+        );
+        
+        if (!hasOverlap) {
+          scheduledBlocks.push({
+            task,
+            taskId: task.id,
+            title: task.title,
+            startMinute: taskStartMinute,
+            endMinute: taskEndMinute,
+            startTime: task.due_time,
+            endTime: minutesToTime(taskEndMinute),
+            duration,
+            isFixed: true
+          });
+          scheduledMinutes += duration;
+          continue;
+        }
       }
     }
     
-    // שיבוץ אוטומטי - בדיקה אם יש מקום
+    // שיבוץ במקום הפנוי הבא
     if (scheduledMinutes + duration <= availableMinutes) {
-      // מציאת חלון פנוי
       const slot = findFreeSlot(scheduledBlocks, currentMinute, endMinute, duration);
       
       if (slot) {
         scheduledBlocks.push({
-          taskId: task.id,
           task,
+          taskId: task.id,
+          title: task.title,
           startMinute: slot.start,
           endMinute: slot.end,
           startTime: minutesToTime(slot.start),
@@ -524,7 +541,8 @@ export function suggestTimeForTask(newTask, existingTasks, preferredDate = new D
       
       if (slot) {
         suggestions.push({
-          date: checkDate.toISOString().split('T')[0],
+          // ✅ תיקון: שימוש ב-toLocalISODate
+          date: toLocalISODate(checkDate),
           dayName: WORK_HOURS[checkDate.getDay()].name,
           startTime: minutesToTime(slot.start),
           endTime: minutesToTime(slot.end),

@@ -7,6 +7,8 @@
  * 
  * כשמסמנים אינטרוול כהושלם - רק הוא מסומן.
  * כשכל האינטרוולים הושלמו - המשימה ההורית מסומנת אוטומטית.
+ * 
+ * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
  */
 
 import { supabase } from './supabase';
@@ -16,6 +18,19 @@ const CONFIG = {
   INTERVAL_DURATION: 45,  // אורך כל אינטרוול בדקות
   MIN_DURATION_TO_SPLIT: 46  // מינימום דקות לפיצול (יותר מאינטרוול אחד)
 };
+
+/**
+ * ✅ פונקציית עזר: המרת תאריך לפורמט ISO מקומי
+ * זה קריטי כי toISOString() מחזיר UTC שיכול להיות יום אחר בישראל
+ */
+function toLocalISODate(date) {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
 
 /**
  * יצירת משימה עם פיצול אוטומטי לאינטרוולים
@@ -92,7 +107,8 @@ export async function createTaskWithIntervals(task) {
   // חישוב זמנים לכל אינטרוול
   const intervals = [];
   const now = new Date();
-  const todayISO = now.toISOString().split('T')[0];
+  // ✅ תיקון: שימוש ב-toLocalISODate
+  const todayISO = toLocalISODate(now);
   
   // תאריך התחלה - אם יש start_date משתמשים בו, אחרת היום
   let currentDate = task.start_date || task.due_date || todayISO;
@@ -378,7 +394,8 @@ function getNextWorkDay(dateStr) {
   if (day === 5) date.setDate(date.getDate() + 2);
   else if (day === 6) date.setDate(date.getDate() + 1);
   
-  return date.toISOString().split('T')[0];
+  // ✅ תיקון: שימוש ב-toLocalISODate
+  return toLocalISODate(date);
 }
 
 export default {

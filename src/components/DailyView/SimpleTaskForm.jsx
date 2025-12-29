@@ -14,7 +14,20 @@ import Input from '../UI/Input';
 import Button from '../UI/Button';
 
 /**
+ * ✅ תיקון: קבלת תאריך בפורמט ISO מקומי (לא UTC!)
+ */
+function getLocalDateISO(date) {
+  if (!date) return '';
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * טופס משימה חכם - עם חישוב זמן אוטומטי
+ * ✅ תיקון: הוספת אפשרות לבחירת שעה ספציפית
  */
 function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   const { addTask, editTask } = useTasks();
@@ -27,12 +40,14 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     inputValue: '', // משך הקלטה / עמודים / דקות ישירות
     startDate: defaultDate || '', // תאריך התחלה - מתי אפשר להתחיל
     dueDate: defaultDate || '',   // תאריך יעד - דדליין
+    dueTime: '',                  // ✅ חדש: שעה ספציפית
     description: '',
     priority: 'normal' // ברירת מחדל: רגיל (לא דחוף!)
   });
 
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('work');
+  const [showTimeField, setShowTimeField] = useState(false); // ✅ חדש: האם להציג שדה שעה
 
   // קבלת סוג המשימה הנוכחי
   const currentTaskType = getTaskType(formData.taskType);
@@ -63,9 +78,15 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         inputValue: task.recording_duration || task.page_count || task.estimated_duration || '',
         startDate: task.start_date || '',
         dueDate: task.due_date || '',
+        dueTime: task.due_time || '', // ✅ חדש
         description: task.description || '',
         priority: task.priority || 'normal'
       });
+      
+      // אם יש שעה - מציגים את השדה
+      if (task.due_time) {
+        setShowTimeField(true);
+      }
     }
   }, [task]);
 
@@ -112,7 +133,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         estimated_duration: calculatedDuration,
         start_date: formData.startDate || null, // תאריך התחלה
         due_date: formData.dueDate || null,     // תאריך יעד
-        due_time: null, // השעה מחושבת אוטומטית
+        due_time: formData.dueTime || null,     // ✅ חדש: שעה ספציפית
         description: formData.description || null,
         priority: formData.priority,
         // שמירת הקלט המקורי ללמידה עתידית
@@ -127,7 +148,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         calculatedDuration,
         startDate: taskData.start_date,
         dueDate: taskData.due_date,
-        formData: { startDate: formData.startDate, dueDate: formData.dueDate },
+        dueTime: taskData.due_time, // ✅ חדש
+        formData: { startDate: formData.startDate, dueDate: formData.dueDate, dueTime: formData.dueTime },
         isEditing
       });
 
@@ -279,7 +301,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
           name="startDate"
           value={formData.startDate}
           onChange={handleChange}
-          min={new Date().toISOString().split('T')[0]}
+          min={getLocalDateISO(new Date())} // ✅ תיקון: תאריך מקומי
         />
         <Input
           label="🎯 תאריך יעד (דדליין)"
@@ -287,14 +309,52 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
           name="dueDate"
           value={formData.dueDate}
           onChange={handleChange}
-          min={formData.startDate || new Date().toISOString().split('T')[0]}
+          min={formData.startDate || getLocalDateISO(new Date())} // ✅ תיקון: תאריך מקומי
         />
       </div>
       
-      {/* הסבר */}
-      <p className="text-xs text-gray-500 dark:text-gray-400 -mt-2">
-        💡 השעות משובצות אוטומטית לפי העומס היומי
-      </p>
+      {/* ✅ חדש: שדה שעה - עם toggle */}
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            🕐 שעה ספציפית
+          </label>
+          <button
+            type="button"
+            onClick={() => {
+              setShowTimeField(!showTimeField);
+              if (showTimeField) {
+                setFormData(prev => ({ ...prev, dueTime: '' }));
+              }
+            }}
+            className={`
+              px-3 py-1 text-xs rounded-full transition-all
+              ${showTimeField 
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' 
+                : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400'
+              }
+            `}
+          >
+            {showTimeField ? 'ביטול' : 'הוסף שעה'}
+          </button>
+        </div>
+        
+        {showTimeField && (
+          <Input
+            type="time"
+            name="dueTime"
+            value={formData.dueTime}
+            onChange={handleChange}
+            placeholder="בחר שעה"
+          />
+        )}
+        
+        {!showTimeField && (
+          <p className="text-xs text-gray-500 dark:text-gray-400">
+            💡 השעה תיקבע אוטומטית לפי העומס היומי
+          </p>
+        )}
+      </div>
 
       {/* הערות */}
       <div>

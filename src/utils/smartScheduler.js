@@ -21,24 +21,12 @@
  * - תמלול: 08:15-12:00 (שעות עירנות)
  * - הגהה/תרגום/אחר: 12:00-16:00
  * - אדמיניסטרציה: 08:00-08:15 קבוע
+ * 
+ * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
  */
 
 import { WORK_HOURS } from '../config/workSchedule';
-
-// ============================================
-// פונקציית עזר לתאריך מקומי
-// ============================================
-
-/**
- * המרת תאריך לפורמט ISO מקומי (לא UTC!)
- * זה קריטי כי toISOString() מחזיר UTC שיכול להיות יום אחר בישראל
- */
-function getLocalDateISO(date) {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
-}
+import { toLocalISODate } from './dateHelpers';
 
 // ============================================
 // הגדרות
@@ -93,15 +81,15 @@ export const SMART_SCHEDULE_CONFIG = {
 export function smartScheduleWeek(weekStart, allTasks) {
   const config = SMART_SCHEDULE_CONFIG;
   
-  // תאריך היום - בשעון מקומי!
+  // ✅ תיקון: שימוש ב-toLocalISODate
   const today = new Date();
-  const todayISO = getLocalDateISO(today);
+  const todayISO = toLocalISODate(today);
   
   // סוף השבוע המבוקש
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekEnd.getDate() + 6);
-  const weekEndISO = getLocalDateISO(weekEnd);
-  const weekStartISO = getLocalDateISO(weekStart);
+  const weekEndISO = toLocalISODate(weekEnd);
+  const weekStartISO = toLocalISODate(weekStart);
   
   console.log('🚀 Smart Scheduler v3 - Starting week planning');
   console.log(`📅 Week: ${weekStartISO} - ${weekEndISO}`);
@@ -211,9 +199,11 @@ function initializeDays(weekStart, config) {
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + i);
+    // ✅ תיקון: קביעת שעה 12 למניעת בעיות timezone
     date.setHours(12, 0, 0, 0);
     
-    const dateISO = getLocalDateISO(date);
+    // ✅ תיקון: שימוש ב-toLocalISODate
+    const dateISO = toLocalISODate(date);
     const dayOfWeek = date.getDay();
     const dayConfig = WORK_HOURS[dayOfWeek];
     const isWorkDay = dayConfig?.enabled || false;
@@ -262,39 +252,35 @@ function initializeDays(weekStart, config) {
  * מיון משימות - הכי דחוף קודם, אבל תמיד לסיים מהר!
  */
 function prioritizeTasks(tasks, todayISO) {
-  const today = new Date(todayISO);
-  
   return [...tasks].sort((a, b) => {
-    const aDue = a.due_date ? new Date(a.due_date) : null;
-    const bDue = b.due_date ? new Date(b.due_date) : null;
+    // 1. משימות באיחור קודם!
+    const aOverdue = a.due_date && a.due_date < todayISO;
+    const bOverdue = b.due_date && b.due_date < todayISO;
+    if (aOverdue && !bOverdue) return -1;
+    if (!aOverdue && bOverdue) return 1;
     
-    // 1. משימות עם דדליין היום - הכי דחוף!
-    const aIsToday = aDue && isSameDay(aDue, today);
-    const bIsToday = bDue && isSameDay(bDue, today);
-    if (aIsToday && !bIsToday) return -1;
-    if (bIsToday && !aIsToday) return 1;
-    
-    // 2. משימות עם דדליין קרוב (עד שבוע)
-    const aIsUrgent = aDue && daysBetween(today, aDue) <= 7;
-    const bIsUrgent = bDue && daysBetween(today, bDue) <= 7;
-    
-    if (aIsUrgent && bIsUrgent) {
-      // שניהם דחופים - לפי קרבת דדליין
-      return aDue - bDue;
-    }
-    if (aIsUrgent && !bIsUrgent) return -1;
-    if (bIsUrgent && !aIsUrgent) return 1;
-    
-    // 3. לפי עדיפות מוגדרת
+    // 2. לפי עדיפות (urgent > high > normal)
     const priorityOrder = { urgent: 0, high: 1, normal: 2 };
     const aPriority = priorityOrder[a.priority] ?? 2;
     const bPriority = priorityOrder[b.priority] ?? 2;
     if (aPriority !== bPriority) return aPriority - bPriority;
     
-    // 4. משימות ארוכות יותר קודם (כדי למלא ימים)
-    const aDuration = a.estimated_duration || 30;
-    const bDuration = b.estimated_duration || 30;
-    return bDuration - aDuration;
+    // 3. לפי תאריך יעד (קרוב יותר קודם)
+    if (a.due_date && b.due_date) {
+      return a.due_date.localeCompare(b.due_date);
+    }
+    if (a.due_date) return -1;
+    if (b.due_date) return 1;
+    
+    // 4. לפי שעה אם יש (משימות עם שעה קבועה קודם)
+    if (a.due_time && !b.due_time) return -1;
+    if (!a.due_time && b.due_time) return 1;
+    if (a.due_time && b.due_time) {
+      return a.due_time.localeCompare(b.due_time);
+    }
+    
+    // 5. לפי תאריך יצירה (ישן יותר קודם)
+    return (a.created_at || '').localeCompare(b.created_at || '');
   });
 }
 
@@ -303,47 +289,38 @@ function prioritizeTasks(tasks, todayISO) {
 // ============================================
 
 /**
- * שיבוץ כל המשימות - למלא ימים למקסימום!
+ * שיבוץ כל המשימות - גרסה לשבוע עתידי
  */
-function scheduleAllTasks(tasks, days, config) {
+function scheduleAllTasks(sortedTasks, days, config) {
   const taskProgress = new Map();
   const warnings = [];
   const unscheduledTasks = [];
   
-  for (const task of tasks) {
-    const duration = task.estimated_duration || 30;
-    taskProgress.set(task.id, { 
-      total: duration,
-      scheduled: 0, 
-      remaining: duration,
+  // אתחול התקדמות לכל משימה
+  for (const task of sortedTasks) {
+    taskProgress.set(task.id, {
+      task,
+      total: task.estimated_duration || 30,
+      scheduled: 0,
+      remaining: task.estimated_duration || 30,
       blocks: []
     });
-    
-    // בדיקה: האם יש מספיק זמן עד הדדליין?
-    if (task.due_date) {
-      const feasibility = checkFeasibility(task, days, config);
-      if (!feasibility.canComplete) {
-        warnings.push({
-          type: 'deadline_risk',
-          taskId: task.id,
-          taskTitle: task.title,
-          message: `⚠️ "${task.title}" - לא בטוח שניתן לעמוד בדדליין ${task.due_date}`,
-          details: feasibility
-        });
-      }
-    }
-    
-    // שיבוץ המשימה - מתחילים מהיום הראשון!
+  }
+  
+  // שיבוץ כל משימה
+  for (const task of sortedTasks) {
     scheduleTask(task, days, taskProgress, config);
-    
-    // בדיקה אם נשאר זמן לא משובץ
-    const progress = taskProgress.get(task.id);
+  }
+  
+  // איסוף משימות שלא שובצו
+  for (const [taskId, progress] of taskProgress) {
     if (progress.remaining > 0) {
-      unscheduledTasks.push({
-        ...task,
-        scheduledMinutes: progress.scheduled,
-        remainingMinutes: progress.remaining,
-        reason: 'לא מספיק זמן בשבוע'
+      unscheduledTasks.push(progress.task);
+      warnings.push({
+        type: 'not_scheduled',
+        severity: 'high',
+        message: `לא נמצא מקום ל"${progress.task.title}" (${progress.remaining} דק' נותרו)`,
+        taskId
       });
     }
   }
@@ -352,55 +329,46 @@ function scheduleAllTasks(tasks, days, config) {
 }
 
 /**
- * שיבוץ כל המשימות - רק מהיום והלאה!
+ * שיבוץ כל המשימות - מהיום והלאה
  */
-function scheduleAllTasksFromToday(tasks, days, todayISO, config) {
+function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
   const taskProgress = new Map();
   const warnings = [];
   const unscheduledTasks = [];
   
   // סינון ימים - רק מהיום והלאה
-  const relevantDays = days.filter(day => day.date >= todayISO);
+  const relevantDays = days.filter(d => d.date >= todayISO && d.isWorkDay);
   
-  for (const task of tasks) {
-    const duration = task.estimated_duration || 30;
-    taskProgress.set(task.id, { 
-      total: duration,
-      scheduled: 0, 
-      remaining: duration,
+  // אתחול התקדמות לכל משימה
+  for (const task of sortedTasks) {
+    taskProgress.set(task.id, {
+      task,
+      total: task.estimated_duration || 30,
+      scheduled: 0,
+      remaining: task.estimated_duration || 30,
       blocks: []
     });
-    
-    // בדיקה: האם יש מספיק זמן עד הדדליין?
-    if (task.due_date) {
-      const feasibility = checkFeasibility(task, relevantDays, config);
-      if (!feasibility.canComplete) {
-        warnings.push({
-          type: 'deadline_risk',
-          taskId: task.id,
-          taskTitle: task.title,
-          message: `⚠️ "${task.title}" - לא בטוח שניתן לעמוד בדדליין ${task.due_date}`,
-          details: feasibility
-        });
-      }
-    }
-    
-    // שיבוץ המשימה - רק בימים הרלוונטיים
+  }
+  
+  // שיבוץ כל משימה
+  for (const task of sortedTasks) {
     scheduleTask(task, relevantDays, taskProgress, config);
-    
-    // בדיקה אם נשאר זמן לא משובץ
-    const progress = taskProgress.get(task.id);
+  }
+  
+  // איסוף משימות שלא שובצו
+  for (const [taskId, progress] of taskProgress) {
     if (progress.remaining > 0) {
-      unscheduledTasks.push({
-        ...task,
-        scheduledMinutes: progress.scheduled,
-        remainingMinutes: progress.remaining,
-        reason: 'לא מספיק זמן בשבוע'
+      unscheduledTasks.push(progress.task);
+      warnings.push({
+        type: 'not_scheduled',
+        severity: 'high',
+        message: `לא נמצא מקום ל"${progress.task.title}" (${progress.remaining} דק' נותרו)`,
+        taskId
       });
     }
   }
   
-  // העתקת הבלוקים מהימים הרלוונטיים לימים המקוריים
+  // העתקת הבלוקים לימים המקוריים
   for (const relevantDay of relevantDays) {
     const originalDay = days.find(d => d.date === relevantDay.date);
     if (originalDay) {
@@ -618,7 +586,7 @@ function minutesToTime(minutes) {
 }
 
 function isSameDay(date1, date2) {
-  return getLocalDateISO(date1) === getLocalDateISO(date2);
+  return toLocalISODate(date1) === toLocalISODate(date2);
 }
 
 function daysBetween(date1, date2) {
@@ -647,7 +615,8 @@ export function smartScheduleDay(date, allTasks) {
   weekStart.setHours(12, 0, 0, 0);
   
   const weekPlan = smartScheduleWeek(weekStart, allTasks);
-  const dateISO = getLocalDateISO(date);
+  // ✅ תיקון: שימוש ב-toLocalISODate
+  const dateISO = toLocalISODate(date);
   
   return weekPlan.days.find(d => d.date === dateISO) || {
     date: dateISO,

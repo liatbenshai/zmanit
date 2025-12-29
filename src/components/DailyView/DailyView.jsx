@@ -137,7 +137,8 @@ function getDateHebrew(date) {
 }
 
 /**
- * קבלת תאריך בפורמט ISO - תיקון timezone
+ * ✅ תיקון: קבלת תאריך בפורמט ISO מקומי (לא UTC!)
+ * זה קריטי כי toISOString() מחזיר UTC שיכול להיות יום אחר בישראל
  */
 function getDateISO(date) {
   const year = date.getFullYear();
@@ -188,22 +189,22 @@ function DailyView() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   
-  // שעה נוכחית - מתעדכנת כל דקה
+  // ✅ תיקון: שעה נוכחית - משתמש ב-getDateISO במקום toISOString
   const [currentTime, setCurrentTime] = useState(() => {
     const now = new Date();
     return {
       minutes: now.getHours() * 60 + now.getMinutes(),
-      dateISO: now.toISOString().split('T')[0]
+      dateISO: getDateISO(now) // ✅ תיקון: תאריך מקומי
     };
   });
   
-  // עדכון השעה כל דקה
+  // ✅ תיקון: עדכון השעה כל דקה - משתמש ב-getDateISO
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
       setCurrentTime({
         minutes: now.getHours() * 60 + now.getMinutes(),
-        dateISO: now.toISOString().split('T')[0]
+        dateISO: getDateISO(now) // ✅ תיקון: תאריך מקומי
       });
     }, 60 * 1000); // כל דקה
     

@@ -8,6 +8,8 @@
  * 2. מתעדף לפי תאריך יעד + עדיפות
  * 3. המטרה: לסיים משימות כמה שיותר מהר
  * 4. לא משאיר זמן פנוי מיותר
+ * 
+ * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
  */
 
 import { 
@@ -19,6 +21,7 @@ import {
   formatDuration,
   BUFFER_PERCENTAGE
 } from '../config/workSchedule';
+import { toLocalISODate } from './dateHelpers';
 
 /**
  * תכנון פרואקטיבי לשבוע
@@ -42,7 +45,8 @@ export function proactivePlan(allTasks, startDate = new Date(), daysAhead = 14) 
     
     if (!isWorkDay(date)) {
       schedule.push({
-        date: date.toISOString().split('T')[0],
+        // ✅ תיקון: שימוש ב-toLocalISODate
+        date: toLocalISODate(date),
         dayName: getDayName(date),
         isWorkDay: false,
         slots: [],
@@ -70,7 +74,8 @@ export function proactivePlan(allTasks, startDate = new Date(), daysAhead = 14) 
  * תכנון יום בודד באופן פרואקטיבי
  */
 function planDayProactively(date, sortedTasks, assignedTasks) {
-  const dateISO = date.toISOString().split('T')[0];
+  // ✅ תיקון: שימוש ב-toLocalISODate
+  const dateISO = toLocalISODate(date);
   const dayOfWeek = date.getDay();
   const workHours = getWorkHoursForDate(date);
   const availableMinutes = getAvailableMinutesForDay(dayOfWeek);
