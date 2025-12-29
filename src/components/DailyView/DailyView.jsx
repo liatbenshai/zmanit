@@ -391,8 +391,8 @@ function DailyView() {
     const startMinutes = nextStartMinutes;
     const endMinutes = startMinutes + duration;
     
-    // האם הבלוק המקורי היה באיחור?
-    const wasOverdue = isBlockPast(block);
+    // האם הבלוק המקורי היה מתוכנן לשעה שעברה?
+    const wasPostponed = isBlockPast(block);
     
     // עדכון לבלוק הבא
     nextStartMinutes = endMinutes + 5; // 5 דקות הפסקה
@@ -403,16 +403,16 @@ function DailyView() {
       originalEndTime: block.endTime,
       startTime: minutesToTime(startMinutes),
       endTime: minutesToTime(endMinutes),
-      isOverdue: wasOverdue,
-      isRescheduled: wasOverdue // סימון שהזמן השתנה
+      isPostponed: wasPostponed,
+      isRescheduled: wasPostponed // סימון שהזמן השתנה
     };
   });
   
-  // בלוקים באיחור (היו באיחור לפי הזמן המקורי)
-  const overdueBlocks = rescheduledBlocks.filter(b => b.isOverdue);
+  // בלוקים שנדחו (היו מתוכננים לשעה שעברה)
+  const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
   
-  // בלוקים עתידיים (לא היו באיחור במקור)
-  const upcomingBlocks = rescheduledBlocks.filter(b => !b.isOverdue);
+  // בלוקים עתידיים (לא נדחו)
+  const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -522,8 +522,8 @@ function DailyView() {
             <span>ממתין ({formatMinutes(timeStats.pending)})</span>
           </div>
           {timeStats.overdue > 0 && (
-            <div className="flex items-center gap-1 text-red-600">
-              <span>🔴 באיחור: {formatMinutes(timeStats.overdue)}</span>
+            <div className="flex items-center gap-1 text-orange-600">
+              <span>🔄 נדחה: {formatMinutes(timeStats.overdue)}</span>
             </div>
           )}
           <div className="flex items-center gap-1">
@@ -591,16 +591,16 @@ function DailyView() {
           </div>
         ) : (
           <>
-            {/* משימות באיחור - עם זמנים מחושבים מחדש */}
+            {/* משימות שנדחו - עם זמנים מחושבים מחדש */}
             {overdueBlocks.length > 0 && (
               <div className="mb-4">
-                <h3 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2 flex items-center gap-2">
-                  🔴 באיחור ({overdueBlocks.length}) - זמנים מעודכנים מעכשיו
+                <h3 className="text-sm font-medium text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-2">
+                  🔄 נדחו ({overdueBlocks.length}) - זמנים מעודכנים
                 </h3>
-                <div className="space-y-2 border-r-4 border-red-500 pr-2">
+                <div className="space-y-2 border-r-4 border-orange-400 pr-2">
                   {overdueBlocks.map((block, index) => (
                     <DailyTaskCard 
-                      key={block.id || `overdue-${index}`} 
+                      key={block.id || `postponed-${index}`} 
                       task={{
                         id: block.taskId || block.id,
                         title: block.title,
@@ -609,14 +609,14 @@ function DailyView() {
                         is_completed: block.isCompleted,
                         task_type: block.taskType,
                         due_time: block.startTime,
-                        priority: block.priority || 'normal', // שומר על העדיפות המקורית!
+                        priority: block.priority || 'normal',
                         blockIndex: block.blockIndex,
                         totalBlocks: block.totalBlocks,
                         startTime: block.startTime,
                         endTime: block.endTime,
                         originalStartTime: block.originalStartTime,
                         originalEndTime: block.originalEndTime,
-                        isOverdue: true, // זה מה שמסמן שהמשימה באיחור
+                        isPostponed: true, // סימון שהמשימה נדחתה
                         isRescheduled: block.isRescheduled
                       }} 
                       onEdit={() => handleEditTask(block)}

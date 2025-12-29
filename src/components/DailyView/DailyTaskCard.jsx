@@ -263,14 +263,14 @@ function DailyTaskCard({ task, onEdit, onUpdate }) {
             `}>
               {displayTitle}
             </h3>
-            {/* תגית באיחור - מוצגת רק אם המשימה באיחור */}
-            {currentTask.isOverdue && (
-              <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full">
-                ⏰ באיחור
+            {/* ✅ תיקון: תגית "נדחה" במקום "באיחור" */}
+            {currentTask.isPostponed && (
+              <span className="text-xs px-2 py-0.5 bg-orange-100 dark:bg-orange-900/30 text-orange-700 dark:text-orange-300 rounded-full">
+                🔄 נדחה
               </span>
             )}
-            {/* תגית דחוף - רק אם זה באמת דחוף ולא רק באיחור */}
-            {currentTask.priority === 'urgent' && !currentTask.isOverdue && (
+            {/* תגית דחוף - רק אם זה באמת דחוף ולא נדחה */}
+            {currentTask.priority === 'urgent' && !currentTask.isPostponed && (
               <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full">
                 🔴 דחוף
               </span>
