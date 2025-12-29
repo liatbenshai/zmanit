@@ -267,16 +267,29 @@ function prioritizeTasks(tasks, todayISO) {
     
     // 3. לפי תאריך יעד (קרוב יותר קודם)
     if (a.due_date && b.due_date) {
-      return a.due_date.localeCompare(b.due_date);
+      const dateCmp = a.due_date.localeCompare(b.due_date);
+      if (dateCmp !== 0) return dateCmp;
     }
-    if (a.due_date) return -1;
-    if (b.due_date) return 1;
+    if (a.due_date && !b.due_date) return -1;
+    if (!a.due_date && b.due_date) return 1;
     
     // 4. לפי שעה אם יש (משימות עם שעה קבועה קודם)
     if (a.due_time && !b.due_time) return -1;
     if (!a.due_time && b.due_time) return 1;
     if (a.due_time && b.due_time) {
-      return a.due_time.localeCompare(b.due_time);
+      const timeCmp = a.due_time.localeCompare(b.due_time);
+      if (timeCmp !== 0) return timeCmp;
+    }
+    
+    // ✅ תיקון: מיון אינטרוולים של אותה משימה לפי מספר הבלוק
+    // אם שניהם מאותו הורה - מיין לפי הכותרת (שמכילה את המספר)
+    if (a.parent_task_id && b.parent_task_id && a.parent_task_id === b.parent_task_id) {
+      // חילוץ מספר הבלוק מהכותרת: "משימה (2/4)" -> 2
+      const aMatch = a.title.match(/\((\d+)\/\d+\)/);
+      const bMatch = b.title.match(/\((\d+)\/\d+\)/);
+      if (aMatch && bMatch) {
+        return parseInt(aMatch[1]) - parseInt(bMatch[1]);
+      }
     }
     
     // 5. לפי תאריך יצירה (ישן יותר קודם)
@@ -565,9 +578,27 @@ function formatDayForOutput(day) {
   const config = SMART_SCHEDULE_CONFIG;
   const dayCapacity = day.isWorkDay ? (config.dayEnd - config.dayStart) : 0;
   
+  // ✅ תיקון: מיון בלוקים לפי זמן התחלה
+  const sortedBlocks = [...(day.blocks || [])].sort((a, b) => {
+    // קודם לפי זמן התחלה
+    if (a.startMinute !== b.startMinute) {
+      return a.startMinute - b.startMinute;
+    }
+    // אם אותו זמן - לפי blockIndex (למשימות מפוצלות)
+    if (a.blockIndex && b.blockIndex) {
+      return a.blockIndex - b.blockIndex;
+    }
+    // לפי due_time אם יש
+    if (a.startTime && b.startTime) {
+      return a.startTime.localeCompare(b.startTime);
+    }
+    return 0;
+  });
+  
   return {
     ...day,
-    scheduledBlocks: day.blocks, // תאימות לאחור
+    blocks: sortedBlocks,
+    scheduledBlocks: sortedBlocks, // תאימות לאחור
     usagePercent: dayCapacity > 0 ? Math.round((day.totalScheduledMinutes / dayCapacity) * 100) : 0,
     freeMinutes: Math.max(0, dayCapacity - day.totalScheduledMinutes),
     scheduledMinutes: day.totalScheduledMinutes,

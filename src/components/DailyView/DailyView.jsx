@@ -444,7 +444,22 @@ function DailyView() {
   };
   
   // הפרדת בלוקים
-  const allBlocks = selectedDayData.blocks || [];
+  // ✅ תיקון: מיון לפי זמן התחלה ואז לפי blockIndex
+  const allBlocks = [...(selectedDayData.blocks || [])].sort((a, b) => {
+    // קודם לפי זמן התחלה
+    if (a.startTime && b.startTime) {
+      const aTime = a.startTime.split(':').map(Number);
+      const bTime = b.startTime.split(':').map(Number);
+      const aMinutes = aTime[0] * 60 + (aTime[1] || 0);
+      const bMinutes = bTime[0] * 60 + (bTime[1] || 0);
+      if (aMinutes !== bMinutes) return aMinutes - bMinutes;
+    }
+    // אם אותו זמן - לפי blockIndex
+    if (a.blockIndex && b.blockIndex) {
+      return a.blockIndex - b.blockIndex;
+    }
+    return 0;
+  });
   
   // בלוקים שהושלמו - נשארים עם הזמנים המקוריים
   const completedBlocks = allBlocks.filter(b => b.isCompleted);
