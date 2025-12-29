@@ -14,6 +14,24 @@ function toLocalISODate(date) {
 }
 
 /**
+ * ✅ פונקציית עזר: בדיקה אם יש טיימר רץ על משימה (ב-localStorage)
+ */
+function isTimerRunning(taskId) {
+  try {
+    // הפורמט מ-DailyTaskCard: timer_v2_${taskId}
+    const key = `timer_v2_${taskId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      return data.isRunning && !data.isInterrupted;
+    }
+  } catch (e) {
+    // התעלם משגיאות
+  }
+  return false;
+}
+
+/**
  * רכיב שבודק התראות - חייב להיות ב-App.jsx!
  * בודק כל 30 שניות אם יש משימות שצריך להתריע עליהן
  * 
@@ -111,7 +129,20 @@ function NotificationChecker() {
       }
 
       // === התראה על איחור ===
+      // ✅ תיקון: לא מתריעים על משימות שכבר עובדים עליהן
       if (diff < -1) {
+        // אם כבר עבדו על המשימה או שהטיימר רץ - לא מתריעים
+        if (task.time_spent && task.time_spent > 0) {
+          console.log(`⏭️ דילוג על "${task.title}" - כבר עבדו עליה (${task.time_spent} דקות)`);
+          return; // דלג - המשימה בעבודה
+        }
+        
+        // בדיקה אם הטיימר רץ (ב-localStorage)
+        if (isTimerRunning(task.id)) {
+          console.log(`⏭️ דילוג על "${task.title}" - טיימר פעיל`);
+          return; // דלג - המשימה בעבודה עכשיו
+        }
+        
         if (canNotify(task.id, 'overdue', repeatEveryMinutes)) {
           const overdueMinutes = Math.abs(diff);
           let overdueText;
