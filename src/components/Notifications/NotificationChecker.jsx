@@ -114,45 +114,8 @@ function NotificationChecker() {
       // דלג על משימות שהושלמו
       if (task.is_completed) return;
       
-      // דלג על משימות בלי תאריך או שעה
-      if (!task.due_date || !task.due_time) return;
-      
-      // רק משימות של היום
-      if (task.due_date !== today) return;
-
-      // חישוב הפרש זמנים
-      const [hour, min] = task.due_time.split(':').map(Number);
-      const taskMinutes = hour * 60 + (min || 0);
-      const diff = taskMinutes - currentMinutes; // חיובי = עתידי, שלילי = עבר
-
-      // === התראה לפני המשימה ===
-      if (diff > 0 && diff <= reminderMinutes) {
-        if (canNotify(task.id, 'before', reminderMinutes)) {
-          console.log(`⏰ התראה לפני: ${task.title} (בעוד ${diff} דק')`);
-          sendNotification(`⏰ ${task.title}`, {
-            body: `מתחיל בעוד ${diff} דקות!`,
-            tag: `task-before-${task.id}`
-          });
-          markNotified(task.id, 'before');
-          notificationsSent++;
-        }
-      }
-
-      // === התראה בדיוק בזמן ===
-      if (notifyOnTime && diff >= -1 && diff <= 0) {
-        if (canNotify(task.id, 'onTime', 5)) {
-          console.log(`🔔 התראה בזמן: ${task.title}`);
-          sendNotification(`🔔 ${task.title}`, {
-            body: 'הגיע הזמן להתחיל!',
-            tag: `task-ontime-${task.id}`
-          });
-          markNotified(task.id, 'onTime');
-          notificationsSent++;
-        }
-      }
-
       // === התראה על סיום זמן המשימה ===
-      // אם הטיימר רץ ויש זמן מוקצב - בודקים אם הזמן עומד להיגמר
+      // זה צריך לעבוד על כל משימה עם טיימר רץ, גם בלי due_date/due_time
       if (task.estimated_duration && isTimerRunning(task.id)) {
         const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
         const remaining = task.estimated_duration - elapsed;
@@ -195,6 +158,44 @@ function NotificationChecker() {
             markNotified(task.id, 'overtime');
             notificationsSent++;
           }
+        }
+      }
+      
+      // === התראות על זמן התחלה - רק למשימות עם תאריך ושעה ===
+      // דלג על משימות בלי תאריך או שעה
+      if (!task.due_date || !task.due_time) return;
+      
+      // רק משימות של היום
+      if (task.due_date !== today) return;
+
+      // חישוב הפרש זמנים
+      const [hour, min] = task.due_time.split(':').map(Number);
+      const taskMinutes = hour * 60 + (min || 0);
+      const diff = taskMinutes - currentMinutes; // חיובי = עתידי, שלילי = עבר
+
+      // === התראה לפני המשימה ===
+      if (diff > 0 && diff <= reminderMinutes) {
+        if (canNotify(task.id, 'before', reminderMinutes)) {
+          console.log(`⏰ התראה לפני: ${task.title} (בעוד ${diff} דק')`);
+          sendNotification(`⏰ ${task.title}`, {
+            body: `מתחיל בעוד ${diff} דקות!`,
+            tag: `task-before-${task.id}`
+          });
+          markNotified(task.id, 'before');
+          notificationsSent++;
+        }
+      }
+
+      // === התראה בדיוק בזמן ===
+      if (notifyOnTime && diff >= -1 && diff <= 0) {
+        if (canNotify(task.id, 'onTime', 5)) {
+          console.log(`🔔 התראה בזמן: ${task.title}`);
+          sendNotification(`🔔 ${task.title}`, {
+            body: 'הגיע הזמן להתחיל!',
+            tag: `task-ontime-${task.id}`
+          });
+          markNotified(task.id, 'onTime');
+          notificationsSent++;
         }
       }
 
