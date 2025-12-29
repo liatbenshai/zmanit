@@ -18,9 +18,8 @@
  * 
  * חוקי שיבוץ:
  * - בלוקים של 45 דקות + 5 דקות הפסקה
- * - תמלול: 08:15-12:00 (שעות עירנות)
+ * - תמלול: 08:00-12:00 (שעות עירנות)
  * - הגהה/תרגום/אחר: 12:00-16:00
- * - אדמיניסטרציה: 08:00-08:15 קבוע
  * 
  * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
  */
@@ -37,13 +36,8 @@ export const SMART_SCHEDULE_CONFIG = {
   dayStart: 8 * 60,           // 08:00
   dayEnd: 16 * 60,            // 16:00
   
-  // אדמיניסטרציה קבועה
-  adminStart: 8 * 60,         // 08:00
-  adminEnd: 8 * 60 + 15,      // 08:15
-  adminDuration: 15,
-  
   // חלון בוקר (תמלול)
-  morningStart: 8 * 60 + 15,  // 08:15
+  morningStart: 8 * 60,       // 08:00
   morningEnd: 12 * 60,        // 12:00
   
   // חלון אחה"צ (הגהה, תרגום, אחר)
@@ -59,12 +53,12 @@ export const SMART_SCHEDULE_CONFIG = {
   
   // זמן עבודה נטו ביום (בדקות)
   get workMinutesPerDay() {
-    return this.dayEnd - this.adminEnd; // 465 דקות = 7:45 שעות
+    return this.dayEnd - this.dayStart; // 480 דקות = 8 שעות
   },
   
   // כמה בלוקים מקסימום ביום
   get maxBlocksPerDay() {
-    return Math.floor(this.workMinutesPerDay / (this.blockDuration + this.breakDuration)); // 9 בלוקים
+    return Math.floor(this.workMinutesPerDay / (this.blockDuration + this.breakDuration)); // 9-10 בלוקים
   }
 };
 
@@ -220,23 +214,7 @@ function initializeDays(weekStart, config) {
       workHours: isWorkDay ? { start: 8, end: 16 } : null
     };
     
-    // הוספת בלוק אדמיניסטרציה קבוע
-    if (isWorkDay) {
-      day.blocks.push({
-        id: 'admin-block',
-        type: 'admin',
-        title: '📧 אדמיניסטרציה',
-        description: 'מיילים, דוח בנק',
-        startMinute: config.adminStart,
-        endMinute: config.adminEnd,
-        startTime: minutesToTime(config.adminStart),
-        endTime: minutesToTime(config.adminEnd),
-        duration: config.adminDuration,
-        isFixed: true,
-        isAdmin: true
-      });
-      day.totalScheduledMinutes = config.adminDuration;
-    }
+    // ❌ הוסר: בלוק אדמיניסטרציה קבוע - לפי בקשת המשתמשת
     
     days.push(day);
   }

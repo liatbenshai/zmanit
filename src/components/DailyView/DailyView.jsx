@@ -422,18 +422,23 @@ function DailyView() {
   }
 
   // === סינון וחישוב מחדש של זמנים ===
-  // בלוקים שעברו ולא הושלמו = "באיחור" - צריך לתזמן מחדש מעכשיו
+  // בלוקים שעברו ולא הושלמו = "נדחה" - רק אם היתה שעה ספציפית
   // בלוקים שעברו והושלמו = מוצגים כ"הושלמו"
-  // בלוקים עתידיים = נדחים אם יש איחורים
+  // בלוקים עתידיים = ממשיכים רגיל
   
-  // פונקציה לבדיקה אם בלוק עבר (משתמשת ב-currentTime מה-state)
+  // ✅ תיקון: רק משימות עם due_time ספציפי יסומנו כ"נדחה"
+  // משימות שתוזמנו אוטומטית לא נחשבות "נדחו" גם אם הזמן עבר
   const isBlockPast = (block) => {
     if (!isViewingToday) return false; // אם לא היום, הכל רלוונטי
-    if (!block.endTime) return false;
     
-    const [hour, min] = block.endTime.split(':').map(Number);
-    const blockEndMinutes = hour * 60 + (min || 0);
-    return blockEndMinutes < currentTime.minutes;
+    // רק אם יש למשימה המקורית due_time ספציפי
+    const task = block.task;
+    if (!task?.due_time) return false; // אין שעה ספציפית = לא נדחה
+    
+    // בדיקה אם השעה הספציפית עברה
+    const [hour, min] = task.due_time.split(':').map(Number);
+    const taskDueMinutes = hour * 60 + (min || 0);
+    return taskDueMinutes < currentTime.minutes;
   };
   
   // פונקציה להמרת דקות לפורמט שעה
