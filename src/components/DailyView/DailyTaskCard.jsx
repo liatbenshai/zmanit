@@ -3,8 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import toast from 'react-hot-toast';
 import TaskTimerWithInterruptions from '../Tasks/TaskTimerWithInterruptions';
-import { TASK_TYPES } from './DailyView';
+import { getTaskType, getAllTaskTypes } from '../../config/taskTypes';
 import { recordTaskCompletion } from '../../utils/taskLearning';
+
+// קבלת TASK_TYPES מ-config (לתאימות לאחור)
+const TASK_TYPES = getAllTaskTypes();
 
 /**
  * בדיקה אם ID הוא UUID תקין
@@ -28,6 +31,18 @@ function isVirtualBlock(id) {
 function getVirtualBlockKey(id, date) {
   const dateStr = date || new Date().toISOString().split('T')[0];
   return `virtual_block_completed_${id}_${dateStr}`;
+}
+
+/**
+ * קבלת תאריך מחר בפורמט ISO
+ */
+function getTomorrowISO() {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const year = tomorrow.getFullYear();
+  const month = String(tomorrow.getMonth() + 1).padStart(2, '0');
+  const day = String(tomorrow.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 /**
@@ -57,7 +72,6 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
   };
   
   const handleConfirm = () => {
-    // שמירה למערכת הלמידה
     if (task.task_type && estimatedMinutes > 0) {
       recordTaskCompletion(
         task.task_type,
@@ -91,7 +105,6 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
             exit={{ scale: 0.9, opacity: 0 }}
             className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full shadow-xl"
           >
-            {/* כותרת */}
             <div className="text-center mb-4">
               <span className="text-4xl mb-2 block">✅</span>
               <h3 className="text-lg font-bold text-gray-900 dark:text-white">
@@ -99,7 +112,6 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
               </h3>
             </div>
             
-            {/* השוואה */}
             <div className="bg-gray-50 dark:bg-gray-700/50 rounded-xl p-4 mb-4">
               <div className="flex justify-between items-center mb-2">
                 <span className="text-gray-600 dark:text-gray-400">הערכה:</span>
@@ -117,7 +129,6 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
                 </span>
               </div>
               
-              {/* הפרש */}
               {estimatedMinutes > 0 && diff !== 0 && (
                 <div className={`text-center mt-3 py-2 rounded-lg ${
                   diff > 0 
@@ -133,7 +144,6 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
               )}
             </div>
             
-            {/* תיקון ידני */}
             {showCorrection ? (
               <div className="mb-4">
                 <label className="block text-sm text-gray-600 dark:text-gray-400 mb-2">
@@ -159,7 +169,6 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
               </button>
             )}
             
-            {/* כפתורים */}
             <div className="flex gap-2">
               <button
                 onClick={handleSkip}
@@ -175,7 +184,6 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
               </button>
             </div>
             
-            {/* הסבר */}
             <p className="text-xs text-gray-400 dark:text-gray-500 text-center mt-3">
               💡 הנתונים עוזרים למערכת ללמוד ולהציע הערכות מדויקות יותר
             </p>
@@ -188,41 +196,27 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
 
 /**
  * כרטיס משימה לתצוגה יומית
- * ✅ עם תמיכה בגרירה ומשוב בסיום
+ * ✅ עם תמיכה בגרירה, משוב בסיום, והעברה למחר
  */
 function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggable = false }) {
-  const { toggleComplete, removeTask, tasks } = useTasks();
+  const { toggleComplete, removeTask, editTask, tasks } = useTasks();
   const [showTimer, setShowTimer] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [liveSpent, setLiveSpent] = useState(task.time_spent || 0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
-  
-  // ✅ חדש: מודל משוב
   const [showFeedback, setShowFeedback] = useState(false);
-  const [pendingComplete, setPendingComplete] = useState(false);
-  
-  // מצב השלמה לבלוקים וירטואליים (נשמר ב-localStorage)
   const [virtualCompleted, setVirtualCompleted] = useState(false);
+  const [showMoveMenu, setShowMoveMenu] = useState(false);
 
-  // שימוש בנתוני הבלוק שנשלחו, לא במשימה המקורית
   const currentTask = task;
-  
-  // בדיקה אם זה בלוק וירטואלי
   const isVirtual = isVirtualBlock(currentTask.id);
-  
-  // קבלת המשימה המקורית רק לצורך פעולות (toggle, delete)
   const originalTask = tasks.find(t => t.id === task.id);
   
-  // סוג המשימה
-  const taskType = TASK_TYPES[currentTask.task_type] || TASK_TYPES.other;
-
-  // בדיקה אם זה בלוק מפוצל (יש blockIndex)
+  // קבלת סוג המשימה מהקונפיג המשודרג
+  const taskType = getTaskType(currentTask.task_type) || { icon: '📋', name: 'אחר' };
   const isBlock = currentTask.blockIndex !== undefined && currentTask.totalBlocks > 1;
-
-  // מפתח localStorage לטיימר
   const timerStorageKey = currentTask.id ? `timer_v2_${currentTask.id}` : null;
   
-  // טעינת מצב השלמה לבלוק וירטואלי מ-localStorage
   useEffect(() => {
     if (isVirtual) {
       const key = getVirtualBlockKey(currentTask.id);
@@ -231,12 +225,10 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
     }
   }, [isVirtual, currentTask.id]);
 
-  // עדכון liveSpent כשה-task משתנה מבחוץ
   useEffect(() => {
     setLiveSpent(task.time_spent || 0);
   }, [task.time_spent]);
 
-  // בדיקת מצב טיימר מ-localStorage - גם כשהכרטיס סגור!
   useEffect(() => {
     if (!timerStorageKey) return;
 
@@ -246,7 +238,6 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
         if (saved) {
           const data = JSON.parse(saved);
           if (data.isRunning && data.startTime && !data.isInterrupted) {
-            // הטיימר רץ! חשב כמה זמן עבר
             const startTime = new Date(data.startTime);
             const now = new Date();
             const elapsedSeconds = Math.floor((now - startTime) / 1000) - (data.totalInterruptionSeconds || 0);
@@ -264,22 +255,16 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
       }
     };
 
-    // בדיקה ראשונית
     checkTimerState();
-
-    // בדיקה כל שנייה לעדכון בזמן אמת
     const interval = setInterval(checkTimerState, 1000);
-
     return () => clearInterval(interval);
   }, [timerStorageKey, task.time_spent]);
 
-  // callback לקבלת עדכונים מהטיימר (כשפתוח)
   const handleTimerUpdate = useCallback((newSpent, running) => {
     setLiveSpent(newSpent);
     setIsTimerRunning(running);
   }, []);
 
-  // פורמט דקות
   const formatMinutes = (minutes) => {
     if (minutes < 60) return `${minutes} דק'`;
     const hours = Math.floor(minutes / 60);
@@ -287,30 +272,67 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
     return mins > 0 ? `${hours}:${mins.toString().padStart(2, '0')}` : `${hours} שעות`;
   };
 
-  // ✅ תיקון: סימון כהושלם - עם מודל משוב
+  // ✅ העברה למחר
+  const handleMoveToTomorrow = async () => {
+    if (isVirtual) {
+      toast.error('לא ניתן להעביר בלוק קבוע');
+      return;
+    }
+    
+    try {
+      await editTask(currentTask.id, {
+        due_date: getTomorrowISO(),
+        due_time: null // איפוס השעה - יתוזמן מחדש
+      });
+      toast.success('📅 המשימה הועברה למחר');
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      toast.error('שגיאה בהעברת המשימה');
+    }
+    setShowMoveMenu(false);
+  };
+
+  // ✅ העברה לתאריך ספציפי
+  const handleMoveToDate = async (daysFromNow) => {
+    if (isVirtual) return;
+    
+    const targetDate = new Date();
+    targetDate.setDate(targetDate.getDate() + daysFromNow);
+    const year = targetDate.getFullYear();
+    const month = String(targetDate.getMonth() + 1).padStart(2, '0');
+    const day = String(targetDate.getDate()).padStart(2, '0');
+    const dateISO = `${year}-${month}-${day}`;
+    
+    try {
+      await editTask(currentTask.id, {
+        due_date: dateISO,
+        due_time: null
+      });
+      toast.success(`📅 המשימה הועברה ל-${day}/${month}`);
+      if (onUpdate) onUpdate();
+    } catch (err) {
+      toast.error('שגיאה בהעברת המשימה');
+    }
+    setShowMoveMenu(false);
+  };
+
   const handleToggleComplete = async (e) => {
     if (e) e.stopPropagation();
     
-    // טיפול בבלוק וירטואלי (כמו אדמיניסטרציה)
     if (isVirtual) {
       const newCompleted = !virtualCompleted;
       setVirtualCompleted(newCompleted);
-      
-      // שמירה ב-localStorage
       const key = getVirtualBlockKey(currentTask.id);
       localStorage.setItem(key, newCompleted.toString());
-      
       if (newCompleted) {
         toast.success('✅ הבלוק הושלם!');
       } else {
         toast.success('הבלוק הוחזר לפעיל');
       }
-      
       if (onUpdate) onUpdate();
       return;
     }
     
-    // אם המשימה כבר הושלמה - מחזירים לפעילה (בלי מודל)
     if (currentTask.is_completed) {
       try {
         await toggleComplete(currentTask.id);
@@ -322,20 +344,16 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
       return;
     }
     
-    // ✅ משימה שמסתיימת - מציגים מודל משוב אם יש הערכה וזמן
     const hasEstimate = currentTask.estimated_duration && currentTask.estimated_duration > 0;
     const hasTimeSpent = liveSpent > 0;
     
     if (hasEstimate && hasTimeSpent) {
-      // מציגים מודל משוב
       setShowFeedback(true);
     } else {
-      // אין מספיק נתונים - פשוט מסמנים כהושלם
       await completeTask();
     }
   };
   
-  // ✅ השלמה בפועל (אחרי מודל או ישירות)
   const completeTask = async (finalTimeSpent) => {
     try {
       await toggleComplete(currentTask.id);
@@ -344,14 +362,12 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
       const estimated = currentTask.estimated_duration || 0;
       
       if (timeUsed < estimated && estimated > 0) {
-        // סיימה מוקדם!
         const saved = estimated - timeUsed;
         toast.success(
           `🎉 סיימת מוקדם! חסכת ${formatMinutes(saved)}`,
           { duration: 4000 }
         );
       } else if (timeUsed > estimated * 1.2 && estimated > 0) {
-        // לקח יותר זמן
         const extra = timeUsed - estimated;
         toast(
           `✅ הושלם! לקח ${formatMinutes(extra)} יותר מהצפוי`,
@@ -367,11 +383,9 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
     }
   };
 
-  // מחיקה
   const handleDelete = async (e) => {
     e.stopPropagation();
     
-    // בלוק וירטואלי - אי אפשר למחוק
     if (isVirtual) {
       toast.error('לא ניתן למחוק בלוק קבוע');
       return;
@@ -388,17 +402,12 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
     }
   };
 
-  // חישוב התקדמות - לפי זמן הבלוק עם עדכון בזמן אמת
   const estimated = currentTask.estimated_duration || 0;
   const spent = liveSpent;
-  const remaining = Math.max(0, estimated - spent);
   const progress = estimated > 0 ? Math.min(100, Math.round((spent / estimated) * 100)) : 0;
   const isOverTime = spent > estimated && estimated > 0;
-  
-  // האם המשימה הושלמה - משלב בלוקים וירטואליים ומשימות רגילות
   const isCompleted = isVirtual ? virtualCompleted : currentTask.is_completed;
 
-  // שם תצוגה עם אינדקס בלוק - רק אם אין כבר מספור בשם
   const displayTitle = (isBlock && !currentTask.title.includes('/'))
     ? `${currentTask.title} (${currentTask.blockIndex}/${currentTask.totalBlocks})`
     : currentTask.title;
@@ -419,7 +428,7 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
           }
         }}
         className={`
-          card p-4 transition-all duration-200
+          card p-4 transition-all duration-200 relative
           ${isCompleted ? 'opacity-60' : ''}
           ${deleting ? 'opacity-50 scale-95' : ''}
           ${isOverTime ? 'border-l-4 border-l-red-500' : ''}
@@ -448,7 +457,6 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
 
           {/* תוכן */}
           <div className="flex-1 min-w-0">
-            {/* שורה ראשונה: כותרת וסוג */}
             <div className="flex items-center gap-2 flex-wrap">
               <span className="text-lg">{taskType.icon}</span>
               <h3 className={`
@@ -472,7 +480,6 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
                   🟠 גבוה
                 </span>
               )}
-              {/* שעות הבלוק */}
               {currentTask.startTime && currentTask.endTime && (
                 <span className="text-sm text-gray-500 dark:text-gray-400" dir="ltr">
                   {currentTask.startTime} - {currentTask.endTime}
@@ -480,17 +487,15 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
               )}
             </div>
 
-            {/* בר התקדמות תמיד מוצג */}
+            {/* בר התקדמות */}
             {!isCompleted && estimated > 0 && (
               <div className="mt-2 flex items-center gap-3">
-                {/* אייקון שעון חול עם אנימציה */}
                 <div className={`text-lg transition-transform duration-500 ${
                   isTimerRunning ? 'animate-spin' : ''
                 }`} style={{ animationDuration: '3s' }}>
                   {isTimerRunning ? '⏳' : progress === 0 ? '⏳' : progress < 100 ? '⌛' : '✅'}
                 </div>
                 
-                {/* סרגל התקדמות */}
                 <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden relative">
                   <motion.div
                     initial={{ width: 0 }}
@@ -504,13 +509,11 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
                       'bg-gray-300'
                     }`}
                   />
-                  {/* פולס כשרץ */}
                   {isTimerRunning && (
                     <div className="absolute inset-0 bg-white/30 animate-pulse rounded-full" />
                   )}
                 </div>
                 
-                {/* טקסט התקדמות */}
                 <span className={`text-sm font-medium whitespace-nowrap ${
                   isOverTime ? 'text-red-600 dark:text-red-400' : 
                   isTimerRunning ? 'text-green-600 dark:text-green-400' :
@@ -523,26 +526,18 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
               </div>
             )}
 
-            {/* פרטים נוספים כשפתוח */}
-            {!isCompleted && showTimer && (
-              <div className="mt-2 space-y-2">
-                {/* אזהרה אם עבר את הזמן */}
-                {isOverTime && (
-                  <div className="text-sm text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
-                    ⚠️ עברת את הזמן המתוכנן ב-{formatMinutes(spent - estimated)}
-                  </div>
-                )}
+            {!isCompleted && showTimer && isOverTime && (
+              <div className="mt-2 text-sm text-red-600 dark:text-red-400 p-2 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                ⚠️ עברת את הזמן המתוכנן ב-{formatMinutes(spent - estimated)}
               </div>
             )}
 
-            {/* תיאור */}
             {currentTask.description && (
               <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                 {currentTask.description}
               </p>
             )}
 
-            {/* סיכום למשימה שהושלמה */}
             {isCompleted && estimated > 0 && (
               <div className="mt-2 text-sm">
                 {spent > estimated ? (
@@ -580,6 +575,56 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
               </button>
             )}
             
+            {/* ✅ כפתור העברה - חדש! */}
+            {!isCompleted && !isVirtual && (
+              <div className="relative">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowMoveMenu(!showMoveMenu);
+                  }}
+                  className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                  title="העבר ליום אחר"
+                >
+                  📅
+                </button>
+                
+                {/* תפריט העברה */}
+                {showMoveMenu && (
+                  <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[140px]">
+                    <button
+                      onClick={handleMoveToTomorrow}
+                      className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <span>📅</span>
+                      <span>מחר</span>
+                    </button>
+                    <button
+                      onClick={() => handleMoveToDate(2)}
+                      className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <span>📆</span>
+                      <span>עוד יומיים</span>
+                    </button>
+                    <button
+                      onClick={() => handleMoveToDate(7)}
+                      className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
+                    >
+                      <span>🗓️</span>
+                      <span>עוד שבוע</span>
+                    </button>
+                    <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                    <button
+                      onClick={() => setShowMoveMenu(false)}
+                      className="w-full px-3 py-2 text-right text-sm text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                    >
+                      ביטול
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* כפתור עריכה */}
             <button
               onClick={(e) => {
@@ -603,7 +648,7 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
           </div>
         </div>
 
-        {/* טיימר עם הפרעות */}
+        {/* טיימר */}
         {showTimer && !isCompleted && (
           <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <TaskTimerWithInterruptions
@@ -614,9 +659,17 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
             />
           </div>
         )}
+        
+        {/* סגירת תפריט בלחיצה בחוץ */}
+        {showMoveMenu && (
+          <div 
+            className="fixed inset-0 z-10" 
+            onClick={() => setShowMoveMenu(false)}
+          />
+        )}
       </motion.div>
       
-      {/* ✅ מודל משוב */}
+      {/* מודל משוב */}
       <CompletionFeedbackModal
         isOpen={showFeedback}
         onClose={() => setShowFeedback(false)}
