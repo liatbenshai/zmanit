@@ -12,6 +12,7 @@ import {
 import toast from 'react-hot-toast';
 import Input from '../UI/Input';
 import Button from '../UI/Button';
+import { getSuggestedEstimate } from '../../utils/taskLearning';
 
 /**
  * ✅ תיקון: קבלת תאריך בפורמט ISO מקומי (לא UTC!)
@@ -26,8 +27,95 @@ function getLocalDateISO(date) {
 }
 
 /**
- * טופס משימה חכם - עם חישוב זמן אוטומטי
- * ✅ תיקון: הוספת אפשרות לבחירת שעה ספציפית
+ * רכיב הצעת הערכה חכמה
+ */
+function EstimateSuggestion({ taskType, currentEstimate, onAcceptSuggestion }) {
+  const [suggestion, setSuggestion] = useState(null);
+  const [dismissed, setDismissed] = useState(false);
+  
+  useEffect(() => {
+    if (taskType && currentEstimate > 0) {
+      const result = getSuggestedEstimate(taskType, currentEstimate);
+      setSuggestion(result);
+      setDismissed(false);
+    } else {
+      setSuggestion(null);
+    }
+  }, [taskType, currentEstimate]);
+  
+  // אם אין הצעה, או שההערכה זהה, או שהמשתמש סגר
+  if (!suggestion || !suggestion.hasData || dismissed) {
+    return null;
+  }
+  
+  // אם ההבדל קטן מ-10% - לא מציגים
+  const diffPercent = Math.abs(suggestion.ratio - 1) * 100;
+  if (diffPercent < 10) {
+    return null;
+  }
+  
+  const isOverEstimate = suggestion.ratio > 1; // לוקח יותר מהצפוי
+  
+  return (
+    <div className={`mt-2 p-3 rounded-lg border ${
+      isOverEstimate 
+        ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800'
+        : 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800'
+    }`}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1">
+          <p className={`text-sm font-medium ${
+            isOverEstimate 
+              ? 'text-orange-700 dark:text-orange-300'
+              : 'text-green-700 dark:text-green-300'
+          }`}>
+            💡 {suggestion.message}
+          </p>
+          
+          {suggestion.suggestedMinutes !== currentEstimate && (
+            <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+              הערכה מומלצת: <strong>{suggestion.suggestedMinutes} דק'</strong>
+              {' '}(במקום {currentEstimate} דק')
+              <span className="text-gray-400 mr-1">
+                • מבוסס על {suggestion.sampleSize} משימות
+              </span>
+            </p>
+          )}
+        </div>
+        
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="text-gray-400 hover:text-gray-600 text-lg"
+          title="סגור"
+        >
+          ×
+        </button>
+      </div>
+      
+      {/* כפתור קבלת ההצעה */}
+      {suggestion.suggestedMinutes !== currentEstimate && onAcceptSuggestion && (
+        <button
+          type="button"
+          onClick={() => {
+            onAcceptSuggestion(suggestion.suggestedMinutes);
+            setDismissed(true);
+          }}
+          className={`mt-2 w-full py-1.5 text-sm rounded-lg font-medium transition-colors ${
+            isOverEstimate
+              ? 'bg-orange-500 hover:bg-orange-600 text-white'
+              : 'bg-green-500 hover:bg-green-600 text-white'
+          }`}
+        >
+          עדכן ל-{suggestion.suggestedMinutes} דק'
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * טופס משימה חכם - עם חישוב זמן אוטומטי והמלצות למידה
  */
 function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   const { addTask, editTask } = useTasks();
@@ -40,24 +128,32 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     inputValue: '', // משך הקלטה / עמודים / דקות ישירות
     startDate: defaultDate || '', // תאריך התחלה - מתי אפשר להתחיל
     dueDate: defaultDate || '',   // תאריך יעד - דדליין
-    dueTime: '',                  // ✅ חדש: שעה ספציפית
+    dueTime: '',                  // שעה ספציפית
     description: '',
     priority: 'normal' // ברירת מחדל: רגיל (לא דחוף!)
   });
 
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('work');
-  const [showTimeField, setShowTimeField] = useState(false); // ✅ חדש: האם להציג שדה שעה
+  const [showTimeField, setShowTimeField] = useState(false);
+  
+  // ✅ חדש: האם לעדכן את ההערכה מההמלצה
+  const [manualDurationOverride, setManualDurationOverride] = useState(null);
 
   // קבלת סוג המשימה הנוכחי
   const currentTaskType = getTaskType(formData.taskType);
 
   // חישוב זמן עבודה אוטומטי
   const calculatedDuration = useMemo(() => {
+    // אם יש override ידני - משתמשים בו
+    if (manualDurationOverride !== null) {
+      return manualDurationOverride;
+    }
+    
     const inputVal = parseFloat(formData.inputValue);
     if (!inputVal || inputVal <= 0) return null;
     return calculateWorkTime(formData.taskType, inputVal);
-  }, [formData.taskType, formData.inputValue]);
+  }, [formData.taskType, formData.inputValue, manualDurationOverride]);
 
   // חישוב כמות בלוקים של 45 דקות
   const blocksCount = useMemo(() => {
@@ -78,7 +174,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         inputValue: task.recording_duration || task.page_count || task.estimated_duration || '',
         startDate: task.start_date || '',
         dueDate: task.due_date || '',
-        dueTime: task.due_time || '', // ✅ חדש
+        dueTime: task.due_time || '',
         description: task.description || '',
         priority: task.priority || 'normal'
       });
@@ -87,8 +183,10 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       if (task.due_time) {
         setShowTimeField(true);
       }
+      
+      setManualDurationOverride(null);
     } else {
-      // ✅ תיקון: איפוס הטופס כשאין משימה (הוספה חדשה)
+      // איפוס הטופס כשאין משימה (הוספה חדשה)
       setFormData({
         title: '',
         taskType: 'transcription',
@@ -101,6 +199,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       });
       setSelectedCategory('work');
       setShowTimeField(false);
+      setManualDurationOverride(null);
     }
   }, [task, defaultDate]);
 
@@ -111,11 +210,22 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       setFormData(prev => ({ ...prev, taskType: typesInCategory[0].id }));
     }
   }, [selectedCategory]);
+  
+  // איפוס override כשמשתנה סוג המשימה או הקלט
+  useEffect(() => {
+    setManualDurationOverride(null);
+  }, [formData.taskType, formData.inputValue]);
 
   // טיפול בשינוי שדה
   const handleChange = (e) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+  
+  // ✅ קבלת הצעת הערכה
+  const handleAcceptSuggestion = (suggestedMinutes) => {
+    setManualDurationOverride(suggestedMinutes);
+    toast.success(`הערכה עודכנה ל-${suggestedMinutes} דק'`);
   };
 
   // שליחת הטופס
@@ -147,7 +257,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         estimated_duration: calculatedDuration,
         start_date: formData.startDate || null, // תאריך התחלה
         due_date: formData.dueDate || null,     // תאריך יעד
-        due_time: formData.dueTime || null,     // ✅ חדש: שעה ספציפית
+        due_time: formData.dueTime || null,     // שעה ספציפית
         description: formData.description || null,
         priority: formData.priority,
         // שמירת הקלט המקורי ללמידה עתידית
@@ -162,8 +272,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         calculatedDuration,
         startDate: taskData.start_date,
         dueDate: taskData.due_date,
-        dueTime: taskData.due_time, // ✅ חדש
-        formData: { startDate: formData.startDate, dueDate: formData.dueDate, dueTime: formData.dueTime },
+        dueTime: taskData.due_time,
+        wasAdjusted: manualDurationOverride !== null,
         isEditing
       });
 
@@ -269,12 +379,24 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
               </span>
               <span className="font-bold text-green-800 dark:text-green-200">
                 {calculatedDuration} דקות
+                {manualDurationOverride !== null && (
+                  <span className="text-xs mr-1 text-green-600">(מותאם)</span>
+                )}
               </span>
             </div>
             <div className="mt-1 text-xs text-green-600 dark:text-green-400">
               יחולק ל-{blocksCount} בלוקים של 45 דקות (+ הפסקות של 5 דק')
             </div>
           </div>
+        )}
+        
+        {/* ✅ חדש: הצעת הערכה חכמה */}
+        {calculatedDuration && !isEditing && (
+          <EstimateSuggestion
+            taskType={formData.taskType}
+            currentEstimate={calculatedDuration}
+            onAcceptSuggestion={handleAcceptSuggestion}
+          />
         )}
       </div>
 
@@ -315,7 +437,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
           name="startDate"
           value={formData.startDate}
           onChange={handleChange}
-          min={getLocalDateISO(new Date())} // ✅ תיקון: תאריך מקומי
+          min={getLocalDateISO(new Date())}
         />
         <Input
           label="🎯 תאריך יעד (דדליין)"
@@ -323,11 +445,11 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
           name="dueDate"
           value={formData.dueDate}
           onChange={handleChange}
-          min={formData.startDate || getLocalDateISO(new Date())} // ✅ תיקון: תאריך מקומי
+          min={formData.startDate || getLocalDateISO(new Date())}
         />
       </div>
       
-      {/* ✅ חדש: שדה שעה - עם toggle */}
+      {/* שדה שעה - עם toggle */}
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
