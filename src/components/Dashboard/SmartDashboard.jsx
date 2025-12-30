@@ -27,6 +27,7 @@ const MOTIVATIONAL_QUOTES = [
 /**
  * דשבורד חכם - עמוד הבית
  * ✅ משודרג עם מוטיבציה, סטריק, ועיצוב מרהיב
+ * ✅ הוספת משימות לכל השבוע (לא רק להיום)
  */
 function SmartDashboard() {
   const { tasks, loading, toggleComplete, loadTasks } = useTasks();
@@ -34,6 +35,7 @@ function SmartDashboard() {
   
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [selectedDateForNewTask, setSelectedDateForNewTask] = useState(null); // ✅ תאריך לבחירה
   const [dailyQuote, setDailyQuote] = useState(null);
   const [streak, setStreak] = useState(0);
   const [learningStats, setLearningStats] = useState(null);
@@ -43,6 +45,40 @@ function SmartDashboard() {
   const todayISO = today.toISOString().split('T')[0];
   const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   const todayName = dayNames[today.getDay()];
+
+  // ✅ חישוב ימי השבוע הקרוב
+  const weekDays = useMemo(() => {
+    const days = [];
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(today);
+      date.setDate(today.getDate() + i);
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const dateISO = `${year}-${month}-${day}`;
+      
+      // ספירת משימות ליום זה
+      const dayTasks = tasks.filter(t => {
+        if (t.is_completed) return false;
+        return t.due_date === dateISO || t.start_date === dateISO;
+      });
+      
+      const totalMinutes = dayTasks.reduce((sum, t) => sum + (t.estimated_duration || 0), 0);
+      
+      days.push({
+        date,
+        dateISO,
+        dayName: dayNames[date.getDay()],
+        dayNumber: date.getDate(),
+        isToday: i === 0,
+        isTomorrow: i === 1,
+        taskCount: dayTasks.length,
+        totalMinutes,
+        isFull: totalMinutes >= 400 // יותר מ-6.5 שעות
+      });
+    }
+    return days;
+  }, [today, tasks]);
 
   // טעינת ציטוט יומי (קבוע ליום)
   useEffect(() => {
@@ -208,6 +244,17 @@ function SmartDashboard() {
     return `${hours}:${mins.toString().padStart(2, '0')}`;
   }
 
+  // ✅ פורמט תאריך לכותרת
+  function formatDateForTitle(dateISO, weekDays) {
+    const day = weekDays.find(d => d.dateISO === dateISO);
+    if (day) {
+      if (day.isToday) return 'היום';
+      if (day.isTomorrow) return 'מחר';
+      return `יום ${day.dayName} (${day.dayNumber})`;
+    }
+    return dateISO;
+  }
+
   // השלמת משימה מהדשבורד
   const handleComplete = async (taskId) => {
     try {
@@ -350,6 +397,81 @@ function SmartDashboard() {
         </motion.div>
       )}
 
+      {/* ✅ תכנון השבוע - הוספת משימות */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.25 }}
+        className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 mb-6"
+      >
+        <h2 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
+          📅 תכנון השבוע
+          <span className="text-xs font-normal text-gray-400">לחצי על יום להוסיף משימה</span>
+        </h2>
+        
+        <div className="grid grid-cols-7 gap-2">
+          {weekDays.map((day, index) => (
+            <button
+              key={day.dateISO}
+              onClick={() => {
+                setSelectedDateForNewTask(day.dateISO);
+                setEditingTask(null);
+                setShowTaskForm(true);
+              }}
+              className={`
+                relative p-3 rounded-xl text-center transition-all hover:scale-105
+                ${day.isToday 
+                  ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500' 
+                  : day.isTomorrow
+                    ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700'
+                    : 'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-blue-400'
+                }
+                ${day.isFull ? 'opacity-60' : ''}
+              `}
+            >
+              {/* שם היום */}
+              <div className={`text-xs font-medium ${day.isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                {day.isToday ? 'היום' : day.isTomorrow ? 'מחר' : day.dayName}
+              </div>
+              
+              {/* מספר התאריך */}
+              <div className={`text-lg font-bold ${day.isToday ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-white'}`}>
+                {day.dayNumber}
+              </div>
+              
+              {/* מספר משימות */}
+              {day.taskCount > 0 ? (
+                <div className={`text-xs ${day.isFull ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
+                  {day.taskCount} משימות
+                </div>
+              ) : (
+                <div className="text-xs text-green-500">פנוי</div>
+              )}
+              
+              {/* אייקון פלוס */}
+              <div className="absolute -top-1 -left-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
+                +
+              </div>
+              
+              {/* אינדיקטור עומס */}
+              {day.totalMinutes > 0 && (
+                <div className="mt-1 h-1 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
+                  <div 
+                    className={`h-full ${day.isFull ? 'bg-red-500' : 'bg-green-500'}`}
+                    style={{ width: `${Math.min(100, (day.totalMinutes / 465) * 100)}%` }}
+                  />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+        
+        {/* טיפ */}
+        <p className="text-xs text-gray-400 text-center mt-3">
+          💡 תכנני את השבוע מראש - זה יעזור לך להיות יותר פרודוקטיבית
+        </p>
+      </motion.div>
+
       {/* === שתי עמודות: משימות + התפלגות === */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* משימות להיום */}
@@ -366,16 +488,11 @@ function SmartDashboard() {
                 ({stats.todayTasks.length})
               </span>
             </h2>
-            <div className="flex gap-2">
-              <Button size="sm" onClick={() => setShowTaskForm(true)}>
-                + חדש
+            <Link to="/daily">
+              <Button size="sm" variant="secondary">
+                לתצוגה יומית →
               </Button>
-              <Link to="/daily">
-                <Button size="sm" variant="secondary">
-                  לתצוגה יומית
-                </Button>
-              </Link>
-            </div>
+            </Link>
           </div>
 
           {stats.todayTasks.length === 0 ? (
@@ -518,13 +635,24 @@ function SmartDashboard() {
       {/* מודל טופס */}
       <Modal
         isOpen={showTaskForm}
-        onClose={() => { setShowTaskForm(false); setEditingTask(null); }}
-        title={editingTask?.id ? 'עריכת משימה' : 'משימה חדשה'}
+        onClose={() => { setShowTaskForm(false); setEditingTask(null); setSelectedDateForNewTask(null); }}
+        title={
+          editingTask?.id 
+            ? 'עריכת משימה' 
+            : selectedDateForNewTask 
+              ? `משימה חדשה ל-${formatDateForTitle(selectedDateForNewTask, weekDays)}`
+              : 'משימה חדשה'
+        }
       >
         <SimpleTaskForm
           task={editingTask}
-          onClose={() => { setShowTaskForm(false); setEditingTask(null); loadTasks(); }}
-          defaultDate={todayISO}
+          onClose={() => { 
+            setShowTaskForm(false); 
+            setEditingTask(null); 
+            setSelectedDateForNewTask(null);
+            loadTasks(); 
+          }}
+          defaultDate={selectedDateForNewTask || todayISO}
         />
       </Modal>
     </div>
