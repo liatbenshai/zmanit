@@ -42,16 +42,16 @@
 ```
 src/
 ├── config/
-│   └── taskTypes.js              ← סוגים מותאמים
+│   └── taskTypes.js              ← שעות עבודה 08:30-16:15
 ├── pages/
 │   └── Settings.jsx              ← טאבים חדשים
 ├── components/
 │   ├── Dashboard/
 │   │   └── SmartDashboard.jsx    ← דשבורד חדש! 🎨
 │   ├── DailyView/
+│   │   ├── DailyView.jsx         ← גרירה לשינוי סדר! 🔄
 │   │   ├── DailyTaskCard.jsx     ← העברה + משוב
-│   │   ├── SimpleTaskForm.jsx    ← הצעות חכמות
-│   │   └── DraggableTaskList.jsx ← גרירה! 🔄
+│   │   └── SimpleTaskForm.jsx    ← הצעות חכמות
 │   └── Notifications/
 │       └── NotificationChecker.jsx
 └── utils/
@@ -63,47 +63,18 @@ src/
 
 ## 🔧 התקנה
 
-### שלב 1: החלפת קבצים (6 קבצים)
+### שלב 1: החלפת קבצים (7 קבצים)
 - `src/config/taskTypes.js`
 - `src/pages/Settings.jsx`
 - `src/components/Dashboard/SmartDashboard.jsx`
+- `src/components/DailyView/DailyView.jsx` ← **חדש!**
 - `src/components/DailyView/DailyTaskCard.jsx`
 - `src/components/DailyView/SimpleTaskForm.jsx`
 - `src/components/Notifications/NotificationChecker.jsx`
 
-### שלב 2: הוספת קבצים חדשים (3 קבצים)
+### שלב 2: הוספת קבצים חדשים (2 קבצים)
 - `src/utils/taskLearning.js`
 - `src/utils/taskOrder.js`
-- `src/components/DailyView/DraggableTaskList.jsx`
-
-### שלב 3: שילוב גרירה ב-DailyView.jsx
-
-ב-DailyView.jsx, הוסיפי את ה-import:
-```jsx
-import DraggableTaskList from './DraggableTaskList';
-import { sortTasksByOrder, saveTaskOrder } from '../../utils/taskOrder';
-```
-
-החליפי את הרינדור של המשימות מ:
-```jsx
-{upcomingBlocks.map((block, index) => (
-  <DailyTaskCard ... />
-))}
-```
-
-ל:
-```jsx
-<DraggableTaskList
-  tasks={upcomingBlocks}
-  dateISO={getDateISO(selectedDate)}
-  onEdit={handleEditTask}
-  onUpdate={loadTasks}
-  onOrderChange={(newOrder) => {
-    saveTaskOrder(getDateISO(selectedDate), newOrder);
-    loadTasks();
-  }}
-/>
-```
 
 ---
 

@@ -14,19 +14,19 @@ export const TASK_CATEGORIES = {
     id: 'work', 
     name: 'עבודה', 
     icon: '💼',
-    hours: { start: 8, end: 16 }
+    hours: { start: 8.5, end: 16.25 }  // 08:30 - 16:15
   },
   family: { 
     id: 'family', 
     name: 'משפחה', 
     icon: '👨‍👩‍👧‍👦',
-    hours: { start: 17, end: 21 }
+    hours: { start: 17, end: 21 }  // 17:00 - 21:00
   },
   home: { 
     id: 'home', 
     name: 'בית', 
     icon: '🏠',
-    hours: { start: 17, end: 21 }
+    hours: { start: 17, end: 21 }  // 17:00 - 21:00
   }
 };
 
@@ -51,7 +51,7 @@ export const BUILT_IN_TASK_TYPES = {
     inputType: 'recording',
     timeRatio: 3,
     defaultDuration: 90,
-    preferredHours: { start: 8, end: 12 },
+    preferredHours: { start: 8.5, end: 12 },
     isBuiltIn: true
   },
   
@@ -71,7 +71,7 @@ export const BUILT_IN_TASK_TYPES = {
     inputType: 'recording',
     timeRatio: 0.5,
     defaultDuration: 30,
-    preferredHours: { start: 12, end: 16 },
+    preferredHours: { start: 12, end: 16.25 },
     isBuiltIn: true
   },
   
@@ -91,7 +91,7 @@ export const BUILT_IN_TASK_TYPES = {
     inputType: 'pages',
     timePerPage: 10,
     defaultDuration: 60,
-    preferredHours: { start: 12, end: 16 },
+    preferredHours: { start: 12, end: 16.25 },
     isBuiltIn: true
   },
   
@@ -110,7 +110,7 @@ export const BUILT_IN_TASK_TYPES = {
     color: 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-800 dark:text-yellow-200 border-yellow-300 dark:border-yellow-700',
     inputType: 'direct',
     defaultDuration: 15,
-    preferredHours: { start: 8, end: 8.25 },
+    preferredHours: { start: 8.5, end: 8.75 },
     isBuiltIn: true
   },
 
@@ -129,7 +129,7 @@ export const BUILT_IN_TASK_TYPES = {
     color: 'bg-cyan-100 dark:bg-cyan-900/30 text-cyan-800 dark:text-cyan-200 border-cyan-300 dark:border-cyan-700',
     inputType: 'direct',
     defaultDuration: 15,
-    preferredHours: { start: 8, end: 16 },
+    preferredHours: { start: 8.5, end: 16.25 },
     isBuiltIn: true
   },
 

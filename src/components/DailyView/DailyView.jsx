@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect, useRef } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { smartScheduleWeek } from '../../utils/smartScheduler';
@@ -8,6 +8,7 @@ import DailyTaskCard from './DailyTaskCard';
 import RescheduleModal from './RescheduleModal';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
+import { sortTasksByOrder, saveTaskOrder } from '../../utils/taskOrder';
 import toast from 'react-hot-toast';
 
 // ===============================
@@ -102,9 +103,9 @@ export const TASK_TYPES = {
  * שעות עבודה קבועות
  */
 const WORK_HOURS = {
-  start: 8, // 08:00
-  end: 16,  // 16:00
-  totalMinutes: 8 * 60 // 480 דקות
+  start: 8.5, // 08:30
+  end: 16.25,  // 16:15
+  totalMinutes: 7.75 * 60 // 465 דקות
 };
 
 /**
@@ -143,7 +144,6 @@ function getDateHebrew(date) {
 
 /**
  * ✅ תיקון: קבלת תאריך בפורמט ISO מקומי (לא UTC!)
- * זה קריטי כי toISOString() מחזיר UTC שיכול להיות יום אחר בישראל
  */
 function getDateISO(date) {
   const year = date.getFullYear();
@@ -185,6 +185,7 @@ function formatMinutes(minutes) {
 
 /**
  * תצוגת יום עבודה - מסך ראשי חדש
+ * ✅ כולל גרירה לשינוי סדר משימות
  */
 function DailyView() {
   const { user } = useAuth();
@@ -193,27 +194,32 @@ function DailyView() {
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
-  const [dragOverTime, setDragOverTime] = useState(null); // שעה שמעליה גוררים
+  const [dragOverTime, setDragOverTime] = useState(null);
+  const [taskOrder, setTaskOrder] = useState([]); // ✅ סדר משימות מותאם
   const timelineRef = useRef(null);
   
-  // ✅ תיקון: שעה נוכחית - משתמש ב-getDateISO במקום toISOString
+  // ✅ גרירה לשינוי סדר
+  const [draggedIndex, setDraggedIndex] = useState(null);
+  const [dragOverIndex, setDragOverIndex] = useState(null);
+  
+  // שעה נוכחית
   const [currentTime, setCurrentTime] = useState(() => {
     const now = new Date();
     return {
       minutes: now.getHours() * 60 + now.getMinutes(),
-      dateISO: getDateISO(now) // ✅ תיקון: תאריך מקומי
+      dateISO: getDateISO(now)
     };
   });
   
-  // ✅ תיקון: עדכון השעה כל דקה - משתמש ב-getDateISO
+  // עדכון השעה כל דקה
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
       setCurrentTime({
         minutes: now.getHours() * 60 + now.getMinutes(),
-        dateISO: getDateISO(now) // ✅ תיקון: תאריך מקומי
+        dateISO: getDateISO(now)
       });
-    }, 60 * 1000); // כל דקה
+    }, 60 * 1000);
     
     return () => clearInterval(interval);
   }, []);
@@ -264,13 +270,12 @@ function DailyView() {
     };
   }, [weekPlan, selectedDate]);
 
-  // חישוב זמנים מעודכן - כל המשימות שלא הושלמו נספרות
+  // חישוב זמנים
   const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;
   
   const timeStats = useMemo(() => {
     const blocks = selectedDayData.blocks || [];
     
-    // פונקציה לבדיקה אם בלוק עבר
     const blockHasPassed = (block) => {
       if (!isViewingToday) return false;
       if (!block.endTime) return false;
@@ -282,12 +287,10 @@ function DailyView() {
       .filter(b => b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
-    // כל המשימות שלא הושלמו - כולל באיחור - זה עבודה שצריך לעשות!
     const pendingMinutes = blocks
       .filter(b => !b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
-    // משימות באיחור (לסטטיסטיקה)
     const overdueMinutes = blocks
       .filter(b => !b.isCompleted && blockHasPassed(b))
       .reduce((sum, b) => sum + (b.duration || 0), 0);
@@ -296,21 +299,19 @@ function DailyView() {
       .filter(b => !b.isCompleted && b.timeSpent > 0)
       .reduce((sum, b) => sum + (b.timeSpent || 0), 0);
     
-    // זמן שנשאר = מעכשיו עד סוף היום (16:00) פחות עבודה שצריך לעשות
-    const endOfDayMinutes = WORK_HOURS.end * 60; // 16:00 = 960 דקות
+    const endOfDayMinutes = WORK_HOURS.end * 60;
     const minutesLeftInDay = isViewingToday 
       ? Math.max(0, endOfDayMinutes - currentTime.minutes)
       : WORK_HOURS.totalMinutes;
     
-    // זמן פנוי = זמן שנשאר ביום - משימות שצריך לעשות
     const freeMinutes = Math.max(0, minutesLeftInDay - pendingMinutes + inProgressMinutes);
     
     return {
       completed: completedMinutes,
-      pending: pendingMinutes, // כל מה שצריך לעשות
+      pending: pendingMinutes,
       overdue: overdueMinutes,
       inProgress: inProgressMinutes,
-      remaining: freeMinutes, // זמן פנוי באמת
+      remaining: freeMinutes,
       minutesLeftInDay: minutesLeftInDay,
       total: WORK_HOURS.totalMinutes,
       usedPercent: Math.round((completedMinutes / WORK_HOURS.totalMinutes) * 100),
@@ -325,7 +326,6 @@ function DailyView() {
   };
 
   const handleEditTask = (task) => {
-    // מציאת המשימה המקורית מה-tasks (לא הבלוק)
     const originalTask = tasks.find(t => t.id === task.taskId || t.id === task.id);
     setEditingTask(originalTask || task);
     setShowTaskForm(true);
@@ -338,23 +338,20 @@ function DailyView() {
   };
 
   // ===============================
-  // Drag & Drop Handlers
+  // Drag & Drop to Timeline (קיים)
   // ===============================
   
-  // התחלת גרירה
   const handleDragStart = (task, e) => {
     draggedTaskData = task;
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', task.id);
   };
 
-  // סיום גרירה
   const handleDragEnd = () => {
     draggedTaskData = null;
     setDragOverTime(null);
   };
 
-  // גרירה מעל אזור זמן
   const handleDragOverTimeline = (e) => {
     e.preventDefault();
     if (!timelineRef.current || !draggedTaskData) return;
@@ -363,10 +360,9 @@ function DailyView() {
     const relativeY = e.clientY - rect.top;
     const percentage = Math.max(0, Math.min(1, relativeY / rect.height));
     
-    // המרה לזמן (8:00 - 16:00)
-    const totalMinutes = 8 * 60; // 8 שעות
+    const totalMinutes = 8 * 60;
     const minutesFromStart = Math.round(percentage * totalMinutes);
-    const roundedMinutes = Math.round(minutesFromStart / 15) * 15; // עיגול ל-15 דקות
+    const roundedMinutes = Math.round(minutesFromStart / 15) * 15;
     
     const hour = 8 + Math.floor(roundedMinutes / 60);
     const minutes = roundedMinutes % 60;
@@ -375,7 +371,6 @@ function DailyView() {
     setDragOverTime(timeStr);
   };
 
-  // שחרור באזור זמן
   const handleDropOnTimeline = async (e) => {
     e.preventDefault();
     
@@ -400,6 +395,62 @@ function DailyView() {
     }
   };
 
+  // ===============================
+  // ✅ Drag & Drop לשינוי סדר (חדש!)
+  // ===============================
+  
+  const handleReorderDragStart = (e, index) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+    e.target.style.opacity = '0.5';
+  };
+
+  const handleReorderDragEnd = (e) => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    if (e.target) {
+      e.target.style.opacity = '1';
+    }
+  };
+
+  const handleReorderDragOver = (e, index) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (index !== draggedIndex) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleReorderDrop = (e, toIndex, blocksArray) => {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const fromIndex = draggedIndex;
+    
+    if (fromIndex === null || fromIndex === toIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    // יצירת סדר חדש
+    const currentOrder = blocksArray.map(b => b.taskId || b.id);
+    const newOrder = [...currentOrder];
+    const [movedItem] = newOrder.splice(fromIndex, 1);
+    newOrder.splice(toIndex, 0, movedItem);
+    
+    // שמירה ב-localStorage
+    const dateISO = getDateISO(selectedDate);
+    saveTaskOrder(dateISO, newOrder);
+    setTaskOrder(newOrder);
+    
+    toast.success('🔄 הסדר עודכן');
+    
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
   // טעינה
   if (loading) {
     return (
@@ -422,36 +473,23 @@ function DailyView() {
   }
 
   // === סינון וחישוב מחדש של זמנים ===
-  // בלוקים שעברו ולא הושלמו = "נדחה" - רק אם היתה שעה ספציפית
-  // בלוקים שעברו והושלמו = מוצגים כ"הושלמו"
-  // בלוקים עתידיים = ממשיכים רגיל
-  
-  // ✅ תיקון: רק משימות עם due_time ספציפי יסומנו כ"נדחה"
-  // משימות שתוזמנו אוטומטית לא נחשבות "נדחו" גם אם הזמן עבר
   const isBlockPast = (block) => {
-    if (!isViewingToday) return false; // אם לא היום, הכל רלוונטי
-    
-    // רק אם יש למשימה המקורית due_time ספציפי
+    if (!isViewingToday) return false;
     const task = block.task;
-    if (!task?.due_time) return false; // אין שעה ספציפית = לא נדחה
-    
-    // בדיקה אם השעה הספציפית עברה
+    if (!task?.due_time) return false;
     const [hour, min] = task.due_time.split(':').map(Number);
     const taskDueMinutes = hour * 60 + (min || 0);
     return taskDueMinutes < currentTime.minutes;
   };
   
-  // פונקציה להמרת דקות לפורמט שעה
   const minutesToTime = (totalMinutes) => {
     const hours = Math.floor(totalMinutes / 60);
     const mins = totalMinutes % 60;
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
   
-  // הפרדת בלוקים
-  // ✅ תיקון: מיון לפי זמן התחלה ואז לפי blockIndex
+  // מיון בלוקים
   const allBlocks = [...(selectedDayData.blocks || [])].sort((a, b) => {
-    // קודם לפי זמן התחלה
     if (a.startTime && b.startTime) {
       const aTime = a.startTime.split(':').map(Number);
       const bTime = b.startTime.split(':').map(Number);
@@ -459,22 +497,16 @@ function DailyView() {
       const bMinutes = bTime[0] * 60 + (bTime[1] || 0);
       if (aMinutes !== bMinutes) return aMinutes - bMinutes;
     }
-    // אם אותו זמן - לפי blockIndex
     if (a.blockIndex && b.blockIndex) {
       return a.blockIndex - b.blockIndex;
     }
     return 0;
   });
   
-  // בלוקים שהושלמו - נשארים עם הזמנים המקוריים
   const completedBlocks = allBlocks.filter(b => b.isCompleted);
-  
-  // בלוקים פעילים (לא הושלמו)
-  // ✅ תיקון: שינוי מ-const ל-let כי נשנה את הסדר
   let activeBlocks = allBlocks.filter(b => !b.isCompleted);
   
-  // ✅ תיקון חדש: משימה עם טיימר פעיל נשארת ראשונה!
-  // בדיקה אם יש משימה שעובדים עליה כרגע
+  // משימה עם טיימר פעיל נשארת ראשונה
   const getRunningTaskId = () => {
     for (const block of activeBlocks) {
       const taskId = block.taskId || block.task?.id;
@@ -495,7 +527,6 @@ function DailyView() {
   
   const runningTaskId = getRunningTaskId();
   
-  // אם יש משימה פעילה - שים אותה ראשונה
   if (runningTaskId) {
     const runningIndex = activeBlocks.findIndex(b => 
       (b.taskId || b.task?.id) === runningTaskId
@@ -503,24 +534,25 @@ function DailyView() {
     if (runningIndex > 0) {
       const [runningBlock] = activeBlocks.splice(runningIndex, 1);
       activeBlocks.unshift(runningBlock);
-      console.log(`⏱️ משימה פעילה נשארת ראשונה: ${runningBlock.title}`);
     }
   }
   
-  // === חישוב זמנים מחדש מעכשיו ===
-  // כל המשימות הפעילות מתוזמנות מחדש מהשעה הנוכחית
+  // ✅ מיון לפי סדר שמור (אם יש)
+  const dateISO = getDateISO(selectedDate);
+  activeBlocks = sortTasksByOrder(activeBlocks.map(b => ({
+    ...b,
+    id: b.taskId || b.id
+  })), dateISO);
+  
+  // חישוב זמנים מחדש
   let nextStartMinutes = isViewingToday ? currentTime.minutes : WORK_HOURS.start * 60;
   
   const rescheduledBlocks = activeBlocks.map(block => {
     const duration = block.duration || 30;
     const startMinutes = nextStartMinutes;
     const endMinutes = startMinutes + duration;
-    
-    // האם הבלוק המקורי היה מתוכנן לשעה שעברה?
     const wasPostponed = isBlockPast(block);
-    
-    // עדכון לבלוק הבא
-    nextStartMinutes = endMinutes + 5; // 5 דקות הפסקה
+    nextStartMinutes = endMinutes + 5;
     
     return {
       ...block,
@@ -529,15 +561,81 @@ function DailyView() {
       startTime: minutesToTime(startMinutes),
       endTime: minutesToTime(endMinutes),
       isPostponed: wasPostponed,
-      isRescheduled: wasPostponed // סימון שהזמן השתנה
+      isRescheduled: wasPostponed
     };
   });
   
-  // בלוקים שנדחו (היו מתוכננים לשעה שעברה)
   const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
-  
-  // בלוקים עתידיים (לא נדחו)
   const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
+
+  // ===============================
+  // רנדור כרטיס עם גרירה
+  // ===============================
+  const renderDraggableCard = (block, index, blocksArray) => (
+    <motion.div
+      key={block.id || block.taskId || `block-${index}`}
+      layout
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ 
+        opacity: draggedIndex === index ? 0.5 : 1, 
+        y: 0,
+        scale: dragOverIndex === index ? 1.02 : 1
+      }}
+      className={`
+        relative
+        ${dragOverIndex === index ? 'ring-2 ring-blue-500 ring-dashed rounded-xl' : ''}
+      `}
+      draggable
+      onDragStart={(e) => handleReorderDragStart(e, index)}
+      onDragEnd={handleReorderDragEnd}
+      onDragOver={(e) => handleReorderDragOver(e, index)}
+      onDrop={(e) => handleReorderDrop(e, index, blocksArray)}
+    >
+      {/* אינדיקטור מיקום */}
+      {dragOverIndex === index && draggedIndex !== null && draggedIndex < index && (
+        <div className="absolute -top-1 left-0 right-0 h-1 bg-blue-500 rounded-full z-10" />
+      )}
+      {dragOverIndex === index && draggedIndex !== null && draggedIndex > index && (
+        <div className="absolute -bottom-1 left-0 right-0 h-1 bg-blue-500 rounded-full z-10" />
+      )}
+
+      {/* ידית גרירה */}
+      <div className="absolute right-1 top-1/2 -translate-y-1/2 z-20 opacity-30 hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1">
+        <div className="flex flex-col gap-0.5">
+          <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
+          <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
+          <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
+        </div>
+      </div>
+
+      <DailyTaskCard 
+        task={{
+          id: block.taskId || block.id,
+          title: block.title,
+          estimated_duration: block.duration,
+          time_spent: block.timeSpent || 0,
+          is_completed: block.isCompleted,
+          task_type: block.taskType,
+          due_time: block.startTime,
+          priority: block.priority || 'normal',
+          blockIndex: block.blockIndex,
+          totalBlocks: block.totalBlocks,
+          startTime: block.startTime,
+          endTime: block.endTime,
+          originalStartTime: block.originalStartTime,
+          originalEndTime: block.originalEndTime,
+          isPostponed: block.isPostponed,
+          isRescheduled: block.isRescheduled
+        }} 
+        onEdit={() => handleEditTask(block)}
+        onUpdate={loadTasks}
+        showTime={true}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        draggable={false}
+      />
+    </motion.div>
+  );
 
   return (
     <div className="max-w-4xl mx-auto p-4">
@@ -595,7 +693,7 @@ function DailyView() {
         </div>
         
         <p className="text-center text-gray-500 dark:text-gray-400 mt-2 text-sm">
-          שעות עבודה: {WORK_HOURS.start}:00 - {WORK_HOURS.end}:00
+          שעות עבודה: 08:30 - 16:15
         </p>
       </motion.div>
 
@@ -621,13 +719,11 @@ function DailyView() {
         {/* סרגל התקדמות */}
         <div className="w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full flex">
-            {/* הושלם - ירוק */}
             <div 
               className="bg-green-500 transition-all duration-500"
               style={{ width: `${(timeStats.completed / timeStats.total) * 100}%` }}
               title={`הושלם: ${formatMinutes(timeStats.completed)}`}
             />
-            {/* ממתין לביצוע - כתום */}
             <div 
               className="bg-orange-500 transition-all duration-500"
               style={{ width: `${(timeStats.pending / timeStats.total) * 100}%` }}
@@ -657,24 +753,21 @@ function DailyView() {
           </div>
         </div>
 
-        {/* אזהרה אם לא יספיק + הצעות */}
+        {/* אזהרה אם לא יספיק */}
         {!timeStats.canFitAll && timeStats.pending > 0 && (
           <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
             <div className="text-red-700 dark:text-red-400 text-sm font-medium mb-2">
-              ⚠️ לא יספיק! צריך {formatMinutes(timeStats.pending)} אבל נשארו רק {formatMinutes(timeStats.minutesLeftInDay)} עד 16:00
+              ⚠️ לא יספיק! צריך {formatMinutes(timeStats.pending)} אבל נשארו רק {formatMinutes(timeStats.minutesLeftInDay)} עד 16:15
             </div>
             
-            {/* הצעות לפתרון */}
             <div className="text-xs text-red-600 dark:text-red-300 space-y-1">
               <p className="font-medium">💡 הצעות:</p>
               <ul className="list-disc list-inside space-y-1 mr-2">
                 <li>העבירי {formatMinutes(timeStats.pending - timeStats.minutesLeftInDay)} למחר</li>
                 <li>האם יש משימה שאפשר לקצר או לדחות?</li>
-                <li>שקלי להאריך את יום העבודה ב-{formatMinutes(Math.min(60, timeStats.pending - timeStats.minutesLeftInDay))}</li>
               </ul>
             </div>
             
-            {/* כפתור לפתיחת מודל ארגון מחדש */}
             <button
               onClick={() => setShowRescheduleModal(true)}
               className="mt-2 w-full py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
@@ -697,14 +790,14 @@ function DailyView() {
         </Button>
       </motion.div>
 
-      {/* רשימת משימות עם ציר זמן לגרירה */}
+      {/* רשימת משימות */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
         className="flex gap-4"
       >
-        {/* ציר זמן לגרירה - מוצג רק כשיש משימות */}
+        {/* ציר זמן לגרירה לשעה ספציפית */}
         {allBlocks.length > 0 && (
           <div 
             ref={timelineRef}
@@ -719,16 +812,14 @@ function DailyView() {
             onDragLeave={() => setDragOverTime(null)}
             onDrop={handleDropOnTimeline}
           >
-            {/* שעות */}
             <div className="h-full flex flex-col justify-between py-2 text-xs text-gray-500 dark:text-gray-400">
-              <span className="text-center">08:00</span>
+              <span className="text-center">08:30</span>
               <span className="text-center">10:00</span>
               <span className="text-center">12:00</span>
               <span className="text-center">14:00</span>
-              <span className="text-center">16:00</span>
+              <span className="text-center">16:15</span>
             </div>
             
-            {/* אינדיקטור זמן בגרירה */}
             {dragOverTime && (
               <div className="absolute left-0 right-0 bg-blue-500 text-white text-xs py-1 px-2 rounded text-center font-medium">
                 {dragOverTime}
@@ -751,47 +842,19 @@ function DailyView() {
           </div>
         ) : (
           <>
-            {/* משימות שנדחו - עם זמנים מחושבים מחדש */}
+            {/* משימות שנדחו */}
             {overdueBlocks.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-sm font-medium text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-2">
                   🔄 נדחו ({overdueBlocks.length}) - זמנים מעודכנים
                 </h3>
                 <div className="space-y-2 border-r-4 border-orange-400 pr-2">
-                  {overdueBlocks.map((block, index) => (
-                    <DailyTaskCard 
-                      key={block.id || `postponed-${index}`} 
-                      task={{
-                        id: block.taskId || block.id,
-                        title: block.title,
-                        estimated_duration: block.duration,
-                        time_spent: block.timeSpent || 0,
-                        is_completed: block.isCompleted,
-                        task_type: block.taskType,
-                        due_time: block.startTime,
-                        priority: block.priority || 'normal',
-                        blockIndex: block.blockIndex,
-                        totalBlocks: block.totalBlocks,
-                        startTime: block.startTime,
-                        endTime: block.endTime,
-                        originalStartTime: block.originalStartTime,
-                        originalEndTime: block.originalEndTime,
-                        isPostponed: true,
-                        isRescheduled: block.isRescheduled
-                      }} 
-                      onEdit={() => handleEditTask(block)}
-                      onUpdate={loadTasks}
-                      showTime={true}
-                      onDragStart={handleDragStart}
-                      onDragEnd={handleDragEnd}
-                      draggable={true}
-                    />
-                  ))}
+                  {overdueBlocks.map((block, index) => renderDraggableCard(block, index, overdueBlocks))}
                 </div>
               </div>
             )}
 
-            {/* משימות עתידיות - עם זמנים מעודכנים */}
+            {/* משימות עתידיות */}
             {upcomingBlocks.length > 0 && (
               <div className="mb-4">
                 {overdueBlocks.length > 0 && (
@@ -800,35 +863,15 @@ function DailyView() {
                   </h3>
                 )}
                 <div className="space-y-2">
-                  {upcomingBlocks.map((block, index) => (
-                    <DailyTaskCard 
-                      key={block.id || `block-${index}`} 
-                      task={{
-                        id: block.taskId || block.id,
-                        title: block.title,
-                        estimated_duration: block.duration,
-                        time_spent: block.timeSpent || 0,
-                        is_completed: block.isCompleted,
-                        task_type: block.taskType,
-                        due_time: block.startTime,
-                        priority: block.priority,
-                        blockIndex: block.blockIndex,
-                        totalBlocks: block.totalBlocks,
-                        startTime: block.startTime,
-                        endTime: block.endTime,
-                        originalStartTime: block.originalStartTime,
-                        originalEndTime: block.originalEndTime,
-                        isRescheduled: block.isRescheduled
-                      }} 
-                      onEdit={() => handleEditTask(block)}
-                      onUpdate={loadTasks}
-                      showTime={true}
-                      onDragStart={handleDragStart}
-                      onDragEnd={handleDragEnd}
-                      draggable={true}
-                    />
-                  ))}
+                  {upcomingBlocks.map((block, index) => renderDraggableCard(block, index, upcomingBlocks))}
                 </div>
+                
+                {/* הסבר גרירה */}
+                {upcomingBlocks.length > 1 && (
+                  <p className="text-xs text-gray-400 text-center mt-3">
+                    💡 גררי משימה כדי לשנות את הסדר
+                  </p>
+                )}
               </div>
             )}
             
@@ -872,7 +915,6 @@ function DailyView() {
         onClose={handleCloseForm}
         title={editingTask ? 'עריכת משימה' : 'משימה חדשה'}
       >
-        {/* ✅ תיקון: key גורם ל-remount כשעוברים בין הוספה לעריכה */}
         <SimpleTaskForm
           key={editingTask?.id || 'new-task'}
           task={editingTask}
@@ -887,7 +929,7 @@ function DailyView() {
         isOpen={showRescheduleModal}
         onClose={() => {
           setShowRescheduleModal(false);
-          loadTasks(); // רענון אחרי שינויים
+          loadTasks();
         }}
         overdueBlocks={overdueBlocks}
         allBlocks={rescheduledBlocks}
