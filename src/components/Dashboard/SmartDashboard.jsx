@@ -1,65 +1,103 @@
 import { useState, useMemo, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
-import { TASK_TYPES } from '../../config/taskTypes';
-import { getInterruptionStats } from '../../services/supabase';
-import { useProductivityInsights } from '../Productivity/ProductivityTracker';
+import { getTaskType, getAllTaskTypes } from '../../config/taskTypes';
+import { getLearningStats } from '../../utils/taskLearning';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
 
+// ציטוטים מוטיבציוניים
+const MOTIVATIONAL_QUOTES = [
+  { text: "הדרך הטובה ביותר לחזות את העתיד היא ליצור אותו", author: "פיטר דרוקר" },
+  { text: "אל תספרי את הימים, עשי שהימים יספרו", author: "מוחמד עלי" },
+  { text: "ההצלחה היא סכום של מאמצים קטנים שחוזרים על עצמם יום אחרי יום", author: "רוברט קולייר" },
+  { text: "התחילי מאיפה שאת, השתמשי במה שיש לך, עשי מה שאת יכולה", author: "ארתור אש" },
+  { text: "הזמן שלך מוגבל, אל תבזבזי אותו בחיים של מישהו אחר", author: "סטיב ג'ובס" },
+  { text: "לא מדובר בזמן, מדובר בעדיפויות", author: "אלכס בנאיין" },
+  { text: "עבודה קשה מנצחת כישרון כשהכישרון לא עובד קשה", author: "טים נוטקה" },
+  { text: "כל משימה גדולה מתחילה בצעד קטן", author: "לאו דזה" },
+  { text: "אני לא מודדת את ההצלחה שלי במה שהשגתי, אלא במכשולים שהתגברתי עליהם", author: "בוקר טי וושינגטון" },
+  { text: "היום הכי פרודוקטיבי שלך מחכה לך", author: "זמנית 💜" }
+];
+
 /**
  * דשבורד חכם - עמוד הבית
- * מציג סיכומים, תובנות מהירות, גרפים ומשימות להיום
+ * ✅ משודרג עם מוטיבציה, סטריק, ועיצוב מרהיב
  */
 function SmartDashboard() {
-  const { tasks, loading, toggleComplete } = useTasks();
+  const { tasks, loading, toggleComplete, loadTasks } = useTasks();
   const { user } = useAuth();
-  const { analysis: productivityAnalysis } = useProductivityInsights();
   
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [interruptionStats, setInterruptionStats] = useState(null);
-  const [dismissedInsights, setDismissedInsights] = useState([]);
-
-  // טעינת סטטיסטיקות הפרעות
-  useEffect(() => {
-    if (user?.id) {
-      loadInterruptionStats();
-      loadDismissedInsights();
-    }
-  }, [user?.id]);
-
-  const loadInterruptionStats = async () => {
-    try {
-      const stats = await getInterruptionStats(user.id, 30);
-      setInterruptionStats(stats);
-    } catch (err) {
-      console.log('אין נתוני הפרעות עדיין');
-    }
-  };
-
-  const loadDismissedInsights = () => {
-    const saved = localStorage.getItem(`dismissed_insights_${user?.id}`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        // סינון הצעות שעבר שבוע מאז הדחייה
-        const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000;
-        const valid = parsed.filter(d => d.dismissedAt > weekAgo);
-        setDismissedInsights(valid);
-      } catch (e) {}
-    }
-  };
+  const [dailyQuote, setDailyQuote] = useState(null);
+  const [streak, setStreak] = useState(0);
+  const [learningStats, setLearningStats] = useState(null);
 
   // תאריכים
   const today = new Date();
   const todayISO = today.toISOString().split('T')[0];
   const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   const todayName = dayNames[today.getDay()];
+
+  // טעינת ציטוט יומי (קבוע ליום)
+  useEffect(() => {
+    const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+    const quoteIndex = dayOfYear % MOTIVATIONAL_QUOTES.length;
+    setDailyQuote(MOTIVATIONAL_QUOTES[quoteIndex]);
+  }, []);
+
+  // חישוב סטריק
+  useEffect(() => {
+    calculateStreak();
+  }, [tasks]);
+
+  // טעינת סטטיסטיקות למידה
+  useEffect(() => {
+    setLearningStats(getLearningStats());
+  }, []);
+
+  const calculateStreak = () => {
+    if (!tasks.length) {
+      setStreak(0);
+      return;
+    }
+
+    // קבלת ימים עם משימות שהושלמו
+    const completedDates = new Set();
+    tasks.forEach(t => {
+      if (t.is_completed && t.completed_at) {
+        completedDates.add(t.completed_at.split('T')[0]);
+      }
+    });
+
+    // ספירת ימים רצופים אחורה מהיום
+    let currentStreak = 0;
+    let checkDate = new Date(today);
+    
+    // אם היום עוד לא סיימנו משימות, נתחיל מאתמול
+    if (!completedDates.has(todayISO)) {
+      checkDate.setDate(checkDate.getDate() - 1);
+    }
+
+    while (true) {
+      const dateStr = checkDate.toISOString().split('T')[0];
+      if (completedDates.has(dateStr)) {
+        currentStreak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+      // מקסימום 365 ימים לבדיקה
+      if (currentStreak > 365) break;
+    }
+
+    setStreak(currentStreak);
+  };
 
   // ברכה לפי שעה
   const getGreeting = () => {
@@ -68,6 +106,16 @@ function SmartDashboard() {
     if (hour < 17) return 'צהריים טובים';
     if (hour < 21) return 'ערב טוב';
     return 'לילה טוב';
+  };
+
+  // אימוג'י לפי שעה
+  const getTimeEmoji = () => {
+    const hour = today.getHours();
+    if (hour < 6) return '🌙';
+    if (hour < 12) return '☀️';
+    if (hour < 17) return '🌤️';
+    if (hour < 21) return '🌅';
+    return '🌙';
   };
 
   // שם המשתמש
@@ -112,11 +160,8 @@ function SmartDashboard() {
     // משימות דחופות
     const urgentTasks = todayTasks.filter(t => t.priority === 'urgent');
 
-    // משימות עם דדליין קרוב (מחר)
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowISO = tomorrow.toISOString().split('T')[0];
-    const dueTomorrow = tasks.filter(t => !t.is_completed && t.due_date === tomorrowISO);
+    // משימה הבאה (הכי דחופה או הראשונה)
+    const nextTask = urgentTasks[0] || todayTasks[0];
 
     // התפלגות לפי סוג משימה (השבוע)
     const byType = {};
@@ -128,8 +173,14 @@ function SmartDashboard() {
     });
 
     // חישוב אחוז היום "מלא"
-    const workDayMinutes = 8 * 60; // 480 דקות
+    const workDayMinutes = 8 * 60;
     const dayFullness = Math.min(100, Math.round((plannedToday / workDayMinutes) * 100));
+
+    // אחוז השלמה היום
+    const totalTodayTasks = todayTasks.length + completedToday.length;
+    const completionPercent = totalTodayTasks > 0 
+      ? Math.round((completedToday.length / totalTodayTasks) * 100) 
+      : 0;
 
     return {
       todayTasks,
@@ -139,117 +190,13 @@ function SmartDashboard() {
       workedThisWeek,
       plannedToday,
       urgentTasks,
-      dueTomorrow,
+      nextTask,
       byType,
-      dayFullness
+      dayFullness,
+      completionPercent,
+      totalTodayTasks
     };
   }, [tasks, todayISO]);
-
-  // === תובנות מהירות ===
-  const quickInsights = useMemo(() => {
-    const insights = [];
-    const dismissedIds = dismissedInsights.map(d => d.id);
-
-    // תובנה: יום עמוס
-    if (stats.dayFullness > 90 && !dismissedIds.includes('busy_day')) {
-      insights.push({
-        id: 'busy_day',
-        type: 'warning',
-        icon: '⚠️',
-        title: 'יום עמוס',
-        text: `תכננת ${formatMinutes(stats.plannedToday)} היום - שקלי לדחות משימות`,
-        action: null
-      });
-    }
-
-    // תובנה: משימות דחופות
-    if (stats.urgentTasks.length > 2 && !dismissedIds.includes('too_urgent')) {
-      insights.push({
-        id: 'too_urgent',
-        type: 'alert',
-        icon: '🔴',
-        title: `${stats.urgentTasks.length} משימות דחופות`,
-        text: 'אולי לא הכל באמת דחוף?',
-        action: { label: 'לסדר עדיפויות', link: '/daily' }
-      });
-    }
-
-    // תובנה: דדליין מחר
-    if (stats.dueTomorrow.length > 0 && !dismissedIds.includes('due_tomorrow')) {
-      insights.push({
-        id: 'due_tomorrow',
-        type: 'info',
-        icon: '⏰',
-        title: `${stats.dueTomorrow.length} משימות לסיום מחר`,
-        text: stats.dueTomorrow.map(t => t.title).slice(0, 2).join(', '),
-        action: { label: 'לצפות', link: '/weekly' }
-      });
-    }
-
-    // תובנה: הרבה הפרעות
-    if (interruptionStats?.avgPerDay > 5 && !dismissedIds.includes('many_interruptions')) {
-      insights.push({
-        id: 'many_interruptions',
-        type: 'insight',
-        icon: '📞',
-        title: 'הרבה הפרעות',
-        text: `ממוצע ${interruptionStats.avgPerDay} הפרעות ליום. שעות השיא: ${interruptionStats.peakHours?.[0]?.hour || '?'}:00`,
-        action: { label: 'לראות פירוט', link: '/insights' }
-      });
-    }
-
-    // תובנה: עידוד
-    if (stats.completedToday.length >= 3 && !dismissedIds.includes('good_progress')) {
-      insights.push({
-        id: 'good_progress',
-        type: 'success',
-        icon: '🌟',
-        title: 'יופי של התקדמות!',
-        text: `כבר סיימת ${stats.completedToday.length} משימות היום`,
-        action: null
-      });
-    }
-
-    // תובנה: עוד לא התחלת
-    if (stats.completedToday.length === 0 && today.getHours() >= 10 && !dismissedIds.includes('not_started')) {
-      insights.push({
-        id: 'not_started',
-        type: 'nudge',
-        icon: '💪',
-        title: 'בואי נתחיל!',
-        text: 'עוד לא סימנת משימות כהושלמו היום',
-        action: { label: 'למשימות', link: '/daily' }
-      });
-    }
-
-    // תובנה: שעות פרודוקטיביות
-    if (productivityAnalysis?.bestHours?.length > 0 && !dismissedIds.includes('best_hours')) {
-      const bestHour = productivityAnalysis.bestHours[0];
-      const currentHour = today.getHours();
-      
-      // הצג רק אם עכשיו קרוב לשעה הטובה או שאנחנו בשעה הטובה
-      if (Math.abs(currentHour - bestHour) <= 1 || productivityAnalysis.bestHours.includes(currentHour)) {
-        insights.push({
-          id: 'best_hours',
-          type: 'insight',
-          icon: '🌟',
-          title: 'זו השעה הטובה שלך!',
-          text: `את הכי פרודוקטיבית עכשיו. תנצלי את זה לעבודות לקוח!`,
-          action: { label: 'למשימות', link: '/daily' }
-        });
-      }
-    }
-
-    return insights.slice(0, 3); // מקסימום 3 תובנות
-  }, [stats, interruptionStats, dismissedInsights, productivityAnalysis, today]);
-
-  // דחיית תובנה
-  const dismissInsight = (insightId) => {
-    const newDismissed = [...dismissedInsights, { id: insightId, dismissedAt: Date.now() }];
-    setDismissedInsights(newDismissed);
-    localStorage.setItem(`dismissed_insights_${user?.id}`, JSON.stringify(newDismissed));
-    toast.success('התובנה נדחתה לשבוע');
-  };
 
   // פורמט דקות
   function formatMinutes(minutes) {
@@ -261,6 +208,16 @@ function SmartDashboard() {
     return `${hours}:${mins.toString().padStart(2, '0')}`;
   }
 
+  // השלמת משימה מהדשבורד
+  const handleComplete = async (taskId) => {
+    try {
+      await toggleComplete(taskId);
+      toast.success('✅ משימה הושלמה!');
+    } catch (err) {
+      toast.error('שגיאה');
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -271,178 +228,243 @@ function SmartDashboard() {
 
   return (
     <div className="smart-dashboard p-4 max-w-6xl mx-auto">
-      {/* === ברכה אישית === */}
+      {/* === Hero Section - ברכה + ציטוט === */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
-        className="mb-6"
+        className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-blue-600 via-purple-600 to-pink-500 p-6 mb-6 text-white"
       >
-        <h1 className="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">
-          {getGreeting()}, {userName}! 👋
-        </h1>
-        <p className="text-gray-600 dark:text-gray-400 mt-1">
-          יום {todayName}, {today.toLocaleDateString('he-IL')}
-          {stats.completedToday.length > 0 && (
-            <span className="text-green-600 dark:text-green-400 mr-2">
-              • סיימת {stats.completedToday.length} משימות היום
-            </span>
+        {/* רקע דקורטיבי */}
+        <div className="absolute inset-0 opacity-10">
+          <div className="absolute top-0 left-0 w-40 h-40 bg-white rounded-full -translate-x-1/2 -translate-y-1/2"></div>
+          <div className="absolute bottom-0 right-0 w-60 h-60 bg-white rounded-full translate-x-1/3 translate-y-1/3"></div>
+        </div>
+
+        <div className="relative z-10">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <h1 className="text-2xl md:text-3xl font-bold mb-1">
+                {getGreeting()}, {userName}! {getTimeEmoji()}
+              </h1>
+              <p className="text-white/80">
+                יום {todayName}, {today.toLocaleDateString('he-IL')}
+              </p>
+            </div>
+            
+            {/* סטריק */}
+            {streak > 0 && (
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                className="flex flex-col items-center bg-white/20 backdrop-blur-sm rounded-2xl px-4 py-2"
+              >
+                <span className="text-3xl">🔥</span>
+                <span className="text-2xl font-bold">{streak}</span>
+                <span className="text-xs text-white/80">ימים רצופים</span>
+              </motion.div>
+            )}
+          </div>
+
+          {/* ציטוט יומי */}
+          {dailyQuote && (
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-4 mt-4">
+              <p className="text-lg italic">"{dailyQuote.text}"</p>
+              <p className="text-sm text-white/70 mt-1">— {dailyQuote.author}</p>
+            </div>
           )}
-        </p>
+        </div>
       </motion.div>
 
-      {/* === כרטיסי סיכום === */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
-        <StatCard
-          icon="✅"
-          label="הושלם היום"
-          value={stats.completedToday.length}
-          subtext={`מתוך ${stats.todayTasks.length + stats.completedToday.length}`}
-          color="green"
-        />
-        <StatCard
-          icon="⏱️"
-          label="שעות עבודה היום"
-          value={formatMinutes(stats.workedToday)}
-          subtext={`מתוכנן: ${formatMinutes(stats.plannedToday)}`}
-          color="blue"
-        />
-        <StatCard
-          icon="📊"
-          label="השבוע"
-          value={formatMinutes(stats.workedThisWeek)}
-          subtext={`${stats.completedThisWeek.length} משימות`}
-          color="purple"
-        />
-        <StatCard
-          icon="📈"
-          label="מילוי היום"
-          value={`${stats.dayFullness}%`}
-          subtext={stats.dayFullness > 80 ? 'יום מלא!' : 'יש מקום'}
-          color={stats.dayFullness > 90 ? 'red' : stats.dayFullness > 60 ? 'yellow' : 'gray'}
-        />
-      </div>
+      {/* === Progress Ring + Quick Stats === */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        {/* טבעת התקדמות */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.9 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700 flex flex-col items-center"
+        >
+          <ProgressRing 
+            percent={stats.completionPercent} 
+            size={120}
+            strokeWidth={10}
+          />
+          <div className="text-center mt-3">
+            <p className="text-sm text-gray-500 dark:text-gray-400">התקדמות היום</p>
+            <p className="text-lg font-bold text-gray-900 dark:text-white">
+              {stats.completedToday.length} / {stats.totalTodayTasks} משימות
+            </p>
+          </div>
+        </motion.div>
 
-      {/* === תובנות מהירות === */}
-      {quickInsights.length > 0 && (
+        {/* סטטיסטיקות מהירות */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700"
+        >
+          <h3 className="font-bold text-gray-700 dark:text-gray-300 mb-3 text-sm">📊 היום</h3>
+          <div className="space-y-3">
+            <StatRow icon="⏱️" label="זמן עבודה" value={formatMinutes(stats.workedToday)} />
+            <StatRow icon="📋" label="מתוכנן" value={formatMinutes(stats.plannedToday)} />
+            <StatRow 
+              icon="🔴" 
+              label="דחופות" 
+              value={stats.urgentTasks.length}
+              highlight={stats.urgentTasks.length > 0}
+            />
+          </div>
+        </motion.div>
+
+        {/* סטטיסטיקות שבועיות */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700"
+        >
+          <h3 className="font-bold text-gray-700 dark:text-gray-300 mb-3 text-sm">📈 השבוע</h3>
+          <div className="space-y-3">
+            <StatRow icon="✅" label="הושלמו" value={`${stats.completedThisWeek.length} משימות`} />
+            <StatRow icon="⏰" label="שעות עבודה" value={formatMinutes(stats.workedThisWeek)} />
+            <StatRow 
+              icon="🎯" 
+              label="יעילות" 
+              value={learningStats ? getEfficiencyText(learningStats) : '---'}
+            />
+          </div>
+        </motion.div>
+      </div>
+
+      {/* === משימה בוערת (אם יש) === */}
+      {stats.nextTask && (
+        <motion.div
+          initial={{ opacity: 0, x: -20 }}
+          animate={{ opacity: 1, x: 0 }}
           className="mb-6"
         >
-          <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3 flex items-center gap-2">
-            💡 תובנות מהירות
-          </h2>
-          <div className="grid md:grid-cols-3 gap-3">
-            {quickInsights.map((insight) => (
-              <InsightCard
-                key={insight.id}
-                insight={insight}
-                onDismiss={() => dismissInsight(insight.id)}
-              />
-            ))}
-          </div>
+          <FocusTaskCard 
+            task={stats.nextTask} 
+            onComplete={() => handleComplete(stats.nextTask.id)}
+          />
         </motion.div>
       )}
 
-      {/* === שני עמודות: משימות + גרפים === */}
+      {/* === שתי עמודות: משימות + התפלגות === */}
       <div className="grid md:grid-cols-2 gap-6">
         {/* משימות להיום */}
         <motion.div
           initial={{ opacity: 0, x: -20 }}
           animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.3 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700"
         >
           <div className="flex items-center justify-between mb-4">
             <h2 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-              📋 משימות להיום
+              📋 עוד להיום
               <span className="text-sm font-normal text-gray-500">
                 ({stats.todayTasks.length})
               </span>
             </h2>
-            <Button
-              size="sm"
-              onClick={() => setShowTaskForm(true)}
-            >
-              + חדש
-            </Button>
+            <div className="flex gap-2">
+              <Button size="sm" onClick={() => setShowTaskForm(true)}>
+                + חדש
+              </Button>
+              <Link to="/daily">
+                <Button size="sm" variant="secondary">
+                  לתצוגה יומית
+                </Button>
+              </Link>
+            </div>
           </div>
 
           {stats.todayTasks.length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
-              <div className="text-4xl mb-2">🎉</div>
-              <p>אין משימות פתוחות להיום!</p>
-              <Link to="/weekly" className="text-blue-500 hover:underline text-sm">
-                לצפות בשבוע →
-              </Link>
+            <div className="text-center py-8">
+              <div className="text-5xl mb-3">🎉</div>
+              <p className="text-gray-600 dark:text-gray-400 font-medium">סיימת הכל להיום!</p>
+              <p className="text-sm text-gray-400 mt-1">מגיע לך מנוחה 💜</p>
             </div>
           ) : (
-            <div className="space-y-2 max-h-80 overflow-y-auto">
-              {stats.todayTasks.slice(0, 8).map((task) => (
+            <div className="space-y-2 max-h-72 overflow-y-auto">
+              {stats.todayTasks.slice(0, 6).map((task, index) => (
                 <TaskRow
                   key={task.id}
                   task={task}
-                  onComplete={() => toggleComplete(task.id)}
+                  index={index}
+                  onComplete={() => handleComplete(task.id)}
                   onEdit={() => {
                     setEditingTask(task);
                     setShowTaskForm(true);
                   }}
                 />
               ))}
-              {stats.todayTasks.length > 8 && (
+              {stats.todayTasks.length > 6 && (
                 <Link
                   to="/daily"
                   className="block text-center text-blue-500 hover:underline text-sm py-2"
                 >
-                  + עוד {stats.todayTasks.length - 8} משימות
+                  + עוד {stats.todayTasks.length - 6} משימות
                 </Link>
               )}
             </div>
           )}
         </motion.div>
 
-        {/* גרף התפלגות לפי סוג */}
+        {/* התפלגות השבוע */}
         <motion.div
           initial={{ opacity: 0, x: 20 }}
           animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.4 }}
           className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700"
         >
           <h2 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            📊 התפלגות השבוע
+            📊 איפה הזמן שלי?
+            <span className="text-xs font-normal text-gray-400">(השבוע)</span>
           </h2>
 
           {Object.keys(stats.byType).length === 0 ? (
-            <div className="text-center py-8 text-gray-400">
+            <div className="text-center py-8">
               <div className="text-4xl mb-2">📈</div>
-              <p>עוד אין נתונים להצגה</p>
-              <p className="text-sm">סיימי משימות כדי לראות סטטיסטיקות</p>
+              <p className="text-gray-500">עוד אין נתונים</p>
+              <p className="text-sm text-gray-400">סיימי משימות כדי לראות סטטיסטיקות</p>
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               {Object.entries(stats.byType)
                 .sort((a, b) => b[1].minutes - a[1].minutes)
-                .slice(0, 6)
-                .map(([type, data]) => {
-                  const taskType = TASK_TYPES[type] || TASK_TYPES.other;
+                .slice(0, 5)
+                .map(([type, data], index) => {
+                  const taskType = getTaskType(type);
                   const totalMinutes = Object.values(stats.byType).reduce((sum, d) => sum + d.minutes, 0);
                   const percent = totalMinutes > 0 ? Math.round((data.minutes / totalMinutes) * 100) : 0;
+                  
+                  const colors = [
+                    'from-blue-500 to-blue-600',
+                    'from-purple-500 to-purple-600',
+                    'from-pink-500 to-pink-600',
+                    'from-orange-500 to-orange-600',
+                    'from-green-500 to-green-600'
+                  ];
                   
                   return (
                     <div key={type}>
                       <div className="flex justify-between text-sm mb-1">
                         <span className="flex items-center gap-2">
-                          <span>{taskType.icon}</span>
-                          <span className="text-gray-700 dark:text-gray-300">{taskType.name}</span>
+                          <span className="text-lg">{taskType.icon}</span>
+                          <span className="text-gray-700 dark:text-gray-300 font-medium">
+                            {taskType.name}
+                          </span>
                         </span>
                         <span className="text-gray-500">
-                          {formatMinutes(data.minutes)} ({percent}%)
+                          {formatMinutes(data.minutes)}
                         </span>
                       </div>
-                      <div className="h-2 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                      <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                         <motion.div
                           initial={{ width: 0 }}
                           animate={{ width: `${percent}%` }}
-                          transition={{ duration: 0.5, delay: 0.1 }}
-                          className="h-full bg-blue-500 rounded-full"
+                          transition={{ duration: 0.8, delay: index * 0.1 }}
+                          className={`h-full bg-gradient-to-r ${colors[index % colors.length]} rounded-full`}
                         />
                       </div>
                     </div>
@@ -451,7 +473,6 @@ function SmartDashboard() {
             </div>
           )}
 
-          {/* קישור לתובנות מלאות */}
           <Link
             to="/insights"
             className="block text-center text-blue-500 hover:underline text-sm mt-4 pt-4 border-t border-gray-100 dark:border-gray-700"
@@ -461,45 +482,38 @@ function SmartDashboard() {
         </motion.div>
       </div>
 
-      {/* === הפרעות (אם יש נתונים) === */}
-      {interruptionStats && interruptionStats.totalInterruptions > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="mt-6 bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700"
-        >
-          <h2 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-            📞 הפרעות (30 יום אחרונים)
-          </h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {interruptionStats.totalInterruptions}
-              </div>
-              <div className="text-sm text-gray-500">סה"כ הפרעות</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {formatMinutes(interruptionStats.totalMinutes)}
-              </div>
-              <div className="text-sm text-gray-500">זמן מבוזבז</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {interruptionStats.avgPerDay}
-              </div>
-              <div className="text-sm text-gray-500">ממוצע ליום</div>
-            </div>
-            <div className="text-center">
-              <div className="text-2xl font-bold text-gray-900 dark:text-white">
-                {interruptionStats.avgDurationMinutes} דק'
-              </div>
-              <div className="text-sm text-gray-500">ממוצע להפרעה</div>
-            </div>
-          </div>
-        </motion.div>
-      )}
+      {/* === Quick Actions === */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.5 }}
+        className="mt-6 grid grid-cols-2 md:grid-cols-4 gap-3"
+      >
+        <QuickActionCard 
+          icon="📋" 
+          label="תצוגה יומית" 
+          link="/daily" 
+          color="blue"
+        />
+        <QuickActionCard 
+          icon="🗓️" 
+          label="תצוגה שבועית" 
+          link="/weekly" 
+          color="purple"
+        />
+        <QuickActionCard 
+          icon="📊" 
+          label="תובנות" 
+          link="/insights" 
+          color="green"
+        />
+        <QuickActionCard 
+          icon="⚙️" 
+          label="הגדרות" 
+          link="/settings" 
+          color="gray"
+        />
+      </motion.div>
 
       {/* מודל טופס */}
       <Modal
@@ -509,7 +523,7 @@ function SmartDashboard() {
       >
         <SimpleTaskForm
           task={editingTask}
-          onClose={() => { setShowTaskForm(false); setEditingTask(null); }}
+          onClose={() => { setShowTaskForm(false); setEditingTask(null); loadTasks(); }}
           defaultDate={todayISO}
         />
       </Modal>
@@ -518,94 +532,125 @@ function SmartDashboard() {
 }
 
 /**
- * כרטיס סטטיסטיקה
+ * טבעת התקדמות
  */
-function StatCard({ icon, label, value, subtext, color = 'gray' }) {
-  const colors = {
-    gray: 'bg-gray-50 dark:bg-gray-800 border-gray-200',
-    green: 'bg-green-50 dark:bg-green-900/20 border-green-200',
-    blue: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200',
-    purple: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200',
-    yellow: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200',
-    red: 'bg-red-50 dark:bg-red-900/20 border-red-200'
+function ProgressRing({ percent, size = 100, strokeWidth = 8 }) {
+  const radius = (size - strokeWidth) / 2;
+  const circumference = radius * 2 * Math.PI;
+  const offset = circumference - (percent / 100) * circumference;
+
+  const getColor = () => {
+    if (percent >= 100) return '#22c55e'; // green
+    if (percent >= 75) return '#3b82f6';  // blue
+    if (percent >= 50) return '#f59e0b';  // yellow
+    return '#ef4444'; // red
   };
 
   return (
-    <motion.div
-      whileHover={{ scale: 1.02 }}
-      className={`${colors[color]} rounded-xl p-3 text-center border dark:border-gray-700`}
-    >
-      <div className="text-xl mb-1">{icon}</div>
-      <div className="text-xl font-bold text-gray-900 dark:text-white">{value}</div>
-      <div className="text-xs text-gray-500 dark:text-gray-400">{label}</div>
-      {subtext && <div className="text-xs text-gray-400 mt-0.5">{subtext}</div>}
-    </motion.div>
+    <div className="relative" style={{ width: size, height: size }}>
+      <svg width={size} height={size} className="transform -rotate-90">
+        {/* רקע */}
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke="currentColor"
+          strokeWidth={strokeWidth}
+          fill="none"
+          className="text-gray-200 dark:text-gray-700"
+        />
+        {/* התקדמות */}
+        <motion.circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          stroke={getColor()}
+          strokeWidth={strokeWidth}
+          fill="none"
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          initial={{ strokeDashoffset: circumference }}
+          animate={{ strokeDashoffset: offset }}
+          transition={{ duration: 1, ease: "easeOut" }}
+        />
+      </svg>
+      {/* טקסט במרכז */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center">
+        <span className="text-3xl font-bold text-gray-900 dark:text-white">
+          {percent}%
+        </span>
+      </div>
+    </div>
   );
 }
 
 /**
- * כרטיס תובנה
+ * שורת סטטיסטיקה
  */
-function InsightCard({ insight, onDismiss }) {
-  const typeColors = {
-    warning: 'bg-orange-50 dark:bg-orange-900/20 border-orange-200 dark:border-orange-800',
-    alert: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800',
-    info: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800',
-    success: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800',
-    insight: 'bg-purple-50 dark:bg-purple-900/20 border-purple-200 dark:border-purple-800',
-    nudge: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
-  };
-
+function StatRow({ icon, label, value, highlight = false }) {
   return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className={`${typeColors[insight.type]} rounded-xl p-3 border relative group`}
-    >
-      {/* כפתור דחייה */}
-      <button
-        onClick={onDismiss}
-        className="absolute top-2 left-2 opacity-0 group-hover:opacity-100 text-gray-400 hover:text-gray-600 transition-opacity"
-        title="דחה לשבוע"
-      >
-        ✕
-      </button>
+    <div className="flex items-center justify-between">
+      <span className="flex items-center gap-2 text-gray-600 dark:text-gray-400 text-sm">
+        <span>{icon}</span>
+        <span>{label}</span>
+      </span>
+      <span className={`font-bold ${highlight ? 'text-red-500' : 'text-gray-900 dark:text-white'}`}>
+        {value}
+      </span>
+    </div>
+  );
+}
 
-      <div className="flex items-start gap-2">
-        <span className="text-xl">{insight.icon}</span>
-        <div className="flex-1">
-          <div className="font-medium text-gray-900 dark:text-white text-sm">
-            {insight.title}
+/**
+ * כרטיס משימה בוערת
+ */
+function FocusTaskCard({ task, onComplete }) {
+  const taskType = getTaskType(task.task_type);
+  
+  return (
+    <div className="relative overflow-hidden bg-gradient-to-r from-orange-500 to-red-500 rounded-2xl p-5 text-white">
+      <div className="absolute top-0 right-0 text-8xl opacity-10">🔥</div>
+      
+      <div className="relative z-10">
+        <div className="flex items-center gap-2 mb-2">
+          <span className="text-xs bg-white/20 px-2 py-1 rounded-full">
+            {task.priority === 'urgent' ? '🔴 דחוף' : '⏰ הבא בתור'}
+          </span>
+        </div>
+        
+        <div className="flex items-center gap-3">
+          <span className="text-3xl">{taskType.icon}</span>
+          <div className="flex-1">
+            <h3 className="text-xl font-bold">{task.title}</h3>
+            <p className="text-white/80 text-sm">
+              {task.estimated_duration ? `${task.estimated_duration} דקות` : 'ללא הערכה'}
+            </p>
           </div>
-          <div className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
-            {insight.text}
-          </div>
-          {insight.action && (
-            <Link
-              to={insight.action.link}
-              className="inline-block mt-2 text-xs text-blue-600 dark:text-blue-400 hover:underline"
-            >
-              {insight.action.label} →
-            </Link>
-          )}
+          <button
+            onClick={onComplete}
+            className="bg-white/20 hover:bg-white/30 rounded-full p-3 transition-colors"
+          >
+            <span className="text-2xl">✓</span>
+          </button>
         </div>
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 /**
  * שורת משימה
  */
-function TaskRow({ task, onComplete, onEdit }) {
-  const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
-  const spent = task.time_spent || 0;
-  const estimated = task.estimated_duration || 0;
-  const progress = estimated > 0 ? Math.min(100, Math.round((spent / estimated) * 100)) : 0;
+function TaskRow({ task, index, onComplete, onEdit }) {
+  const taskType = getTaskType(task.task_type);
 
   return (
-    <div className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group">
-      {/* כפתור השלמה */}
+    <motion.div
+      initial={{ opacity: 0, x: -20 }}
+      animate={{ opacity: 1, x: 0 }}
+      transition={{ delay: index * 0.05 }}
+      className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+    >
       <button
         onClick={onComplete}
         className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 hover:bg-green-500 flex-shrink-0 transition-all flex items-center justify-center"
@@ -613,45 +658,71 @@ function TaskRow({ task, onComplete, onEdit }) {
         <span className="text-white text-xs opacity-0 group-hover:opacity-100">✓</span>
       </button>
 
-      {/* אייקון */}
       <span className="text-lg">{taskType.icon}</span>
 
-      {/* תוכן */}
       <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2">
-          <span className="font-medium text-gray-900 dark:text-white truncate text-sm">
-            {task.title}
-          </span>
-          {task.priority === 'urgent' && (
-            <span className="text-xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 rounded">
-              דחוף
-            </span>
-          )}
-        </div>
-        {estimated > 0 && (
-          <div className="flex items-center gap-2 text-xs text-gray-500">
-            <span>{Math.round(estimated)} דק'</span>
-            {progress > 0 && (
-              <div className="flex-1 max-w-16 h-1 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-500" 
-                  style={{ width: `${progress}%` }}
-                />
-              </div>
-            )}
-          </div>
+        <span className="font-medium text-gray-900 dark:text-white truncate text-sm block">
+          {task.title}
+        </span>
+        {task.estimated_duration && (
+          <span className="text-xs text-gray-500">{task.estimated_duration} דק'</span>
         )}
       </div>
 
-      {/* כפתור עריכה */}
+      {task.priority === 'urgent' && (
+        <span className="text-xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 rounded">
+          דחוף
+        </span>
+      )}
+
       <button
         onClick={onEdit}
         className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
       >
         ✏️
       </button>
-    </div>
+    </motion.div>
   );
+}
+
+/**
+ * כרטיס פעולה מהירה
+ */
+function QuickActionCard({ icon, label, link, color }) {
+  const colors = {
+    blue: 'hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:border-blue-300',
+    purple: 'hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:border-purple-300',
+    green: 'hover:bg-green-50 dark:hover:bg-green-900/20 hover:border-green-300',
+    gray: 'hover:bg-gray-50 dark:hover:bg-gray-700 hover:border-gray-300'
+  };
+
+  return (
+    <Link to={link}>
+      <motion.div
+        whileHover={{ scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        className={`bg-white dark:bg-gray-800 rounded-xl p-4 text-center border border-gray-100 dark:border-gray-700 transition-colors ${colors[color]}`}
+      >
+        <span className="text-2xl mb-1 block">{icon}</span>
+        <span className="text-sm text-gray-700 dark:text-gray-300">{label}</span>
+      </motion.div>
+    </Link>
+  );
+}
+
+/**
+ * טקסט יעילות מנתוני למידה
+ */
+function getEfficiencyText(stats) {
+  if (!stats || Object.keys(stats).length === 0) return '---';
+  
+  const ratios = Object.values(stats).map(s => s.ratio);
+  const avgRatio = ratios.reduce((a, b) => a + b, 0) / ratios.length;
+  
+  if (avgRatio <= 1.05) return '🎯 מעולה!';
+  if (avgRatio <= 1.15) return '👍 טוב';
+  if (avgRatio <= 1.3) return '📈 משתפר';
+  return '💪 יש מקום';
 }
 
 export default SmartDashboard;

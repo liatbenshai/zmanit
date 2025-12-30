@@ -1,239 +1,175 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  sortTasksByOrder, 
-  setDayTaskOrder, 
-  reorderTask,
-  initializeDayOrder 
-} from '../../utils/taskReorder';
+import DailyTaskCard from './DailyTaskCard';
+import { reorderTasks } from '../../utils/taskOrder';
+import toast from 'react-hot-toast';
 
 /**
- * רשימת משימות עם גרירה
- * =====================
- * 
- * עוטף את DailyTaskCard ומוסיף תמיכה בגרירה לשינוי סדר.
+ * רשימת משימות עם גרירה לשינוי סדר
  */
 function DraggableTaskList({ 
-  blocks,          // בלוקי משימות
-  date,            // תאריך (YYYY-MM-DD)
-  renderTask,      // פונקציה לרנדור כל משימה
-  onReorder,       // callback כשמשנים סדר
-  onMoveToDay,     // callback כשמעבירים ליום אחר
-  className = ''
+  tasks, 
+  dateISO,
+  onEdit, 
+  onUpdate,
+  onOrderChange,
+  showTime = true 
 }) {
-  const [items, setItems] = useState([]);
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
-  const draggedItemRef = useRef(null);
-  
-  // אתחול ומיון לפי סדר שמור
-  useEffect(() => {
-    if (blocks && blocks.length > 0) {
-      // אתחול סדר אם אין
-      initializeDayOrder(date, blocks);
-      // מיון לפי סדר שמור
-      const sorted = sortTasksByOrder(blocks, date);
-      setItems(sorted);
-    } else {
-      setItems([]);
-    }
-  }, [blocks, date]);
-  
+
   // התחלת גרירה
-  const handleDragStart = (e, index) => {
+  const handleDragStart = useCallback((e, index) => {
     setDraggedIndex(index);
-    draggedItemRef.current = items[index];
-    
-    // אפקט גרירה
     e.dataTransfer.effectAllowed = 'move';
-    e.dataTransfer.setData('text/plain', items[index].id || items[index].taskId);
+    e.dataTransfer.setData('text/plain', index.toString());
     
-    // עיכוב קטן לאנימציה חלקה
-    setTimeout(() => {
+    // הוספת אפקט ויזואלי
+    if (e.target) {
       e.target.style.opacity = '0.5';
-    }, 0);
-  };
-  
-  // גרירה מעל פריט
-  const handleDragOver = (e, index) => {
+    }
+  }, []);
+
+  // סיום גרירה
+  const handleDragEnd = useCallback((e) => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+    
+    if (e.target) {
+      e.target.style.opacity = '1';
+    }
+  }, []);
+
+  // גרירה מעל משימה אחרת
+  const handleDragOver = useCallback((e, index) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     
-    if (index !== dragOverIndex) {
+    if (index !== draggedIndex) {
       setDragOverIndex(index);
     }
-  };
-  
-  // עזיבת אזור גרירה
-  const handleDragLeave = (e) => {
-    // רק אם עוזבים לגמרי (לא נכנסים לילד)
-    if (!e.currentTarget.contains(e.relatedTarget)) {
-      setDragOverIndex(null);
-    }
-  };
-  
-  // סיום גרירה
-  const handleDragEnd = (e) => {
-    e.target.style.opacity = '1';
-    setDraggedIndex(null);
+  }, [draggedIndex]);
+
+  // יציאה מהגרירה
+  const handleDragLeave = useCallback(() => {
     setDragOverIndex(null);
-    draggedItemRef.current = null;
-  };
-  
-  // שחרור (drop)
-  const handleDrop = (e, dropIndex) => {
+  }, []);
+
+  // שחרור - ביצוע ההחלפה
+  const handleDrop = useCallback((e, toIndex) => {
     e.preventDefault();
     
-    if (draggedIndex === null || draggedIndex === dropIndex) {
-      handleDragEnd(e);
+    const fromIndex = draggedIndex;
+    
+    if (fromIndex === null || fromIndex === toIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
       return;
     }
+
+    // יצירת סדר חדש
+    const currentOrder = tasks.map(t => t.id || t.taskId);
+    const newOrder = reorderTasks(dateISO, currentOrder, fromIndex, toIndex);
     
-    // עדכון הרשימה המקומית
-    const newItems = [...items];
-    const [draggedItem] = newItems.splice(draggedIndex, 1);
-    newItems.splice(dropIndex, 0, draggedItem);
-    setItems(newItems);
-    
-    // שמירת הסדר החדש
-    const taskIds = newItems.map(item => item.id || item.taskId).filter(Boolean);
-    setDayTaskOrder(date, taskIds);
-    
-    // callback
-    if (onReorder) {
-      onReorder(newItems, draggedIndex, dropIndex);
+    // עדכון ה-parent
+    if (onOrderChange) {
+      onOrderChange(newOrder);
     }
     
-    console.log(`📋 סדר עודכן: משימה הועברה מ-${draggedIndex} ל-${dropIndex}`);
+    toast.success('🔄 הסדר עודכן');
     
-    handleDragEnd(e);
-  };
-  
-  if (items.length === 0) {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  }, [draggedIndex, tasks, dateISO, onOrderChange]);
+
+  if (!tasks || tasks.length === 0) {
     return null;
   }
 
   return (
-    <div className={`space-y-2 ${className}`}>
+    <div className="space-y-2">
       <AnimatePresence mode="popLayout">
-        {items.map((item, index) => (
+        {tasks.map((task, index) => (
           <motion.div
-            key={item.id || item.taskId || `item-${index}`}
+            key={task.id || task.taskId || `task-${index}`}
             layout
-            initial={{ opacity: 0, y: 10 }}
+            initial={{ opacity: 0, y: 20 }}
             animate={{ 
               opacity: 1, 
               y: 0,
-              scale: draggedIndex === index ? 1.02 : 1,
-              zIndex: draggedIndex === index ? 10 : 1
+              scale: dragOverIndex === index ? 1.02 : 1,
+              borderColor: dragOverIndex === index ? '#3b82f6' : 'transparent'
             }}
-            exit={{ opacity: 0, y: -10 }}
+            exit={{ opacity: 0, scale: 0.9 }}
             transition={{ duration: 0.2 }}
-            draggable
-            onDragStart={(e) => handleDragStart(e, index)}
-            onDragOver={(e) => handleDragOver(e, index)}
-            onDragLeave={handleDragLeave}
-            onDragEnd={handleDragEnd}
-            onDrop={(e) => handleDrop(e, index)}
             className={`
-              relative cursor-grab active:cursor-grabbing
+              relative
               ${draggedIndex === index ? 'opacity-50' : ''}
-              ${dragOverIndex === index && draggedIndex !== index ? 'transform translate-y-2' : ''}
+              ${dragOverIndex === index ? 'border-2 border-blue-500 border-dashed rounded-xl' : ''}
             `}
           >
-            {/* אינדיקטור מיקום */}
-            {dragOverIndex === index && draggedIndex !== index && draggedIndex !== null && (
+            {/* אינדיקטור מיקום יעד */}
+            {dragOverIndex === index && draggedIndex !== null && draggedIndex < index && (
               <div className="absolute -top-1 left-0 right-0 h-1 bg-blue-500 rounded-full" />
             )}
-            
-            {/* ידית גרירה */}
-            <div className="absolute right-0 top-0 bottom-0 w-8 flex items-center justify-center opacity-30 hover:opacity-60 transition-opacity">
-              <span className="text-gray-400 text-lg select-none">⋮⋮</span>
-            </div>
-            
-            {/* תוכן המשימה */}
-            <div className="pr-6">
-              {renderTask(item, index)}
+            {dragOverIndex === index && draggedIndex !== null && draggedIndex > index && (
+              <div className="absolute -bottom-1 left-0 right-0 h-1 bg-blue-500 rounded-full" />
+            )}
+
+            {/* עטיפה לגרירה */}
+            <div
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragEnd={handleDragEnd}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, index)}
+              className="cursor-grab active:cursor-grabbing"
+            >
+              {/* ידית גרירה */}
+              <div className="absolute right-2 top-1/2 -translate-y-1/2 z-10 opacity-30 hover:opacity-100 transition-opacity">
+                <div className="flex flex-col gap-0.5 p-2">
+                  <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
+                  <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
+                  <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
+                </div>
+              </div>
+
+              {/* כרטיס המשימה */}
+              <DailyTaskCard
+                task={{
+                  id: task.taskId || task.id,
+                  title: task.title,
+                  estimated_duration: task.duration || task.estimated_duration,
+                  time_spent: task.timeSpent || task.time_spent || 0,
+                  is_completed: task.isCompleted || task.is_completed,
+                  task_type: task.taskType || task.task_type,
+                  due_time: task.startTime || task.due_time,
+                  priority: task.priority || 'normal',
+                  blockIndex: task.blockIndex,
+                  totalBlocks: task.totalBlocks,
+                  startTime: task.startTime,
+                  endTime: task.endTime,
+                  isPostponed: task.isPostponed,
+                  isRescheduled: task.isRescheduled
+                }}
+                onEdit={() => onEdit(task)}
+                onUpdate={onUpdate}
+                showTime={showTime}
+                draggable={false} // מטופל ברמת הרשימה
+              />
             </div>
           </motion.div>
         ))}
       </AnimatePresence>
+      
+      {/* הסבר קצר */}
+      {tasks.length > 1 && (
+        <p className="text-xs text-gray-400 text-center mt-2">
+          💡 גררי משימה כדי לשנות את הסדר
+        </p>
+      )}
     </div>
-  );
-}
-
-/**
- * רכיב בחירת יום להעברת משימה
- */
-export function DaySelector({ currentDate, onSelectDay, onClose }) {
-  // יצירת 7 ימים קדימה
-  const days = [];
-  const today = new Date();
-  
-  for (let i = 0; i < 7; i++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() + i);
-    const dateISO = date.toISOString().split('T')[0];
-    
-    const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
-    const dayName = dayNames[date.getDay()];
-    
-    days.push({
-      date: dateISO,
-      dayName,
-      dayNum: date.getDate(),
-      isToday: i === 0,
-      isCurrent: dateISO === currentDate
-    });
-  }
-  
-  return (
-    <div className="absolute top-full left-0 mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 p-2 z-50">
-      <div className="text-xs text-gray-500 mb-2 px-2">העבר ליום:</div>
-      <div className="flex gap-1">
-        {days.map(day => (
-          <button
-            key={day.date}
-            onClick={() => {
-              onSelectDay(day.date);
-              onClose();
-            }}
-            disabled={day.isCurrent}
-            className={`
-              w-10 h-12 rounded-lg flex flex-col items-center justify-center text-xs
-              transition-colors
-              ${day.isCurrent 
-                ? 'bg-gray-200 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
-                : 'hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300'
-              }
-              ${day.isToday && !day.isCurrent ? 'ring-2 ring-blue-400' : ''}
-            `}
-          >
-            <span className="font-medium">{day.dayNum}</span>
-            <span className="text-gray-400">{day.dayName}</span>
-          </button>
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
- * כפתור "העבר למחר"
- */
-export function MoveToTomorrowButton({ taskId, currentDate, onMove }) {
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowISO = tomorrow.toISOString().split('T')[0];
-  
-  return (
-    <button
-      onClick={() => onMove(taskId, currentDate, tomorrowISO)}
-      className="text-xs text-gray-500 hover:text-blue-600 dark:hover:text-blue-400 transition-colors"
-      title="העבר למחר"
-    >
-      📅 מחר
-    </button>
   );
 }
 
