@@ -470,7 +470,42 @@ function DailyView() {
   const completedBlocks = allBlocks.filter(b => b.isCompleted);
   
   // בלוקים פעילים (לא הושלמו)
-  const activeBlocks = allBlocks.filter(b => !b.isCompleted);
+  // ✅ תיקון: שינוי מ-const ל-let כי נשנה את הסדר
+  let activeBlocks = allBlocks.filter(b => !b.isCompleted);
+  
+  // ✅ תיקון חדש: משימה עם טיימר פעיל נשארת ראשונה!
+  // בדיקה אם יש משימה שעובדים עליה כרגע
+  const getRunningTaskId = () => {
+    for (const block of activeBlocks) {
+      const taskId = block.taskId || block.task?.id;
+      if (taskId) {
+        try {
+          const timerData = localStorage.getItem(`timer_v2_${taskId}`);
+          if (timerData) {
+            const parsed = JSON.parse(timerData);
+            if (parsed.isRunning && !parsed.isInterrupted) {
+              return taskId;
+            }
+          }
+        } catch (e) {}
+      }
+    }
+    return null;
+  };
+  
+  const runningTaskId = getRunningTaskId();
+  
+  // אם יש משימה פעילה - שים אותה ראשונה
+  if (runningTaskId) {
+    const runningIndex = activeBlocks.findIndex(b => 
+      (b.taskId || b.task?.id) === runningTaskId
+    );
+    if (runningIndex > 0) {
+      const [runningBlock] = activeBlocks.splice(runningIndex, 1);
+      activeBlocks.unshift(runningBlock);
+      console.log(`⏱️ משימה פעילה נשארת ראשונה: ${runningBlock.title}`);
+    }
+  }
   
   // === חישוב זמנים מחדש מעכשיו ===
   // כל המשימות הפעילות מתוזמנות מחדש מהשעה הנוכחית
