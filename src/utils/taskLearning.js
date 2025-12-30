@@ -270,6 +270,9 @@ export function correctActualTime(taskType, originalActual, correctedActual) {
   console.log(`✏️ תיקון למידה: ${taskType} | מקורי: ${originalActual} | מתוקן: ${correctedActual}`);
 }
 
+// Alias for Settings page
+export const clearLearningData = resetLearningData;
+
 export default {
   loadLearningData,
   recordTaskCompletion,
@@ -277,5 +280,6 @@ export default {
   getLearningStats,
   getTaskTypeHistory,
   correctActualTime,
-  resetLearningData
+  resetLearningData,
+  clearLearningData
 };

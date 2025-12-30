@@ -2,12 +2,29 @@ import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../services/supabase';
-import { TASK_TYPES } from '../config/taskTypes';
+import { 
+  TASK_CATEGORIES,
+  getTaskTypesByCategory,
+  addCustomTaskType,
+  deleteCustomTaskType,
+  loadCustomTaskTypes 
+} from '../config/taskTypes';
 import { useNotifications } from '../hooks/useNotifications';
+import { getLearningStats, clearLearningData } from '../utils/taskLearning';
 import toast from 'react-hot-toast';
 import Button from '../components/UI/Button';
 import Input from '../components/UI/Input';
 import Modal from '../components/UI/Modal';
+
+// אימוג'ים נפוצים לבחירה
+const COMMON_EMOJIS = [
+  '📌', '✨', '🎯', '⭐', '💡', '🔔', '📝', '✅',
+  '🏠', '🧹', '🧺', '👕', '🍳', '🛒', '🚗', '🏃',
+  '📚', '💻', '📞', '✉️', '📅', '⏰', '🎨', '🎵',
+  '👶', '👧', '👦', '👨', '👩', '👴', '👵', '🐕',
+  '💪', '🧘', '🏋️', '🚴', '⚽', '🎮', '📺', '🎬',
+  '💊', '🏥', '💰', '🏦', '🎁', '🎂', '✈️', '🏖️'
+];
 
 function Settings() {
   const { user, logout } = useAuth();
@@ -36,6 +53,7 @@ function Settings() {
     { id: 'notifications', label: 'התראות', icon: '🔔' },
     { id: 'work', label: 'עבודה', icon: '💼' },
     { id: 'taskTypes', label: 'סוגי משימות', icon: '📋' },
+    { id: 'learning', label: 'למידה', icon: '🧠' },
     { id: 'profile', label: 'פרופיל', icon: '👤' },
     { id: 'appearance', label: 'תצוגה', icon: '🎨' },
     { id: 'account', label: 'חשבון', icon: '⚙️' }
@@ -70,7 +88,8 @@ function Settings() {
         <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 shadow-sm border border-gray-100 dark:border-gray-700">
           {activeTab === 'notifications' && <NotificationSettings />}
           {activeTab === 'work' && <WorkSettings user={user} />}
-          {activeTab === 'taskTypes' && <TaskTypesSettings user={user} />}
+          {activeTab === 'taskTypes' && <TaskTypesSettings />}
+          {activeTab === 'learning' && <LearningSettings />}
           {activeTab === 'profile' && <ProfileSettings user={user} loading={loading} setLoading={setLoading} />}
           {activeTab === 'appearance' && <AppearanceSettings darkMode={darkMode} toggleDarkMode={toggleDarkMode} />}
           {activeTab === 'account' && <AccountSettings user={user} logout={logout} loading={loading} setLoading={setLoading} />}
@@ -298,84 +317,357 @@ function WorkSettings({ user }) {
   );
 }
 
-function TaskTypesSettings({ user }) {
-  const [customTypes, setCustomTypes] = useState([]);
+/**
+ * ✅ הגדרות סוגי משימות - משודרג!
+ */
+function TaskTypesSettings() {
+  const [selectedCategory, setSelectedCategory] = useState('home');
   const [showAddForm, setShowAddForm] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(`custom_task_types_${user?.id}`);
-    if (saved) {
-      try { setCustomTypes(JSON.parse(saved)); } catch (e) {}
+  const refresh = () => setRefreshKey(k => k + 1);
+
+  // קבלת סוגים לפי קטגוריה
+  const typesForCategory = getTaskTypesByCategory(selectedCategory);
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">📋 סוגי משימות</h2>
+      </div>
+      
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        הוסיפי סוגי משימות מותאמים אישית כמו "חוג מקרמה" או "קיפול כביסה"
+      </p>
+
+      {/* טאבים לקטגוריות */}
+      <div className="flex gap-2 border-b border-gray-200 dark:border-gray-700 pb-2">
+        {Object.values(TASK_CATEGORIES).map(cat => (
+          <button
+            key={cat.id}
+            onClick={() => setSelectedCategory(cat.id)}
+            className={`
+              flex items-center gap-2 px-4 py-2 rounded-t-lg text-sm font-medium transition-colors
+              ${selectedCategory === cat.id
+                ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border-b-2 border-blue-500'
+                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700'
+              }
+            `}
+          >
+            <span>{cat.icon}</span>
+            <span>{cat.name}</span>
+          </button>
+        ))}
+      </div>
+
+      {/* רשימת סוגי משימות */}
+      <div className="space-y-2" key={refreshKey}>
+        {typesForCategory.map(type => (
+          <div
+            key={type.id}
+            className={`
+              flex items-center justify-between p-3 rounded-lg border
+              ${type.bgLight || 'bg-gray-50 dark:bg-gray-700'} 
+              ${type.border || 'border-gray-200 dark:border-gray-600'}
+            `}
+          >
+            <div className="flex items-center gap-3">
+              <span className="text-2xl">{type.icon}</span>
+              <div>
+                <p className={`font-medium ${type.text || 'text-gray-900 dark:text-white'}`}>
+                  {type.name}
+                </p>
+                <p className="text-xs text-gray-500">
+                  {type.inputType === 'recording' && `הקלטה × ${type.timeRatio}`}
+                  {type.inputType === 'pages' && `${type.timePerPage} דק' לעמוד`}
+                  {type.inputType === 'direct' && `${type.defaultDuration} דק' ברירת מחדל`}
+                </p>
+              </div>
+            </div>
+            
+            {type.isBuiltIn ? (
+              <span className="text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-2 py-1 rounded">
+                מובנה
+              </span>
+            ) : (
+              <button
+                onClick={() => {
+                  if (confirm(`למחוק את "${type.name}"?`)) {
+                    deleteCustomTaskType(type.id);
+                    refresh();
+                    toast.success('סוג המשימה נמחק');
+                  }
+                }}
+                className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-gray-500 hover:text-red-600 transition-colors"
+                title="מחק"
+              >
+                🗑️
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* כפתור הוספה */}
+      {!showAddForm && (
+        <button
+          onClick={() => setShowAddForm(true)}
+          className="w-full py-3 border-2 border-dashed border-gray-300 dark:border-gray-600 
+                     rounded-lg text-gray-500 dark:text-gray-400 hover:border-blue-400 
+                     hover:text-blue-500 transition-colors"
+        >
+          + הוסף סוג משימה חדש
+        </button>
+      )}
+
+      {/* טופס הוספה */}
+      {showAddForm && (
+        <AddTaskTypeForm
+          category={selectedCategory}
+          onSave={(newType) => {
+            addCustomTaskType(newType);
+            refresh();
+            setShowAddForm(false);
+            toast.success(`נוסף סוג משימה: ${newType.name}`);
+          }}
+          onCancel={() => setShowAddForm(false)}
+        />
+      )}
+
+      {/* הסבר */}
+      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+        💡 <strong>טיפ:</strong> סוגי משימות מותאמים נשמרים בדפדפן. הם יופיעו בטופס הוספת משימה חדשה.
+      </div>
+    </div>
+  );
+}
+
+/**
+ * טופס הוספת סוג משימה
+ */
+function AddTaskTypeForm({ category, onSave, onCancel }) {
+  const [name, setName] = useState('');
+  const [icon, setIcon] = useState('📌');
+  const [defaultDuration, setDefaultDuration] = useState(30);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    
+    if (!name.trim()) {
+      toast.error('נא להזין שם');
+      return;
     }
-  }, [user?.id]);
+    
+    onSave({
+      name: name.trim(),
+      icon,
+      category,
+      defaultDuration
+    });
+  };
+  
+  return (
+    <form onSubmit={handleSubmit} className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg space-y-4 border border-gray-200 dark:border-gray-700">
+      <h3 className="font-medium text-gray-900 dark:text-white">
+        סוג משימה חדש - {TASK_CATEGORIES[category]?.name}
+      </h3>
+      
+      {/* שם ואייקון */}
+      <div className="flex gap-3">
+        {/* בחירת אייקון */}
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+            className="w-14 h-14 text-3xl bg-white dark:bg-gray-800 border border-gray-300 
+                       dark:border-gray-600 rounded-lg hover:border-blue-400 transition-colors"
+          >
+            {icon}
+          </button>
+          
+          {/* בוחר אימוג'ים */}
+          {showEmojiPicker && (
+            <div className="absolute top-full right-0 mt-2 p-2 bg-white dark:bg-gray-800 
+                            border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10
+                            grid grid-cols-8 gap-1 w-72">
+              {COMMON_EMOJIS.map(emoji => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => {
+                    setIcon(emoji);
+                    setShowEmojiPicker(false);
+                  }}
+                  className="w-8 h-8 text-xl hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+        
+        {/* שם */}
+        <input
+          type="text"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="שם סוג המשימה (למשל: חוג מקרמה)"
+          className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
+                     bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+          autoFocus
+        />
+      </div>
+      
+      {/* זמן ברירת מחדל */}
+      <div>
+        <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+          זמן ברירת מחדל (דקות)
+        </label>
+        <input
+          type="number"
+          value={defaultDuration}
+          onChange={(e) => setDefaultDuration(parseInt(e.target.value) || 30)}
+          min="5"
+          max="480"
+          className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
+                     bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+        />
+        <span className="text-sm text-gray-500 mr-2">דקות</span>
+      </div>
+      
+      {/* כפתורים */}
+      <div className="flex gap-2 pt-2">
+        <Button type="submit">
+          הוסף ✓
+        </Button>
+        <Button type="button" variant="secondary" onClick={onCancel}>
+          ביטול
+        </Button>
+      </div>
+    </form>
+  );
+}
 
-  const saveCustomTypes = (types) => {
-    setCustomTypes(types);
-    localStorage.setItem(`custom_task_types_${user?.id}`, JSON.stringify(types));
+/**
+ * ✅ חדש: הגדרות למידה
+ */
+function LearningSettings() {
+  const [stats, setStats] = useState(null);
+  
+  useEffect(() => {
+    setStats(getLearningStats());
+  }, []);
+  
+  const handleClearData = () => {
+    if (confirm('למחוק את כל נתוני הלמידה? הפעולה בלתי הפיכה.')) {
+      clearLearningData();
+      setStats(getLearningStats());
+      toast.success('נתוני הלמידה נמחקו');
+    }
+  };
+  
+  const formatRatio = (ratio) => {
+    if (ratio > 1) return `+${Math.round((ratio - 1) * 100)}%`;
+    if (ratio < 1) return `-${Math.round((1 - ratio) * 100)}%`;
+    return 'מדויק';
+  };
+  
+  const getTrendEmoji = (trend) => {
+    if (trend === 'improving') return '📈';
+    if (trend === 'declining') return '📉';
+    return '➡️';
+  };
+  
+  const getTrendText = (trend) => {
+    if (trend === 'improving') return 'משתפרת';
+    if (trend === 'declining') return 'יורדת';
+    return 'יציבה';
   };
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white">סוגי משימות</h2>
-        <Button size="sm" onClick={() => setShowAddForm(true)}>+ הוסף סוג</Button>
+        <h2 className="text-lg font-bold text-gray-900 dark:text-white">🧠 מערכת למידה</h2>
       </div>
+      
+      <p className="text-sm text-gray-500 dark:text-gray-400">
+        המערכת לומדת מכל משימה שמסיימים ומציעה הערכות זמן מדויקות יותר
+      </p>
 
-      <div className="grid gap-3">
-        {Object.entries(TASK_TYPES).map(([key, type]) => (
-          <div key={key} className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{type.icon}</span>
-              <div>
-                <p className="font-medium text-gray-900 dark:text-white">{type.name}</p>
-                <p className="text-sm text-gray-500">{type.avgDuration} דקות</p>
+      {!stats || Object.keys(stats).length === 0 ? (
+        <div className="p-6 bg-gray-50 dark:bg-gray-700 rounded-lg text-center">
+          <span className="text-4xl mb-3 block">📊</span>
+          <p className="text-gray-600 dark:text-gray-300">
+            אין עדיין נתוני למידה
+          </p>
+          <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
+            סיימי משימות כדי שהמערכת תתחיל ללמוד את הדפוסים שלך
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {Object.entries(stats).map(([taskType, data]) => (
+            <div
+              key={taskType}
+              className="p-4 bg-gray-50 dark:bg-gray-700 rounded-lg"
+            >
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-gray-900 dark:text-white">
+                    {taskType}
+                  </p>
+                  <p className="text-sm text-gray-500 dark:text-gray-400">
+                    {data.count} משימות הושלמו
+                  </p>
+                </div>
+                <div className="text-left">
+                  <p className={`font-bold ${
+                    data.ratio > 1.1 ? 'text-orange-600' : 
+                    data.ratio < 0.9 ? 'text-green-600' : 
+                    'text-blue-600'
+                  }`}>
+                    {formatRatio(data.ratio)}
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    {getTrendEmoji(data.trend)} {getTrendText(data.trend)}
+                  </p>
+                </div>
+              </div>
+              
+              {/* פירוט */}
+              <div className="mt-2 pt-2 border-t border-gray-200 dark:border-gray-600 text-xs text-gray-500 dark:text-gray-400">
+                ממוצע הערכה: {Math.round(data.avgEstimated)} דק' → 
+                בפועל: {Math.round(data.avgActual)} דק'
               </div>
             </div>
-            <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-1 rounded">מובנה</span>
-          </div>
-        ))}
-        {customTypes.map(type => (
-          <div key={type.id} className="flex items-center justify-between p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">{type.icon}</span>
-              <p className="font-medium text-gray-900 dark:text-white">{type.name}</p>
-            </div>
-            <button onClick={() => saveCustomTypes(customTypes.filter(t => t.id !== type.id))} className="text-red-500">🗑️</button>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
-      <Modal isOpen={showAddForm} onClose={() => setShowAddForm(false)} title="הוסף סוג משימה">
-        <TaskTypeForm onSave={(newType) => {
-          saveCustomTypes([...customTypes, { ...newType, id: Date.now().toString() }]);
-          setShowAddForm(false);
-          toast.success('סוג המשימה נוסף');
-        }} onClose={() => setShowAddForm(false)} />
-      </Modal>
-    </div>
-  );
-}
-
-function TaskTypeForm({ onSave, onClose }) {
-  const [form, setForm] = useState({ name: '', icon: '📌', avgDuration: 30 });
-  const icons = ['📌', '📝', '💻', '📞', '📧', '🎯', '📊', '🔧', '📚', '🎨'];
-
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); if (form.name) onSave(form); }} className="space-y-4">
-      <Input label="שם" value={form.name} onChange={(e) => setForm(f => ({ ...f, name: e.target.value }))} />
-      <div className="flex flex-wrap gap-2">
-        {icons.map(icon => (
-          <button key={icon} type="button" onClick={() => setForm(f => ({ ...f, icon }))}
-            className={`w-10 h-10 rounded-lg text-xl ${form.icon === icon ? 'bg-blue-100 border-2 border-blue-500' : 'bg-gray-100'}`}>
-            {icon}
+      {/* כפתור מחיקה */}
+      {stats && Object.keys(stats).length > 0 && (
+        <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+          <button
+            onClick={handleClearData}
+            className="text-sm text-red-500 hover:text-red-700 dark:text-red-400"
+          >
+            🗑️ מחק את כל נתוני הלמידה
           </button>
-        ))}
+        </div>
+      )}
+
+      {/* הסבר */}
+      <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+        <p><strong>💡 איך זה עובד?</strong></p>
+        <ul className="mt-2 space-y-1 text-xs">
+          <li>• כל פעם שמסיימים משימה, המערכת שומרת את הזמן האמיתי</li>
+          <li>• אחרי 3+ משימות מאותו סוג, תופיע הצעה לעדכון הערכה</li>
+          <li>• ככל שתשתמשי יותר, ההצעות יהיו מדויקות יותר</li>
+        </ul>
       </div>
-      <div className="flex gap-3">
-        <Button type="submit">שמור</Button>
-        <Button type="button" variant="secondary" onClick={onClose}>ביטול</Button>
-      </div>
-    </form>
+    </div>
   );
 }
 
