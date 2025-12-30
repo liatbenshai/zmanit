@@ -32,6 +32,21 @@ function isTimerRunning(taskId) {
 }
 
 /**
+ * ✅ פונקציית עזר חדשה: בדיקה אם יש טיימר רץ על משימה כלשהי
+ * מחזירה את ה-taskId של המשימה הפעילה, או null
+ */
+function getActiveTaskId(tasks) {
+  if (!tasks || tasks.length === 0) return null;
+  
+  for (const task of tasks) {
+    if (isTimerRunning(task.id)) {
+      return task.id;
+    }
+  }
+  return null;
+}
+
+/**
  * ✅ פונקציית עזר: חישוב כמה זמן עבד על המשימה (בדקות)
  */
 function getElapsedMinutes(taskId, baseTimeSpent = 0) {
@@ -59,6 +74,7 @@ function getElapsedMinutes(taskId, baseTimeSpent = 0) {
  * בודק כל 30 שניות אם יש משימות שצריך להתריע עליהן
  * 
  * ✅ תיקון: שימוש ב-toLocalISODate במקום toISOString
+ * ✅ תיקון חדש: לא שולח התראות "הגיע הזמן להתחיל" כשעובדים על משימה אחרת
  */
 function NotificationChecker() {
   const { tasks } = useTasks();
@@ -107,6 +123,12 @@ function NotificationChecker() {
     const notifyOnTime = settings?.notifyOnTime !== false;
 
     console.log(`🔔 בודק ${tasks.length} משימות (${now.toLocaleTimeString('he-IL')}) | תאריך: ${today}`);
+
+    // ✅ תיקון חדש: בדיקה אם יש משימה פעילה עכשיו
+    const activeTaskId = getActiveTaskId(tasks);
+    if (activeTaskId) {
+      console.log(`⏱️ יש משימה פעילה: ${activeTaskId} - לא נשלח התראות "הגיע הזמן" למשימות אחרות`);
+    }
 
     let notificationsSent = 0;
 
@@ -174,7 +196,14 @@ function NotificationChecker() {
       const diff = taskMinutes - currentMinutes; // חיובי = עתידי, שלילי = עבר
 
       // === התראה לפני המשימה ===
+      // ✅ תיקון: לא מתריעים אם עובדים על משימה אחרת
       if (diff > 0 && diff <= reminderMinutes) {
+        // אם יש משימה פעילה אחרת - לא מתריעים
+        if (activeTaskId && activeTaskId !== task.id) {
+          console.log(`⏭️ דילוג על התראה מקדימה ל"${task.title}" - עובדים על משימה אחרת`);
+          return;
+        }
+        
         if (canNotify(task.id, 'before', reminderMinutes)) {
           console.log(`⏰ התראה לפני: ${task.title} (בעוד ${diff} דק')`);
           sendNotification(`⏰ ${task.title}`, {
@@ -187,7 +216,14 @@ function NotificationChecker() {
       }
 
       // === התראה בדיוק בזמן ===
+      // ✅ תיקון: לא מתריעים אם עובדים על משימה אחרת
       if (notifyOnTime && diff >= -1 && diff <= 0) {
+        // אם יש משימה פעילה אחרת - לא מתריעים
+        if (activeTaskId && activeTaskId !== task.id) {
+          console.log(`⏭️ דילוג על התראת "הגיע הזמן" ל"${task.title}" - עובדים על משימה אחרת`);
+          return;
+        }
+        
         if (canNotify(task.id, 'onTime', 5)) {
           console.log(`🔔 התראה בזמן: ${task.title}`);
           sendNotification(`🔔 ${task.title}`, {
@@ -201,17 +237,24 @@ function NotificationChecker() {
 
       // === התראה על איחור ===
       // ✅ תיקון: לא מתריעים על משימות שכבר עובדים עליהן
+      // ✅ תיקון חדש: לא מתריעים אם עובדים על משימה אחרת
       if (diff < -1) {
-        // אם כבר עבדו על המשימה או שהטיימר רץ - לא מתריעים
+        // אם יש משימה פעילה (כולל אם זו המשימה הזו או אחרת) - לא מתריעים על איחור
+        if (activeTaskId) {
+          console.log(`⏭️ דילוג על התראת איחור ל"${task.title}" - יש משימה פעילה`);
+          return;
+        }
+        
+        // אם כבר עבדו על המשימה - לא מתריעים
         if (task.time_spent && task.time_spent > 0) {
           console.log(`⏭️ דילוג על "${task.title}" - כבר עבדו עליה (${task.time_spent} דקות)`);
-          return; // דלג - המשימה בעבודה
+          return;
         }
         
         // בדיקה אם הטיימר רץ (ב-localStorage)
         if (isTimerRunning(task.id)) {
           console.log(`⏭️ דילוג על "${task.title}" - טיימר פעיל`);
-          return; // דלג - המשימה בעבודה עכשיו
+          return;
         }
         
         if (canNotify(task.id, 'overdue', repeatEveryMinutes)) {
