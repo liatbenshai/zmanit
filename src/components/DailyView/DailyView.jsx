@@ -276,9 +276,25 @@ function DailyView() {
   const timeStats = useMemo(() => {
     const blocks = selectedDayData.blocks || [];
     
+    // ✅ בדיקה אם יש טיימר פעיל
+    const checkTimerRunning = (block) => {
+      const taskId = block.taskId || block.task?.id || block.id;
+      if (!taskId) return false;
+      try {
+        const timerData = localStorage.getItem(`timer_v2_${taskId}`);
+        if (timerData) {
+          const parsed = JSON.parse(timerData);
+          return parsed.isRunning && !parsed.isInterrupted;
+        }
+      } catch (e) {}
+      return false;
+    };
+    
     const blockHasPassed = (block) => {
       if (!isViewingToday) return false;
       if (!block.endTime) return false;
+      // ✅ אם טיימר פעיל - לא עבר!
+      if (checkTimerRunning(block)) return false;
       const [hour, min] = block.endTime.split(':').map(Number);
       return (hour * 60 + (min || 0)) < currentTime.minutes;
     };
@@ -291,6 +307,7 @@ function DailyView() {
       .filter(b => !b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
+    // ✅ משימות באיחור - לא כולל משימות עם טיימר פעיל!
     const overdueMinutes = blocks
       .filter(b => !b.isCompleted && blockHasPassed(b))
       .reduce((sum, b) => sum + (b.duration || 0), 0);
@@ -473,10 +490,32 @@ function DailyView() {
   }
 
   // === סינון וחישוב מחדש של זמנים ===
+  
+  // ✅ בדיקה אם יש טיימר פעיל על משימה
+  const isTimerRunning = (taskId) => {
+    if (!taskId) return false;
+    try {
+      const timerData = localStorage.getItem(`timer_v2_${taskId}`);
+      if (timerData) {
+        const parsed = JSON.parse(timerData);
+        return parsed.isRunning && !parsed.isInterrupted;
+      }
+    } catch (e) {}
+    return false;
+  };
+  
+  // ✅ תיקון: משימה עם טיימר פעיל לא נחשבת "באיחור"!
   const isBlockPast = (block) => {
     if (!isViewingToday) return false;
+    
+    // ✅ אם יש טיימר פעיל - זה לא איחור, זו עבודה!
+    const taskId = block.taskId || block.task?.id || block.id;
+    if (isTimerRunning(taskId)) return false;
+    
+    // רק אם יש למשימה המקורית due_time ספציפי
     const task = block.task;
     if (!task?.due_time) return false;
+    
     const [hour, min] = task.due_time.split(':').map(Number);
     const taskDueMinutes = hour * 60 + (min || 0);
     return taskDueMinutes < currentTime.minutes;
@@ -541,7 +580,8 @@ function DailyView() {
   const dateISO = getDateISO(selectedDate);
   activeBlocks = sortTasksByOrder(activeBlocks.map(b => ({
     ...b,
-    id: b.taskId || b.id
+    id: b.taskId || b.id,
+    isRunning: isTimerRunning(b.taskId || b.task?.id || b.id) // ✅ סימון משימה פעילה
   })), dateISO);
   
   // חישוב זמנים מחדש
@@ -625,7 +665,8 @@ function DailyView() {
           originalStartTime: block.originalStartTime,
           originalEndTime: block.originalEndTime,
           isPostponed: block.isPostponed,
-          isRescheduled: block.isRescheduled
+          isRescheduled: block.isRescheduled,
+          isRunning: block.isRunning // ✅ טיימר פעיל
         }} 
         onEdit={() => handleEditTask(block)}
         onUpdate={loadTasks}
