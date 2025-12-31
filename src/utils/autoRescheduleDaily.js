@@ -75,25 +75,38 @@ function getRemainingTaskTime(task) {
 }
 
 /**
+ * בדיקה אם משימה היא "פרויקט" גדול שמחולק לבלוקים
+ * משימות מעל 3 שעות נחשבות פרויקטים - הן מטופלות ע"י smartScheduler
+ */
+function isProjectTask(task) {
+  const duration = task.estimated_duration || 0;
+  return duration > 180; // יותר מ-3 שעות = פרויקט
+}
+
+/**
  * ✅ פונקציה ראשית: חישוב דחיות אוטומטיות
  * 
  * מחזירה רשימת משימות לעדכון:
  * - משימות שצריך להעביר למחר (אין מקום להיום)
  * - משימות שאפשר למשוך ממחר להיום (יש מקום)
+ * 
+ * ⚠️ לא מטפל בפרויקטים גדולים (מעל 3 שעות) - הם מחולקים לבלוקים ע"י smartScheduler
  */
 export function calculateAutoReschedule(tasks, editTask) {
   const now = new Date();
   const today = toLocalISODate(now);
   const tomorrow = toLocalISODate(getNextWorkday(now));
   
-  // סינון משימות
+  // סינון משימות - רק משימות "רגילות", לא פרויקטים גדולים
   const todayTasks = tasks.filter(t => 
     !t.is_completed && 
+    !isProjectTask(t) && // ✅ לא פרויקטים
     (t.due_date === today || t.start_date === today)
   );
   
   const tomorrowTasks = tasks.filter(t => 
     !t.is_completed && 
+    !isProjectTask(t) && // ✅ לא פרויקטים
     (t.due_date === tomorrow || t.start_date === tomorrow)
   );
   

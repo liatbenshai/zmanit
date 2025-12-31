@@ -213,10 +213,23 @@ function NotificationChecker() {
       // רק משימות של היום
       if (task.due_date !== today) return;
 
+      // ✅ תיקון: דלג על "פרויקטים" גדולים - הם מחולקים לבלוקים
+      // אם משימה היא יותר מ-3 שעות, היא לא באמת מתוכננת לשעה הזו
+      const taskDuration = task.estimated_duration || 30;
+      if (taskDuration > 180) {
+        console.log(`⏭️ דילוג על "${task.title}" - פרויקט גדול (${taskDuration} דק')`);
+        return;
+      }
+
       // חישוב הפרש זמנים
       const [hour, min] = task.due_time.split(':').map(Number);
       const taskMinutes = hour * 60 + (min || 0);
       const diff = taskMinutes - currentMinutes; // חיובי = עתידי, שלילי = עבר
+
+      // ✅ תיקון: אם המשימה מתוכננת ליותר משעה מעכשיו - לא מתריעים
+      if (diff > 60) {
+        return; // המשימה רחוקה, לא צריך התראות עכשיו
+      }
 
       // === התראה לפני המשימה ===
       // ✅ תיקון: לא מתריעים אם עובדים על משימה אחרת
@@ -261,7 +274,8 @@ function NotificationChecker() {
       // === התראה על איחור ===
       // ✅ תיקון: לא מתריעים על משימות שכבר עובדים עליהן
       // ✅ תיקון חדש: לא מתריעים אם עובדים על משימה אחרת
-      if (diff < -1) {
+      // ✅ תיקון: לא מתריעים על משימות שעברו יותר מ-2 שעות - כנראה נדחו
+      if (diff < -1 && diff > -120) { // בין 1 דקה ל-2 שעות באיחור
         // אם יש משימה פעילה (כולל אם זו המשימה הזו או אחרת) - לא מתריעים על איחור
         if (activeTaskId) {
           console.log(`⏭️ דילוג על התראת איחור ל"${task.title}" - יש משימה פעילה`);
