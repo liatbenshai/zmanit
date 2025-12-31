@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useMemo } from 'react';
 import { useTasks } from '../../hooks/useTasks';
 import { useNotifications } from '../../hooks/useNotifications';
 
@@ -70,12 +70,79 @@ function getElapsedMinutes(taskId, baseTimeSpent = 0) {
 }
 
 /**
+ * ✅ חדש: חישוב לו"ז דינמי - כמו DailyView
+ * מחזיר מפה של taskId -> { startTime, endTime } בדקות
+ */
+function calculateDynamicSchedule(tasks, currentMinutes) {
+  const schedule = new Map();
+  
+  // סנן רק משימות של היום שלא הושלמו
+  const today = toLocalISODate(new Date());
+  const todayTasks = tasks.filter(t => 
+    !t.is_completed && 
+    (t.due_date === today || t.start_date === today)
+  );
+  
+  // מיין לפי עדיפות ואז לפי שעה
+  const sortedTasks = [...todayTasks].sort((a, b) => {
+    // משימה עם טיימר רץ קודם
+    if (isTimerRunning(a.id) && !isTimerRunning(b.id)) return -1;
+    if (isTimerRunning(b.id) && !isTimerRunning(a.id)) return 1;
+    
+    // דחופים קודם
+    const priorityOrder = { urgent: 0, high: 1, normal: 2 };
+    const aPriority = priorityOrder[a.priority] ?? 2;
+    const bPriority = priorityOrder[b.priority] ?? 2;
+    if (aPriority !== bPriority) return aPriority - bPriority;
+    
+    // לפי שעה מקורית
+    if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
+    if (a.due_time) return -1;
+    if (b.due_time) return 1;
+    
+    return 0;
+  });
+  
+  // חישוב זמני התחלה דינמיים
+  let nextStartMinutes = currentMinutes;
+  
+  sortedTasks.forEach(task => {
+    const duration = task.estimated_duration || 30;
+    
+    // דלג על פרויקטים גדולים (מעל 3 שעות)
+    if (duration > 180) return;
+    
+    const startMinutes = nextStartMinutes;
+    const endMinutes = startMinutes + duration;
+    
+    schedule.set(task.id, {
+      startMinutes,
+      endMinutes,
+      duration,
+      task
+    });
+    
+    nextStartMinutes = endMinutes + 5; // 5 דקות הפסקה בין משימות
+  });
+  
+  return schedule;
+}
+
+/**
+ * ✅ המרה דקות לשעה (לתצוגה)
+ */
+function minutesToTimeString(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+}
+
+/**
  * רכיב שבודק התראות - חייב להיות ב-App.jsx!
  * בודק כל 30 שניות אם יש משימות שצריך להתריע עליהן
  * 
- * ✅ תיקון: שימוש ב-toLocalISODate במקום toISOString
- * ✅ תיקון חדש: לא שולח התראות "הגיע הזמן להתחיל" כשעובדים על משימה אחרת
- * ✅ תיקון: בדיקה מחודשת של is_completed
+ * ✅ תיקון: שימוש בלו"ז דינמי במקום due_time המקורי
+ * ✅ תיקון: התראות על סיום משימה (לא רק התחלה)
  */
 function NotificationChecker() {
   const { tasks, loadTasks } = useTasks();
@@ -206,33 +273,23 @@ function NotificationChecker() {
         }
       }
       
-      // === התראות על זמן התחלה - רק למשימות עם תאריך ושעה ===
-      // דלג על משימות בלי תאריך או שעה
-      if (!task.due_date || !task.due_time) return;
+      // === התראות על זמן התחלה - לפי לו"ז דינמי! ===
+      // ✅ חדש: חישוב לו"ז דינמי כמו ב-DailyView
+      const dynamicSchedule = calculateDynamicSchedule(tasks, currentMinutes);
+      const taskSchedule = dynamicSchedule.get(task.id);
       
-      // רק משימות של היום
-      if (task.due_date !== today) return;
-
-      // ✅ תיקון: דלג על "פרויקטים" גדולים - הם מחולקים לבלוקים
-      // אם משימה היא יותר מ-3 שעות, היא לא באמת מתוכננת לשעה הזו
-      const taskDuration = task.estimated_duration || 30;
-      if (taskDuration > 180) {
-        console.log(`⏭️ דילוג על "${task.title}" - פרויקט גדול (${taskDuration} דק')`);
+      // אם המשימה לא בלו"ז הדינמי (פרויקט גדול / לא להיום) - דלג
+      if (!taskSchedule) {
         return;
       }
-
-      // חישוב הפרש זמנים
-      const [hour, min] = task.due_time.split(':').map(Number);
-      const taskMinutes = hour * 60 + (min || 0);
-      const diff = taskMinutes - currentMinutes; // חיובי = עתידי, שלילי = עבר
-
-      // ✅ תיקון: אם המשימה מתוכננת ליותר משעה מעכשיו - לא מתריעים
-      if (diff > 60) {
-        return; // המשימה רחוקה, לא צריך התראות עכשיו
-      }
+      
+      // חישוב הפרש זמנים לפי הלו"ז הדינמי
+      const diff = taskSchedule.startMinutes - currentMinutes; // חיובי = עתידי
+      const endDiff = taskSchedule.endMinutes - currentMinutes; // מתי המשימה אמורה להסתיים
+      
+      console.log(`📋 ${task.title}: מתוכנן ${minutesToTimeString(taskSchedule.startMinutes)}-${minutesToTimeString(taskSchedule.endMinutes)} | diff=${diff} דק'`);
 
       // === התראה לפני המשימה ===
-      // ✅ תיקון: לא מתריעים אם עובדים על משימה אחרת
       if (diff > 0 && diff <= reminderMinutes) {
         // אם יש משימה פעילה אחרת - לא מתריעים
         if (activeTaskId && activeTaskId !== task.id) {
@@ -243,7 +300,7 @@ function NotificationChecker() {
         if (canNotify(task.id, 'before', reminderMinutes)) {
           console.log(`⏰ התראה לפני: ${task.title} (בעוד ${diff} דק')`);
           sendNotification(`⏰ ${task.title}`, {
-            body: `מתחיל בעוד ${diff} דקות!`,
+            body: `מתחיל בעוד ${diff} דקות (${minutesToTimeString(taskSchedule.startMinutes)})`,
             tag: `task-before-${task.id}`
           });
           markNotified(task.id, 'before');
@@ -252,8 +309,7 @@ function NotificationChecker() {
       }
 
       // === התראה בדיוק בזמן ===
-      // ✅ תיקון: לא מתריעים אם עובדים על משימה אחרת
-      if (notifyOnTime && diff >= -1 && diff <= 0) {
+      if (notifyOnTime && diff >= -1 && diff <= 1) {
         // אם יש משימה פעילה אחרת - לא מתריעים
         if (activeTaskId && activeTaskId !== task.id) {
           console.log(`⏭️ דילוג על התראת "הגיע הזמן" ל"${task.title}" - עובדים על משימה אחרת`);
@@ -263,7 +319,7 @@ function NotificationChecker() {
         if (canNotify(task.id, 'onTime', 5)) {
           console.log(`🔔 התראה בזמן: ${task.title}`);
           sendNotification(`🔔 ${task.title}`, {
-            body: 'הגיע הזמן להתחיל!',
+            body: `הגיע הזמן להתחיל! (${taskSchedule.duration} דק')`,
             tag: `task-ontime-${task.id}`
           });
           markNotified(task.id, 'onTime');
@@ -271,12 +327,24 @@ function NotificationChecker() {
         }
       }
 
+      // === התראה על סיום משימה (לא רק התחלה!) ===
+      // אם המשימה אמורה להסתיים בעוד 5 דקות (לפי הלו"ז)
+      if (!isTimerRunning(task.id) && endDiff > 0 && endDiff <= 5) {
+        if (canNotify(task.id, 'shouldEnd', 5)) {
+          console.log(`⏳ המשימה אמורה להסתיים בקרוב: ${task.title} (בעוד ${endDiff} דק')`);
+          sendNotification(`⏳ ${task.title}`, {
+            body: `לפי הלו"ז, המשימה אמורה להסתיים ב-${minutesToTimeString(taskSchedule.endMinutes)}`,
+            tag: `task-shouldend-${task.id}`
+          });
+          markNotified(task.id, 'shouldEnd');
+          notificationsSent++;
+        }
+      }
+
       // === התראה על איחור ===
-      // ✅ תיקון: לא מתריעים על משימות שכבר עובדים עליהן
-      // ✅ תיקון חדש: לא מתריעים אם עובדים על משימה אחרת
-      // ✅ תיקון: לא מתריעים על משימות שעברו יותר מ-2 שעות - כנראה נדחו
-      if (diff < -1 && diff > -120) { // בין 1 דקה ל-2 שעות באיחור
-        // אם יש משימה פעילה (כולל אם זו המשימה הזו או אחרת) - לא מתריעים על איחור
+      // אם הזמן המתוכנן עבר ולא התחילו לעבוד
+      if (diff < -1 && diff > -30) { // בין 1 דקה ל-30 דקות באיחור
+        // אם יש משימה פעילה - לא מתריעים על איחור
         if (activeTaskId) {
           console.log(`⏭️ דילוג על התראת איחור ל"${task.title}" - יש משימה פעילה`);
           return;
@@ -294,23 +362,14 @@ function NotificationChecker() {
           return;
         }
         
-        if (canNotify(task.id, 'overdue', repeatEveryMinutes)) {
-          const overdueMinutes = Math.abs(diff);
-          let overdueText;
-          if (overdueMinutes >= 60) {
-            const hours = Math.floor(overdueMinutes / 60);
-            const mins = overdueMinutes % 60;
-            overdueText = mins > 0 ? `${hours} שעות ו-${mins} דקות` : `${hours} שעות`;
-          } else {
-            overdueText = `${overdueMinutes} דקות`;
-          }
-          
-          console.log(`🔴 נדחה: ${task.title} (${overdueText})`);
-          sendNotification(`🔄 נדחה: ${task.title}`, {
-            body: `היה אמור להתחיל לפני ${overdueText}`,
-            tag: `task-overdue-${task.id}`
+        if (canNotify(task.id, 'late', repeatEveryMinutes)) {
+          const lateMinutes = Math.abs(Math.round(diff));
+          console.log(`⏰ התראה על איחור: ${task.title} (${lateMinutes} דק' באיחור)`);
+          sendNotification(`⏰ ${task.title}`, {
+            body: `היית אמור להתחיל לפני ${lateMinutes} דקות`,
+            tag: `task-late-${task.id}`
           });
-          markNotified(task.id, 'overdue');
+          markNotified(task.id, 'late');
           notificationsSent++;
         }
       }
