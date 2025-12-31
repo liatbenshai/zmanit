@@ -93,6 +93,13 @@ function getElapsedMinutes(taskId, baseTimeSpent = 0) {
 }
 
 /**
+ * ✅ חדש: בדיקה אם משימה היא "הורה" שיש לה אינטרוולים
+ */
+function isParentWithIntervals(task, allTasks) {
+  return allTasks.some(t => t.parent_task_id === task.id);
+}
+
+/**
  * ✅ חדש: חישוב לו"ז דינמי - כמו DailyView
  * מחזיר מפה של taskId -> { startTime, endTime } בדקות
  */
@@ -100,9 +107,11 @@ function calculateDynamicSchedule(tasks, currentMinutes) {
   const schedule = new Map();
   
   // סנן רק משימות של היום שלא הושלמו
+  // ✅ לא סופרים הורים שיש להם אינטרוולים - כדי לא לספור כפול!
   const today = toLocalISODate(new Date());
   const todayTasks = tasks.filter(t => 
     !t.is_completed && 
+    !isParentWithIntervals(t, tasks) && // ✅ חדש!
     (t.due_date === today || t.start_date === today)
   );
   

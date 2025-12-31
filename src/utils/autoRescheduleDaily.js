@@ -84,6 +84,14 @@ function isProjectTask(task) {
 }
 
 /**
+ * ✅ חדש: בדיקה אם משימה היא "הורה" שיש לה אינטרוולים
+ * אם יש ילדים עם parent_task_id שמצביע על המשימה - היא הורה
+ */
+function isParentWithIntervals(task, allTasks) {
+  return allTasks.some(t => t.parent_task_id === task.id);
+}
+
+/**
  * ✅ פונקציה ראשית: חישוב דחיות אוטומטיות
  * 
  * מחזירה רשימת משימות לעדכון:
@@ -91,22 +99,25 @@ function isProjectTask(task) {
  * - משימות שאפשר למשוך ממחר להיום (יש מקום)
  * 
  * ⚠️ לא מטפל בפרויקטים גדולים (מעל 3 שעות) - הם מחולקים לבלוקים ע"י smartScheduler
+ * ⚠️ לא סופר משימות הורה שיש להן אינטרוולים - כדי לא לספור כפול!
  */
 export function calculateAutoReschedule(tasks, editTask) {
   const now = new Date();
   const today = toLocalISODate(now);
   const tomorrow = toLocalISODate(getNextWorkday(now));
   
-  // סינון משימות - רק משימות "רגילות", לא פרויקטים גדולים
+  // סינון משימות - רק משימות "רגילות", לא פרויקטים גדולים, לא הורים עם אינטרוולים
   const todayTasks = tasks.filter(t => 
     !t.is_completed && 
     !isProjectTask(t) && // ✅ לא פרויקטים
+    !isParentWithIntervals(t, tasks) && // ✅ חדש: לא הורים שיש להם ילדים
     (t.due_date === today || t.start_date === today)
   );
   
   const tomorrowTasks = tasks.filter(t => 
     !t.is_completed && 
     !isProjectTask(t) && // ✅ לא פרויקטים
+    !isParentWithIntervals(t, tasks) && // ✅ חדש: לא הורים שיש להם ילדים
     (t.due_date === tomorrow || t.start_date === tomorrow)
   );
   
