@@ -9,6 +9,7 @@ import RescheduleModal from './RescheduleModal';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import { sortTasksByOrder, saveTaskOrder } from '../../utils/taskOrder';
+import { calculateAutoReschedule, executeAutoReschedule } from '../../utils/autoRescheduleDaily';
 import toast from 'react-hot-toast';
 
 // ===============================
@@ -211,6 +212,10 @@ function DailyView() {
     };
   });
   
+  // ✅ דחייה אוטומטית
+  const [rescheduleInfo, setRescheduleInfo] = useState(null);
+  const [isAutoRescheduling, setIsAutoRescheduling] = useState(false);
+  
   // עדכון השעה כל דקה
   useEffect(() => {
     const interval = setInterval(() => {
@@ -223,6 +228,57 @@ function DailyView() {
     
     return () => clearInterval(interval);
   }, []);
+
+  // ✅ חישוב דחייה אוטומטית
+  useEffect(() => {
+    if (!tasks || tasks.length === 0) {
+      setRescheduleInfo(null);
+      return;
+    }
+    
+    // רק אם צופים בהיום
+    const todayISO = getDateISO(new Date());
+    if (getDateISO(selectedDate) !== todayISO) {
+      setRescheduleInfo(null);
+      return;
+    }
+    
+    const info = calculateAutoReschedule(tasks, editTask);
+    setRescheduleInfo(info);
+    
+    console.log('📊 Auto-reschedule info:', {
+      remainingToday: info.remainingToday,
+      timeNeededToday: info.timeNeededToday,
+      freeTimeToday: info.freeTimeToday,
+      toMoveToTomorrow: info.tasksToMoveToTomorrow.length,
+      toMoveToToday: info.tasksToMoveToToday.length
+    });
+  }, [tasks, selectedDate, currentTime.minutes]);
+
+  // ✅ ביצוע דחייה אוטומטית
+  const handleAutoReschedule = async () => {
+    if (!rescheduleInfo) return;
+    
+    setIsAutoRescheduling(true);
+    
+    try {
+      const result = await executeAutoReschedule(editTask, rescheduleInfo);
+      
+      if (result.movedToTomorrow > 0) {
+        toast.success(`📅 ${result.movedToTomorrow} משימות הועברו למחר`);
+      }
+      if (result.movedToToday > 0) {
+        toast.success(`✨ ${result.movedToToday} משימות נמשכו להיום`);
+      }
+      
+      loadTasks();
+    } catch (err) {
+      console.error('Error in auto-reschedule:', err);
+      toast.error('שגיאה בדחיית משימות');
+    } finally {
+      setIsAutoRescheduling(false);
+    }
+  };
 
   // ניווט בין ימים
   const goToPreviousDay = () => {
@@ -794,26 +850,75 @@ function DailyView() {
           </div>
         </div>
 
-        {/* אזהרה אם לא יספיק */}
-        {!timeStats.canFitAll && timeStats.pending > 0 && (
+        {/* אזהרה אם לא יספיק + דחייה אוטומטית */}
+        {rescheduleInfo && rescheduleInfo.tasksToMoveToTomorrow.length > 0 && (
           <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
             <div className="text-red-700 dark:text-red-400 text-sm font-medium mb-2">
-              ⚠️ לא יספיק! צריך {formatMinutes(timeStats.pending)} אבל נשארו רק {formatMinutes(timeStats.minutesLeftInDay)} עד 16:15
+              ⚠️ לא יספיק! צריך {formatMinutes(rescheduleInfo.timeNeededToday + rescheduleInfo.tasksToMoveToTomorrow.reduce((sum, t) => sum + (t.estimated_duration || 30), 0))} אבל נשארו רק {formatMinutes(rescheduleInfo.remainingToday)} עד 16:15
             </div>
             
-            <div className="text-xs text-red-600 dark:text-red-300 space-y-1">
-              <p className="font-medium">💡 הצעות:</p>
+            {/* רשימת משימות שיידחו */}
+            <div className="text-xs text-red-600 dark:text-red-300 mb-2">
+              <p className="font-medium mb-1">📋 משימות שיועברו למחר:</p>
               <ul className="list-disc list-inside space-y-1 mr-2">
-                <li>העבירי {formatMinutes(timeStats.pending - timeStats.minutesLeftInDay)} למחר</li>
-                <li>האם יש משימה שאפשר לקצר או לדחות?</li>
+                {rescheduleInfo.tasksToMoveToTomorrow.slice(0, 3).map(task => (
+                  <li key={task.id}>{task.title} ({task.estimated_duration || 30} דק')</li>
+                ))}
+                {rescheduleInfo.tasksToMoveToTomorrow.length > 3 && (
+                  <li>ועוד {rescheduleInfo.tasksToMoveToTomorrow.length - 3} משימות...</li>
+                )}
+              </ul>
+            </div>
+            
+            {/* כפתורי פעולה */}
+            <div className="flex gap-2">
+              <button
+                onClick={handleAutoReschedule}
+                disabled={isAutoRescheduling}
+                className="flex-1 py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+              >
+                {isAutoRescheduling ? (
+                  <>⏳ מעביר...</>
+                ) : (
+                  <>🚀 העבר אוטומטית למחר ({rescheduleInfo.tasksToMoveToTomorrow.length})</>
+                )}
+              </button>
+              <button
+                onClick={() => setShowRescheduleModal(true)}
+                className="px-3 py-2 text-sm font-medium bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+              >
+                בחירה ידנית
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* הודעה על משיכת משימות ממחר */}
+        {rescheduleInfo && rescheduleInfo.tasksToMoveToToday.length > 0 && rescheduleInfo.tasksToMoveToTomorrow.length === 0 && (
+          <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+            <div className="text-green-700 dark:text-green-400 text-sm font-medium mb-2">
+              ✨ יש מקום! {formatMinutes(rescheduleInfo.freeTimeToday)} פנויות - אפשר למשוך משימות ממחר
+            </div>
+            
+            <div className="text-xs text-green-600 dark:text-green-300 mb-2">
+              <p className="font-medium mb-1">📋 משימות שאפשר להקדים:</p>
+              <ul className="list-disc list-inside space-y-1 mr-2">
+                {rescheduleInfo.tasksToMoveToToday.slice(0, 3).map(task => (
+                  <li key={task.id}>{task.title} ({task.estimated_duration || 30} דק')</li>
+                ))}
               </ul>
             </div>
             
             <button
-              onClick={() => setShowRescheduleModal(true)}
-              className="mt-2 w-full py-2 text-sm font-medium bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+              onClick={handleAutoReschedule}
+              disabled={isAutoRescheduling}
+              className="w-full py-2 text-sm font-medium bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
             >
-              📅 ארגון מחדש - בחרי מה להעביר
+              {isAutoRescheduling ? (
+                <>⏳ מושך...</>
+              ) : (
+                <>📥 משוך להיום ({rescheduleInfo.tasksToMoveToToday.length})</>
+              )}
             </button>
           </div>
         )}

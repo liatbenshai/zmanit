@@ -168,10 +168,29 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       const taskType = getTaskType(task.task_type);
       setSelectedCategory(taskType.category || 'work');
       
+      // ✅ תיקון: חישוב inputValue נכון בעריכה
+      // אם יש recording_duration או page_count - משתמשים בהם
+      // אחרת - מחשבים הפוך מ-estimated_duration
+      let inputVal = '';
+      if (task.recording_duration) {
+        inputVal = task.recording_duration;
+      } else if (task.page_count) {
+        inputVal = task.page_count;
+      } else if (task.estimated_duration) {
+        // חישוב הפוך - אם זה סוג עם timeRatio, מחלקים בו
+        if (taskType.inputType === 'recording' && taskType.timeRatio) {
+          inputVal = Math.round(task.estimated_duration / taskType.timeRatio);
+        } else if (taskType.inputType === 'pages' && taskType.timePerPage) {
+          inputVal = Math.round(task.estimated_duration / taskType.timePerPage);
+        } else {
+          inputVal = task.estimated_duration;
+        }
+      }
+      
       setFormData({
         title: task.title || '',
         taskType: task.task_type || 'transcription',
-        inputValue: task.recording_duration || task.page_count || task.estimated_duration || '',
+        inputValue: inputVal,
         startDate: task.start_date || '',
         dueDate: task.due_date || '',
         dueTime: task.due_time || '',

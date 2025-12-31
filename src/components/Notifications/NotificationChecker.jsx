@@ -75,14 +75,17 @@ function getElapsedMinutes(taskId, baseTimeSpent = 0) {
  * 
  * ✅ תיקון: שימוש ב-toLocalISODate במקום toISOString
  * ✅ תיקון חדש: לא שולח התראות "הגיע הזמן להתחיל" כשעובדים על משימה אחרת
+ * ✅ תיקון: בדיקה מחודשת של is_completed
  */
 function NotificationChecker() {
-  const { tasks } = useTasks();
+  const { tasks, loadTasks } = useTasks();
   const { permission, settings, sendNotification } = useNotifications();
   
   // מעקב אחרי התראות שנשלחו
   const lastNotifiedRef = useRef({});
   const checkIntervalRef = useRef(null);
+  // ✅ מעקב אחרי משימות שהושלמו (לא לשלוח עליהן התראות יותר)
+  const completedTasksRef = useRef(new Set());
 
   // בדיקה אם עבר מספיק זמן מההתראה האחרונה
   const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
@@ -100,6 +103,17 @@ function NotificationChecker() {
   const markNotified = useCallback((taskId, type) => {
     const key = `${taskId}-${type}`;
     lastNotifiedRef.current[key] = Date.now();
+  }, []);
+
+  // ✅ סימון משימה כהושלמה - לא לשלוח עליה התראות יותר
+  const markCompleted = useCallback((taskId) => {
+    completedTasksRef.current.add(taskId);
+    // נקה את כל ההתראות הקודמות של המשימה
+    Object.keys(lastNotifiedRef.current).forEach(key => {
+      if (key.startsWith(taskId)) {
+        delete lastNotifiedRef.current[key];
+      }
+    });
   }, []);
 
   // בדיקת משימות ושליחת התראות
@@ -124,6 +138,13 @@ function NotificationChecker() {
 
     console.log(`🔔 בודק ${tasks.length} משימות (${now.toLocaleTimeString('he-IL')}) | תאריך: ${today}`);
 
+    // ✅ עדכון רשימת המשימות שהושלמו
+    tasks.forEach(task => {
+      if (task.is_completed) {
+        completedTasksRef.current.add(task.id);
+      }
+    });
+
     // ✅ תיקון חדש: בדיקה אם יש משימה פעילה עכשיו
     const activeTaskId = getActiveTaskId(tasks);
     if (activeTaskId) {
@@ -133,8 +154,10 @@ function NotificationChecker() {
     let notificationsSent = 0;
 
     tasks.forEach(task => {
-      // דלג על משימות שהושלמו
-      if (task.is_completed) return;
+      // ✅ תיקון משופר: דלג על משימות שהושלמו (גם מה-ref וגם מה-task)
+      if (task.is_completed || completedTasksRef.current.has(task.id)) {
+        return;
+      }
       
       // === התראה על סיום זמן המשימה ===
       // זה צריך לעבוד על כל משימה עם טיימר רץ, גם בלי due_date/due_time
