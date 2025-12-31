@@ -14,7 +14,7 @@ export const WORK_HOURS = {
   2: { start: 8.5, end: 16.25, enabled: true, name: 'שלישי' },   // שלישי
   3: { start: 8.5, end: 16.25, enabled: true, name: 'רביעי' },   // רביעי
   4: { start: 8.5, end: 16.25, enabled: true, name: 'חמישי' },   // חמישי
-  5: { start: 8.5, end: 12, enabled: true, name: 'שישי' },       // שישי 08:30-12:00 ✅
+  5: { start: null, end: null, enabled: false, name: 'שישי' },  // שישי - לא עובדים
   6: { start: null, end: null, enabled: false, name: 'שבת' }    // שבת - לא עובדים
 };
 

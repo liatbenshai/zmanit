@@ -350,8 +350,8 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
       // בדיקה שהיום לא קיים כבר
       if (!extendedDays.find(d => d.date === nextDateISO)) {
         const dayOfWeek = nextDate.getDay();
-        // ✅ תיקון: ימי עבודה א'-ו' (לא שבת בלבד)
-        const isWorkDay = dayOfWeek >= 0 && dayOfWeek <= 5; // א'-ו'
+        // ✅ ימי עבודה: א'-ה' בלבד (0-4), לא שישי (5) ולא שבת (6)
+        const isWorkDay = dayOfWeek >= 0 && dayOfWeek <= 4;
         
         if (isWorkDay) {
           extendedDays.push({
