@@ -47,13 +47,21 @@ export default function AdminSettings({ onClose }) {
 
   // עדכון שדה
   const updateField = (section, field, value) => {
-    setConfig(prev => ({
-      ...prev,
-      [section]: {
-        ...prev[section],
-        [field]: value
-      }
-    }));
+    // ✅ טיפול מיוחד ב-workDays (מערך, לא אובייקט)
+    if (section === 'workDays') {
+      setConfig(prev => ({
+        ...prev,
+        workDays: value
+      }));
+    } else {
+      setConfig(prev => ({
+        ...prev,
+        [section]: {
+          ...prev[section],
+          [field]: value
+        }
+      }));
+    }
     setHasChanges(true);
   };
 
@@ -201,19 +209,6 @@ function WorkHoursSettings({ config, updateField }) {
     { id: 6, name: 'שבת', short: 'ש\'' }
   ];
 
-  const toggleDay = (dayId) => {
-    const current = config.workDays || [];
-    const newDays = current.includes(dayId)
-      ? current.filter(d => d !== dayId)
-      : [...current, dayId].sort();
-    updateField('workDays', null, newDays);
-  };
-
-  // עדכון ישיר של workDays (לא בתוך section)
-  const updateWorkDays = (newDays) => {
-    updateField('workDays', null, newDays);
-  };
-
   return (
     <div className="space-y-6">
       {/* שעות עבודה רגילות */}
@@ -264,7 +259,7 @@ function WorkHoursSettings({ config, updateField }) {
                 const newDays = current.includes(day.id)
                   ? current.filter(d => d !== day.id)
                   : [...current, day.id].sort();
-                // עדכון ישיר של המערך
+                // ✅ עדכון ישיר של workDays
                 updateField('workDays', null, newDays);
               }}
               className={`

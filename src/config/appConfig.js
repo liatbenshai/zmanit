@@ -177,12 +177,32 @@ export async function saveConfigToSupabase(userId, config) {
   try {
     const dbData = transformToDb(config);
     
-    const { error } = await supabase
+    // ✅ גישה חדשה: נסה UPDATE קודם, אם אין רשומה - INSERT
+    const { data: existing } = await supabase
       .from('app_settings')
-      .upsert({
-        user_id: userId,
-        ...dbData
-      });
+      .select('id')
+      .eq('user_id', userId)
+      .single();
+    
+    let error;
+    
+    if (existing) {
+      // יש רשומה - עדכן אותה
+      const result = await supabase
+        .from('app_settings')
+        .update(dbData)
+        .eq('user_id', userId);
+      error = result.error;
+    } else {
+      // אין רשומה - צור חדשה
+      const result = await supabase
+        .from('app_settings')
+        .insert({
+          user_id: userId,
+          ...dbData
+        });
+      error = result.error;
+    }
     
     if (error) throw error;
     
@@ -190,6 +210,7 @@ export async function saveConfigToSupabase(userId, config) {
     configCache = config;
     localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
     
+    console.log('✅ קונפיגורציה נשמרה בהצלחה');
     return true;
   } catch (err) {
     console.error('❌ שגיאה בשמירת קונפיגורציה:', err);
