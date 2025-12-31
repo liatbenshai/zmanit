@@ -335,8 +335,44 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
   const warnings = [];
   const unscheduledTasks = [];
   
-  // סינון ימים - רק מהיום והלאה
-  const relevantDays = days.filter(d => d.date >= todayISO && d.isWorkDay);
+  // ✅ תיקון: הרחבת הימים הרלוונטיים מעבר לשבוע הנוכחי
+  // יוצרים ימים נוספים אם צריך (עד 14 ימים קדימה)
+  const extendedDays = [...days];
+  const lastDay = days[days.length - 1];
+  
+  if (lastDay) {
+    // הוספת ימים נוספים (עד 2 שבועות קדימה)
+    for (let i = 1; i <= 14; i++) {
+      const nextDate = new Date(lastDay.date);
+      nextDate.setDate(nextDate.getDate() + i);
+      const nextDateISO = nextDate.toISOString().split('T')[0];
+      
+      // בדיקה שהיום לא קיים כבר
+      if (!extendedDays.find(d => d.date === nextDateISO)) {
+        const dayOfWeek = nextDate.getDay();
+        // ✅ תיקון: ימי עבודה א'-ו' (לא שבת בלבד)
+        const isWorkDay = dayOfWeek >= 0 && dayOfWeek <= 5; // א'-ו'
+        
+        if (isWorkDay) {
+          extendedDays.push({
+            date: nextDateISO,
+            dateISO: nextDateISO,
+            dayName: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][dayOfWeek],
+            isWorkDay: true,
+            blocks: [],
+            totalScheduledMinutes: 0,
+            morningMinutesUsed: 0,
+            afternoonMinutesUsed: 0
+          });
+        }
+      }
+    }
+  }
+  
+  // סינון ימים - רק מהיום והלאה וימי עבודה
+  const relevantDays = extendedDays.filter(d => d.date >= todayISO && d.isWorkDay);
+  
+  console.log(`📅 ימים זמינים לשיבוץ: ${relevantDays.length} (כולל הרחבה)`);
   
   // ✅ תיקון: עדכון due_date של משימות באיחור להיום
   // כדי שאינטרוולים שה-due_date שלהם עבר יופיעו היום
@@ -383,7 +419,7 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
     }
   }
   
-  // העתקת הבלוקים לימים המקוריים
+  // העתקת הבלוקים לימים המקוריים (כולל ימים חדשים)
   for (const relevantDay of relevantDays) {
     const originalDay = days.find(d => d.date === relevantDay.date);
     if (originalDay) {
@@ -391,6 +427,9 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
       originalDay.totalScheduledMinutes = relevantDay.totalScheduledMinutes;
       originalDay.morningMinutesUsed = relevantDay.morningMinutesUsed;
       originalDay.afternoonMinutesUsed = relevantDay.afternoonMinutesUsed;
+    } else if (relevantDay.blocks.length > 0) {
+      // יום חדש עם בלוקים - מוסיפים למערך
+      days.push(relevantDay);
     }
   }
   
