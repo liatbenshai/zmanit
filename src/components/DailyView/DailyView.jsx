@@ -637,6 +637,8 @@ function DailyView() {
   activeBlocks = sortTasksByOrder(activeBlocks.map(b => ({
     ...b,
     id: b.taskId || b.id,
+    parentId: b.parentId || b.task?.parent_task_id, // ✅ העברת parentId
+    blockIndex: b.blockIndex, // ✅ העברת blockIndex
     isRunning: isTimerRunning(b.taskId || b.task?.id || b.id) // ✅ סימון משימה פעילה
   })), dateISO);
   

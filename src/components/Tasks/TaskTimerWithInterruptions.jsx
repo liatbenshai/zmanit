@@ -269,18 +269,43 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
 
   // שמירת התקדמות
   const saveProgress = async (reset = false) => {
-    if (savingRef.current) return;
+    console.log('💾 saveProgress called, reset:', reset);
+    console.log('💾 currentTask:', currentTask ? { id: currentTask.id, title: currentTask.title } : 'null');
+    console.log('💾 elapsedSeconds:', elapsedSeconds);
+    
+    if (savingRef.current) {
+      console.log('💾 Already saving, skip');
+      return;
+    }
     savingRef.current = true;
 
-    const minutesToAdd = Math.floor(elapsedSeconds / 60);
-    if (minutesToAdd < 1) {
+    // ✅ בדיקה שיש משימה
+    if (!currentTask || !currentTask.id) {
+      console.error('❌ אין משימה לשמור!');
       savingRef.current = false;
+      toast.error('שגיאה: לא נמצאה משימה');
+      return { success: false, reason: 'no_task' };
+    }
+
+    const minutesToAdd = Math.floor(elapsedSeconds / 60);
+    console.log('💾 minutesToAdd:', minutesToAdd);
+    
+    if (minutesToAdd < 1) {
+      console.log('💾 Less than 1 minute, skip');
+      savingRef.current = false;
+      if (reset) {
+        // אם ביקשו reset, לפחות לאפס את הטיימר
+        resetTimer();
+        toast.success('הטיימר אופס');
+      }
       return { success: false, reason: 'less_than_minute' };
     }
 
     try {
       const newTimeSpent = timeSpent + minutesToAdd;
+      console.log('💾 Saving newTimeSpent:', newTimeSpent);
       await updateTaskTime(currentTask.id, newTimeSpent);
+      console.log('💾 Save successful!');
 
       // תיעוד פרודוקטיביות
       try {
