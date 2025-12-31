@@ -6,6 +6,8 @@ import { useAuth } from '../../hooks/useAuth';
 import { getTaskType, getAllTaskTypes } from '../../config/taskTypes';
 import { getLearningStats } from '../../utils/taskLearning';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
+import DailySummary from '../Analytics/DailySummary';
+import WeeklyReview from '../Analytics/WeeklyReview';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
@@ -39,6 +41,8 @@ function SmartDashboard() {
   const [dailyQuote, setDailyQuote] = useState(null);
   const [streak, setStreak] = useState(0);
   const [learningStats, setLearningStats] = useState(null);
+  const [showDailySummary, setShowDailySummary] = useState(false); // ✅ סיכום יומי
+  const [showWeeklySummary, setShowWeeklySummary] = useState(false); // ✅ סיכום שבועי
 
   // תאריכים
   const today = new Date();
@@ -632,6 +636,29 @@ function SmartDashboard() {
         />
       </motion.div>
 
+      {/* === סיכומים === */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.6 }}
+        className="mt-4 grid grid-cols-2 gap-3"
+      >
+        <button
+          onClick={() => setShowDailySummary(true)}
+          className="flex items-center justify-center gap-2 p-4 bg-gradient-to-l from-blue-500 to-indigo-600 text-white rounded-xl font-medium hover:from-blue-600 hover:to-indigo-700 transition-all shadow-sm"
+        >
+          <span className="text-xl">📊</span>
+          <span>סיכום היום</span>
+        </button>
+        <button
+          onClick={() => setShowWeeklySummary(true)}
+          className="flex items-center justify-center gap-2 p-4 bg-gradient-to-l from-purple-500 to-pink-600 text-white rounded-xl font-medium hover:from-purple-600 hover:to-pink-700 transition-all shadow-sm"
+        >
+          <span className="text-xl">📈</span>
+          <span>סיכום השבוע</span>
+        </button>
+      </motion.div>
+
       {/* מודל טופס */}
       <Modal
         isOpen={showTaskForm}
@@ -655,6 +682,44 @@ function SmartDashboard() {
           defaultDate={selectedDateForNewTask || todayISO}
         />
       </Modal>
+
+      {/* מודל סיכום יומי */}
+      <AnimatePresence>
+        {showDailySummary && (
+          <Modal
+            isOpen={showDailySummary}
+            onClose={() => setShowDailySummary(false)}
+            title=""
+            maxWidth="max-w-lg"
+            hideHeader
+          >
+            <DailySummary 
+              tasks={tasks}
+              date={today}
+              onClose={() => setShowDailySummary(false)}
+              onMoveTasks={(tasksToMove, targetDate) => {
+                // TODO: implement move tasks
+                toast.success(`${tasksToMove.length} משימות הועברו`);
+                setShowDailySummary(false);
+              }}
+            />
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      {/* מודל סיכום שבועי */}
+      <AnimatePresence>
+        {showWeeklySummary && (
+          <Modal
+            isOpen={showWeeklySummary}
+            onClose={() => setShowWeeklySummary(false)}
+            title="📊 סיכום השבוע"
+            maxWidth="max-w-2xl"
+          >
+            <WeeklyReview onClose={() => setShowWeeklySummary(false)} />
+          </Modal>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

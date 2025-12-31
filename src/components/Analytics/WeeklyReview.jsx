@@ -2,7 +2,7 @@ import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
-import { TASK_TYPES } from '../DailyView/DailyView';
+import { getTaskType, getAllTaskTypes } from '../../config/taskTypes';
 import { getAllTaskTypeLearning } from '../../services/supabase';
 import { useEffect } from 'react';
 
@@ -183,7 +183,7 @@ function WeeklyReview({ onClose }) {
     // למידה לפי סוג
     learningData.forEach(learning => {
       if (learning.total_tasks >= 5) {
-        const taskType = TASK_TYPES[learning.task_type];
+        const taskType = getTaskType(learning.task_type);
         if (learning.average_ratio > 1.2) {
           list.push({
             icon: taskType?.icon || '📋',
@@ -299,14 +299,14 @@ function WeeklyReview({ onClose }) {
             .sort((a, b) => b[1].actual - a[1].actual)
             .slice(0, 5)
             .map(([type, data]) => {
-              const taskType = TASK_TYPES[type] || TASK_TYPES.other;
+              const taskType = getTaskType(type) || { icon: '📋', name: type, color: 'bg-gray-100' };
               const pct = weekStats.totalWorkMinutes > 0 
                 ? Math.round((data.actual / weekStats.totalWorkMinutes) * 100) 
                 : 0;
               
               return (
                 <div key={type} className="flex items-center gap-2">
-                  <span className={`px-2 py-1 rounded ${taskType.color}`}>
+                  <span className={`px-2 py-1 rounded ${taskType.color || 'bg-gray-100'}`}>
                     {taskType.icon}
                   </span>
                   <span className="flex-1 text-sm">{taskType.name}</span>
