@@ -8,6 +8,7 @@ import { getLearningStats } from '../../utils/taskLearning';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import DailySummary from '../Analytics/DailySummary';
 import WeeklyReview from '../Analytics/WeeklyReview';
+import AdminSettings from '../Admin/AdminSettings'; // ✅ חדש: הגדרות
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
@@ -43,6 +44,7 @@ function SmartDashboard() {
   const [learningStats, setLearningStats] = useState(null);
   const [showDailySummary, setShowDailySummary] = useState(false); // ✅ סיכום יומי
   const [showWeeklySummary, setShowWeeklySummary] = useState(false); // ✅ סיכום שבועי
+  const [showSettings, setShowSettings] = useState(false); // ✅ חדש: הגדרות מערכת
 
   // תאריכים
   const today = new Date();
@@ -302,18 +304,31 @@ function SmartDashboard() {
               </p>
             </div>
             
-            {/* סטריק */}
-            {streak > 0 && (
-              <motion.div
-                initial={{ scale: 0 }}
-                animate={{ scale: 1 }}
-                className="flex flex-col items-center bg-white/20 backdrop-blur-sm rounded-2xl px-4 py-2"
+            <div className="flex items-center gap-3">
+              {/* ✅ כפתור הגדרות */}
+              <motion.button
+                whileHover={{ scale: 1.1 }}
+                whileTap={{ scale: 0.95 }}
+                onClick={() => setShowSettings(true)}
+                className="bg-white/20 backdrop-blur-sm rounded-xl p-2 hover:bg-white/30 transition-colors"
+                title="הגדרות מערכת"
               >
-                <span className="text-3xl">🔥</span>
-                <span className="text-2xl font-bold">{streak}</span>
-                <span className="text-xs text-white/80">ימים רצופים</span>
-              </motion.div>
-            )}
+                <span className="text-2xl">⚙️</span>
+              </motion.button>
+
+              {/* סטריק */}
+              {streak > 0 && (
+                <motion.div
+                  initial={{ scale: 0 }}
+                  animate={{ scale: 1 }}
+                  className="flex flex-col items-center bg-white/20 backdrop-blur-sm rounded-2xl px-4 py-2"
+                >
+                  <span className="text-3xl">🔥</span>
+                  <span className="text-2xl font-bold">{streak}</span>
+                  <span className="text-xs text-white/80">ימים רצופים</span>
+                </motion.div>
+              )}
+            </div>
           </div>
 
           {/* ציטוט יומי */}
@@ -717,6 +732,20 @@ function SmartDashboard() {
             maxWidth="max-w-2xl"
           >
             <WeeklyReview onClose={() => setShowWeeklySummary(false)} />
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      {/* ✅ מודל הגדרות מערכת */}
+      <AnimatePresence>
+        {showSettings && (
+          <Modal
+            isOpen={showSettings}
+            onClose={() => setShowSettings(false)}
+            title="⚙️ הגדרות מערכת"
+            maxWidth="max-w-4xl"
+          >
+            <AdminSettings onClose={() => setShowSettings(false)} />
           </Modal>
         )}
       </AnimatePresence>
