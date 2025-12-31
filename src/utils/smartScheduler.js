@@ -118,6 +118,14 @@ export function smartScheduleWeek(weekStart, allTasks) {
   // 🔍 DEBUG: הצגת המשימות שמתקבלות
   console.log('🔍 DEBUG - allTasks received:', allTasks.length);
   console.log('🔍 DEBUG - pendingTasks after filter:', pendingTasks.length);
+  
+  // 🔍 DEBUG מורחב: הצגת כל האינטרוולים (כולל הושלמו)
+  const allIntervals = allTasks.filter(t => t.parent_task_id);
+  console.log('🔍 DEBUG - ALL intervals (including completed):', allIntervals.length);
+  allIntervals.forEach(t => {
+    console.log(`  📌 "${t.title}" | due: ${t.due_date} | completed: ${t.is_completed} | parent: ${t.parent_task_id?.slice(0,8)}`);
+  });
+  
   pendingTasks.forEach(t => {
     console.log(`  📌 Task: "${t.title}" | id: ${t.id} | parent_task_id: ${t.parent_task_id || 'none'} | duration: ${t.estimated_duration}`);
   });

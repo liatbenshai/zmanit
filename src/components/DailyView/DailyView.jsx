@@ -302,6 +302,16 @@ function DailyView() {
     if (!tasks || tasks.length === 0) return null;
     const weekStart = getWeekStart(selectedDate);
     console.log('📅 DailyView: Computing week plan from', getDateISO(weekStart));
+    
+    // 🔍 DEBUG: הצגת כל האינטרוולים של משימות עם parent
+    const intervals = tasks.filter(t => t.parent_task_id && !t.is_completed);
+    if (intervals.length > 0) {
+      console.log('🔍 DEBUG - All intervals (not completed):');
+      intervals.forEach(t => {
+        console.log(`  📌 "${t.title}" | due_date: ${t.due_date} | parent: ${t.parent_task_id?.slice(0,8)}`);
+      });
+    }
+    
     return smartScheduleWeek(weekStart, tasks);
   }, [tasks, selectedDate]);
 
