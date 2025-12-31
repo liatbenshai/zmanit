@@ -23,7 +23,11 @@ function isTimerRunning(taskId) {
     const saved = localStorage.getItem(key);
     if (saved) {
       const data = JSON.parse(saved);
-      return data.isRunning && !data.isInterrupted;
+      const running = data.isRunning && !data.isInterrupted;
+      if (running) {
+        console.log(`✅ טיימר רץ על משימה ${taskId}`);
+      }
+      return running;
     }
   } catch (e) {
     // התעלם משגיאות
@@ -40,9 +44,28 @@ function getActiveTaskId(tasks) {
   
   for (const task of tasks) {
     if (isTimerRunning(task.id)) {
+      console.log(`🏃 משימה פעילה נמצאה: ${task.id} - ${task.title}`);
       return task.id;
     }
   }
+  
+  // בדיקה נוספת: חיפוש ישיר ב-localStorage
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('timer_v2_')) {
+        const data = JSON.parse(localStorage.getItem(key));
+        if (data.isRunning && !data.isInterrupted) {
+          const taskId = key.replace('timer_v2_', '');
+          console.log(`🔍 נמצא טיימר רץ ב-localStorage: ${taskId}`);
+          return taskId;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('שגיאה בחיפוש טיימר:', e);
+  }
+  
   return null;
 }
 
@@ -218,6 +241,10 @@ function NotificationChecker() {
       console.log(`⏱️ יש משימה פעילה: ${activeTaskId} - לא נשלח התראות "הגיע הזמן" למשימות אחרות`);
     }
 
+    // ✅ חישוב לו"ז דינמי פעם אחת (מחוץ ל-loop)
+    const dynamicSchedule = calculateDynamicSchedule(tasks, currentMinutes);
+    console.log(`📅 לו"ז דינמי: ${dynamicSchedule.size} משימות`);
+
     let notificationsSent = 0;
 
     tasks.forEach(task => {
@@ -274,8 +301,13 @@ function NotificationChecker() {
       }
       
       // === התראות על זמן התחלה - לפי לו"ז דינמי! ===
-      // ✅ חדש: חישוב לו"ז דינמי כמו ב-DailyView
-      const dynamicSchedule = calculateDynamicSchedule(tasks, currentMinutes);
+      // ✅ תיקון: אם המשימה הזו היא המשימה הפעילה - לא צריך התראות "הגיע הזמן"
+      if (activeTaskId === task.id) {
+        console.log(`⏭️ דילוג על התראות התחלה ל"${task.title}" - זו המשימה הפעילה!`);
+        return; // עוברים למשימה הבאה
+      }
+      
+      // ✅ שימוש בלו"ז הדינמי שחושב מראש
       const taskSchedule = dynamicSchedule.get(task.id);
       
       // אם המשימה לא בלו"ז הדינמי (פרויקט גדול / לא להיום) - דלג
