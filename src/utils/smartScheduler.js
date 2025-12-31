@@ -231,6 +231,17 @@ function initializeDays(weekStart, config) {
  */
 function prioritizeTasks(tasks, todayISO) {
   return [...tasks].sort((a, b) => {
+    // ✅ תיקון חשוב: אינטרוולים של אותו הורה - לפי מספר בלוק!
+    // זה צריך להיות ראשון כדי שאינטרוולים ישארו ביחד
+    if (a.parent_task_id && b.parent_task_id && a.parent_task_id === b.parent_task_id) {
+      // חילוץ מספר הבלוק מהכותרת: "משימה (2/4)" -> 2
+      const aMatch = a.title.match(/\((\d+)\/\d+\)/);
+      const bMatch = b.title.match(/\((\d+)\/\d+\)/);
+      if (aMatch && bMatch) {
+        return parseInt(aMatch[1]) - parseInt(bMatch[1]);
+      }
+    }
+    
     // 1. משימות באיחור קודם!
     const aOverdue = a.due_date && a.due_date < todayISO;
     const bOverdue = b.due_date && b.due_date < todayISO;
@@ -257,17 +268,6 @@ function prioritizeTasks(tasks, todayISO) {
     if (a.due_time && b.due_time) {
       const timeCmp = a.due_time.localeCompare(b.due_time);
       if (timeCmp !== 0) return timeCmp;
-    }
-    
-    // ✅ תיקון: מיון אינטרוולים של אותה משימה לפי מספר הבלוק
-    // אם שניהם מאותו הורה - מיין לפי הכותרת (שמכילה את המספר)
-    if (a.parent_task_id && b.parent_task_id && a.parent_task_id === b.parent_task_id) {
-      // חילוץ מספר הבלוק מהכותרת: "משימה (2/4)" -> 2
-      const aMatch = a.title.match(/\((\d+)\/\d+\)/);
-      const bMatch = b.title.match(/\((\d+)\/\d+\)/);
-      if (aMatch && bMatch) {
-        return parseInt(aMatch[1]) - parseInt(bMatch[1]);
-      }
     }
     
     // 5. לפי תאריך יצירה (ישן יותר קודם)
@@ -330,8 +330,24 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
   // סינון ימים - רק מהיום והלאה
   const relevantDays = days.filter(d => d.date >= todayISO && d.isWorkDay);
   
+  // ✅ תיקון: עדכון due_date של משימות באיחור להיום
+  // כדי שאינטרוולים שה-due_date שלהם עבר יופיעו היום
+  const tasksWithUpdatedDates = sortedTasks.map(task => {
+    // אם זה אינטרוול (יש parent_task_id) וה-due_date עבר
+    if (task.parent_task_id && task.due_date && task.due_date < todayISO) {
+      console.log(`📅 עדכון אינטרוול באיחור: "${task.title}" מ-${task.due_date} להיום`);
+      return {
+        ...task,
+        original_due_date: task.due_date,
+        due_date: todayISO,
+        is_overdue: true
+      };
+    }
+    return task;
+  });
+  
   // אתחול התקדמות לכל משימה
-  for (const task of sortedTasks) {
+  for (const task of tasksWithUpdatedDates) {
     taskProgress.set(task.id, {
       task,
       total: task.estimated_duration || 30,
@@ -342,7 +358,7 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
   }
   
   // שיבוץ כל משימה
-  for (const task of sortedTasks) {
+  for (const task of tasksWithUpdatedDates) {
     scheduleTask(task, relevantDays, taskProgress, config);
   }
   
