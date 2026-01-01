@@ -64,15 +64,6 @@ export const supabase = createClient(
   }
 );
 
-// Debug: check session on load
-if (typeof window !== 'undefined') {
-  supabase.auth.getSession().then(({ data, error }) => {
-      hasSession: !!data?.session,
-      email: data?.session?.user?.email,
-      error: error?.message
-    });
-  });
-}
 
 // === פונקציות אותנטיקציה ===
 
@@ -370,10 +361,6 @@ export async function createTask(task) {
       });
       throw new Error('❌ אין משתמש מחובר. אנא התחברי מחדש.');
     }
-      userId: checkSession.user.id,
-      email: checkSession.user.email,
-      expiresAt: checkSession.expires_at
-    });
     
     // וידוא שה-user_id תואם לסשן
     if (taskData.user_id !== checkSession.user.id) {
