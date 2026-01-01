@@ -26,23 +26,12 @@ import {
  * ממלא את כל הזמן הפנוי במשימות, גם עתידיות
  */
 export function proactivePlan(allTasks, startDate = new Date(), daysAhead = 14) {
-    totalTasks: allTasks?.length,
-    startDate: startDate?.toISOString?.(),
-    daysAhead 
-  });
   
   const schedule = [];
   const assignedTasks = new Set(); // משימות שכבר שובצו
   
   // סינון משימות פעילות בלבד
   const pendingTasks = allTasks.filter(t => !t.is_completed);
-    id: t.id, 
-    title: t.title, 
-    start_date: t.start_date,
-    due_date: t.due_date,
-    due_time: t.due_time,
-    estimated_duration: t.estimated_duration
-  })));
   
   // מיון משימות לפי דחיפות (קרוב יותר = דחוף יותר)
   const sortedTasks = sortByUrgency(pendingTasks);
