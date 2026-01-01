@@ -44,7 +44,6 @@ function saveIdleData(data) {
 export function startIdleTracking() {
   const now = new Date().toISOString();
   localStorage.setItem(IDLE_START_KEY, now);
-  console.log('⏸️ התחלת מעקב זמן מת:', now);
 }
 
 /**
@@ -82,7 +81,6 @@ export function stopIdleTracking() {
     });
     
     saveIdleData(data);
-    console.log(`⏱️ נוסף זמן מת: ${idleMinutes} דקות. סה"כ היום: ${data[todayKey].totalMinutes} דקות`);
   }
   
   // נקה את זמן ההתחלה
@@ -187,7 +185,6 @@ export function cleanOldIdleData() {
   
   if (cleaned > 0) {
     saveIdleData(data);
-    console.log(`🧹 נוקו ${cleaned} ימים ישנים של נתוני זמן מת`);
   }
 }
 

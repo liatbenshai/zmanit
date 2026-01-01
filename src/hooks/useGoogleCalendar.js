@@ -249,7 +249,6 @@ export function useGoogleCalendar() {
         resource: event,
       });
 
-      console.log('✅ אירוע נוצר ביומן:', response.result);
       return response.result;
     } catch (err) {
       console.error('שגיאה בייצוא ליומן:', err);

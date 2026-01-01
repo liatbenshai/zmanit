@@ -29,7 +29,6 @@ const INTERVAL_DURATION = 45;
  * ספק משימות
  */
 export function TaskProvider({ children }) {
-  console.log('📋 TaskProvider rendering...');
   const { user, loading: authLoading } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -55,13 +54,11 @@ export function TaskProvider({ children }) {
     
     try {
       const data = await getTasks(user.id);
-      console.log('📥 טעינת משימות מה-DB:', { count: data?.length });
       const safeData = (data || []).map(task => ({
         ...task,
         time_spent: task.time_spent || 0,
         estimated_duration: task.estimated_duration || null
       }));
-      console.log('✅ משימות נטענו:', { count: safeData.length });
       setTasks(safeData);
     } catch (err) {
       console.error('שגיאה בטעינת משימות:', err);
@@ -86,7 +83,6 @@ export function TaskProvider({ children }) {
    * אם המשימה ארוכה מ-45 דקות, היא מתפצלת אוטומטית למשימות-ילד.
    */
   const addTask = async (taskData) => {
-    console.log('🟢 TaskContext.addTask נקרא עם:', taskData);
     
     if (authLoading) {
       throw new Error('⏳ ממתין לאימות משתמש...');
@@ -125,7 +121,6 @@ export function TaskProvider({ children }) {
       
       const duration = taskToCreate.estimated_duration || 0;
       
-      console.log('⏱️ זמנים:', { 
         duration, 
         due_time: taskToCreate.due_time,
         due_date: taskToCreate.due_date,
@@ -134,11 +129,9 @@ export function TaskProvider({ children }) {
       
       // אם המשימה ארוכה מ-45 דקות - פיצול אוטומטי
       if (duration > INTERVAL_DURATION) {
-        console.log(`🔄 משימה של ${duration} דקות - מפצלת ל-${Math.ceil(duration / INTERVAL_DURATION)} אינטרוולים של ${INTERVAL_DURATION} דקות`);
         
         const { parentTask, intervals } = await createTaskWithIntervals(taskToCreate);
         
-        console.log(`✅ נוצרה משימה הורית + ${intervals.length} אינטרוולים`);
         
         // טעינה מחדש
         await loadTasks();
@@ -146,14 +139,12 @@ export function TaskProvider({ children }) {
       }
       
       // משימה קצרה - יצירה רגילה
-      console.log('📤 יוצר משימה רגילה (קצרה מ-45 דקות)');
       const newTask = await createTask(taskToCreate);
       
       if (!newTask || !newTask.id) {
         throw new Error('❌ המשימה לא נוצרה');
       }
       
-      console.log('✅ משימה נוצרה:', newTask);
       await loadTasks();
       return newTask;
       
@@ -207,7 +198,6 @@ export function TaskProvider({ children }) {
       const taskType = updates.taskType ?? updates.task_type ?? null;
       const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
       
-      console.log('📝 editTask called with:', { 
         taskId, 
         updates,
         resolved: { startDate, dueDate, dueTime }
@@ -227,7 +217,6 @@ export function TaskProvider({ children }) {
         priority: updates.priority || 'normal'
       });
       
-      console.log('✅ Task updated:', updatedTask);
       setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
       return updatedTask;
     } catch (err) {
@@ -303,7 +292,6 @@ export function TaskProvider({ children }) {
    * - מסמנים אותה ישירות
    */
   const toggleComplete = async (taskId) => {
-    console.log('🔄 toggleComplete נקרא:', taskId);
     
     const task = tasks.find(t => t.id === taskId);
     if (!task) {
@@ -311,7 +299,6 @@ export function TaskProvider({ children }) {
       return;
     }
     
-    console.log('📋 משימה נמצאה:', { 
       id: task.id, 
       title: task.title, 
       is_completed: task.is_completed,
@@ -321,16 +308,13 @@ export function TaskProvider({ children }) {
 
     try {
       const newCompleteStatus = !task.is_completed;
-      console.log('🎯 סטטוס חדש:', newCompleteStatus ? 'הושלם' : 'לא הושלם');
       
       // בדיקה אם זה אינטרוול (משימה עם הורה)
       if (task.parent_task_id) {
-        console.log('📦 זה אינטרוול - קורא ל-completeInterval/uncompleteInterval');
         
         if (newCompleteStatus) {
           // מסמנים כהושלם
           const { interval, parentCompleted, parentId } = await completeInterval(taskId);
-          console.log('✅ אינטרוול הושלם:', { interval, parentCompleted, parentId });
           
           // עדכון ה-state
           setTasks(prev => {
@@ -345,19 +329,16 @@ export function TaskProvider({ children }) {
               );
             }
             
-            console.log('📊 State עודכן:', updated.filter(t => t.id === taskId || t.id === parentId));
             return updated;
           });
           
           if (parentCompleted) {
-            console.log('🎉 כל האינטרוולים הושלמו! המשימה כולה סומנה כהושלמה.');
           }
           
           return interval;
         } else {
           // מבטלים השלמה
           const { interval, parentUncompleted } = await uncompleteInterval(taskId);
-          console.log('↩️ השלמה בוטלה:', { interval, parentUncompleted });
           
           setTasks(prev => {
             let updated = prev.map(t => t.id === taskId ? { ...t, is_completed: false, completed_at: null } : t);
@@ -379,13 +360,10 @@ export function TaskProvider({ children }) {
       }
       
       // משימה רגילה (לא אינטרוול)
-      console.log('📝 משימה רגילה - קורא ל-toggleTaskComplete');
       const updatedTask = await toggleTaskComplete(taskId, newCompleteStatus);
-      console.log('✅ משימה עודכנה:', updatedTask);
       
       setTasks(prev => {
         const updated = prev.map(t => t.id === taskId ? updatedTask : t);
-        console.log('📊 State עודכן');
         return updated;
       });
       

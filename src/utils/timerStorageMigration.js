@@ -19,11 +19,9 @@ export function migrateTimerStorage() {
   
   // מחיקת המפתחות הישנים
   keysToRemove.forEach(key => {
-    console.log('🗑️ מוחק מפתח ישן:', key);
     localStorage.removeItem(key);
   });
   
-  console.log(`✅ נמחקו ${keysToRemove.length} מפתחות ישנים`);
   return keysToRemove.length;
 }
 
@@ -41,11 +39,9 @@ export function clearAllTimerStorage() {
   }
   
   keysToRemove.forEach(key => {
-    console.log('🗑️ מוחק:', key);
     localStorage.removeItem(key);
   });
   
-  console.log(`✅ נמחקו ${keysToRemove.length} מפתחות טיימר`);
   return keysToRemove.length;
 }
 
@@ -53,7 +49,6 @@ export function clearAllTimerStorage() {
  * הצגת כל נתוני הטיימר הקיימים
  */
 export function debugTimerStorage() {
-  console.log('🔍 נתוני טיימר ב-localStorage:');
   
   for (let i = 0; i < localStorage.length; i++) {
     const key = localStorage.key(i);
@@ -61,9 +56,7 @@ export function debugTimerStorage() {
       try {
         const value = localStorage.getItem(key);
         const parsed = JSON.parse(value);
-        console.log(`  ${key}:`, parsed);
       } catch {
-        console.log(`  ${key}:`, localStorage.getItem(key));
       }
     }
   }

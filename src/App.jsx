@@ -24,7 +24,6 @@ import NotificationChecker from './components/Notifications/NotificationChecker'
 function App() {
   const { user, loading } = useAuth();
 
-  console.log('🔍 App render:', { user: !!user, loading });
 
   // מסך טעינה
   if (loading) {

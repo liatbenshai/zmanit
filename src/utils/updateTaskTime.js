@@ -31,7 +31,6 @@ export async function updateTaskTimeByName(taskTitle, timeSpentMinutes, supabase
     }
 
     const task = tasks[0];
-    console.log(`מעדכן משימה: ${task.title} (ID: ${task.id}), זמן נוכחי: ${task.time_spent || 0} דקות, זמן חדש: ${timeSpentMinutes} דקות`);
 
     // עדכון הזמן
     const { data: updatedTask, error: updateError } = await supabase
@@ -48,7 +47,6 @@ export async function updateTaskTimeByName(taskTitle, timeSpentMinutes, supabase
       throw updateError;
     }
 
-    console.log('✅ זמן עודכן בהצלחה!', updatedTask);
     return updatedTask;
   } catch (err) {
     console.error('❌ שגיאה בעדכון זמן:', err);

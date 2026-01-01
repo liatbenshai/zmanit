@@ -103,11 +103,9 @@ export function scheduleNotification(task, minutesBefore = 15) {
   // הגבלת delay ל-24 שעות מקסימום (מגבלת דפדפן)
   const maxDelay = 24 * 60 * 60 * 1000;
   if (delay > maxDelay) {
-    console.log(`⏰ התראה למשימה "${task.title}" רחוקה מדי, תתוזמן מחדש`);
     return null;
   }
 
-  console.log(`⏰ מתזמן התראה למשימה "${task.title}" בעוד ${Math.round(delay / 60000)} דקות`);
 
   // שמירת ה-timeout ID לביטול אפשרי
   const timeoutId = setTimeout(() => {
@@ -131,7 +129,6 @@ export function cancelScheduledNotification(timeoutId) {
  */
 export async function subscribeToPush() {
   if (!isPushSupported()) {
-    console.log('ℹ️ Push Notifications לא נתמכים בדפדפן זה');
     return null;
   }
 
@@ -155,7 +152,6 @@ export async function subscribeToPush() {
         applicationServerKey: urlBase64ToUint8Array(vapidPublicKey)
       });
       
-      console.log('✅ נרשם ל-Push Notifications');
     }
 
     return subscription;
@@ -177,7 +173,6 @@ export async function unsubscribeFromPush() {
     
     if (subscription) {
       await subscription.unsubscribe();
-      console.log('✅ בוטל רישום Push');
       return true;
     }
     

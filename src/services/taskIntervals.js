@@ -78,9 +78,7 @@ export async function createTaskWithIntervals(task) {
   const baseIntervalDuration = Math.floor(duration / numIntervals);
   const remainder = duration % numIntervals;
   
-  console.log(`🔄 יוצר משימה עם ${numIntervals} אינטרוולים של ~${baseIntervalDuration} דקות`);
   if (blocksForToday !== undefined && blocksForToday !== null) {
-    console.log(`📅 בחירת משתמש: ${blocksForToday} בלוקים להיום`);
   }
   
   // יצירת המשימה ההורית (כפרויקט)
@@ -129,11 +127,9 @@ export async function createTaskWithIntervals(task) {
   if (currentDate > todayISO) {
     // תאריך עתידי - מתחילים ב-9:00
     currentTime = { hours: 9, minutes: 0 };
-    console.log('⏰ תאריך עתידי - מתחיל ב-09:00');
   } else if (task.due_time) {
     // יש שעה מוגדרת
     currentTime = parseTime(task.due_time);
-    console.log('⏰ משתמש בשעה מוגדרת:', task.due_time);
   } else {
     // היום - מתחילים מהשעה הנוכחית + עיגול ל-5 דקות
     currentTime = { 
@@ -149,13 +145,10 @@ export async function createTaskWithIntervals(task) {
     if (currentTime.hours >= 16) {
       currentDate = getNextWorkDay(currentDate);
       currentTime = { hours: 9, minutes: 0 };
-      console.log('⏰ כבר אחרי 16:00 - עובר למחר');
     } else {
-      console.log('⏰ משתמש בשעה נוכחית:', formatTime(currentTime));
     }
   }
   
-  console.log('📅 תאריך התחלה:', currentDate);
   
   for (let i = 0; i < numIntervals; i++) {
     // אורך האינטרוול הנוכחי
@@ -170,7 +163,6 @@ export async function createTaskWithIntervals(task) {
       // עברנו את המכסה - עוברים ליום הבא
       currentDate = getNextWorkDay(currentDate);
       currentTime = { hours: 9, minutes: 0 };
-      console.log(`📅 עברנו מכסת ${effectiveBlocksForToday} להיום - עובר ליום הבא: ${currentDate}`);
     }
     
     // בדיקה אם עוברים את סוף יום העבודה (16:00)
@@ -224,8 +216,6 @@ export async function createTaskWithIntervals(task) {
     throw intervalsError;
   }
   
-  console.log(`✅ נוצרו ${createdIntervals.length} אינטרוולים למשימה "${task.title}"`);
-  console.log(`   📅 היום: ${blocksScheduledToday}, ימים הבאים: ${numIntervals - blocksScheduledToday}`);
   
   return { parentTask, intervals: createdIntervals };
 }
@@ -283,12 +273,10 @@ export async function completeInterval(intervalId) {
     
     if (parentError) throw parentError;
     
-    console.log(`✅ כל האינטרוולים הושלמו - המשימה ההורית סומנה כהושלמה`);
     return { interval, parentCompleted: true, parentId: interval.parent_task_id };
   }
   
   const completedCount = siblings.filter(s => s.is_completed).length;
-  console.log(`✅ אינטרוול ${completedCount}/${siblings.length} הושלם`);
   
   return { interval, parentCompleted: false };
 }

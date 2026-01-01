@@ -36,7 +36,6 @@ function TaskInsights() {
         const stats = await getInterruptionStats(user.id, 30);
         setInterruptionStats(stats);
       } catch (e) {
-        console.log('אין נתוני הפרעות');
       }
 
       // טעינת נתוני למידה
@@ -44,7 +43,6 @@ function TaskInsights() {
         const learning = await getLearningData(user.id);
         setLearningData(learning || []);
       } catch (e) {
-        console.log('אין נתוני למידה');
       }
 
       // טעינת היסטוריית הצעות

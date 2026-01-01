@@ -26,7 +26,6 @@ import {
  * ממלא את כל הזמן הפנוי במשימות, גם עתידיות
  */
 export function proactivePlan(allTasks, startDate = new Date(), daysAhead = 14) {
-  console.log('🚀 proactivePlan called:', { 
     totalTasks: allTasks?.length,
     startDate: startDate?.toISOString?.(),
     daysAhead 
@@ -37,7 +36,6 @@ export function proactivePlan(allTasks, startDate = new Date(), daysAhead = 14) 
   
   // סינון משימות פעילות בלבד
   const pendingTasks = allTasks.filter(t => !t.is_completed);
-  console.log('📋 Pending tasks:', pendingTasks.length, pendingTasks.slice(0, 3).map(t => ({ 
     id: t.id, 
     title: t.title, 
     start_date: t.start_date,
@@ -90,7 +88,6 @@ function planDayProactively(date, sortedTasks, assignedTasks) {
   const availableMinutes = getAvailableMinutesForDay(dayOfWeek);
   const totalMinutes = getWorkMinutesForDay(dayOfWeek);
   
-  console.log(`📅 Planning day ${dateISO}:`, { 
     dayOfWeek, 
     availableMinutes, 
     totalMinutes,
@@ -183,7 +180,6 @@ function planDayProactively(date, sortedTasks, assignedTasks) {
     }
   }
   
-  console.log(`📅 Day ${dateISO} result:`, { 
     slotsCount: slots.length, 
     scheduledMinutes, 
     skippedReasons,

@@ -55,7 +55,6 @@ export function setDayTaskOrder(date, taskIds) {
   const order = loadTaskOrder();
   order[date] = taskIds;
   saveTaskOrder(order);
-  console.log(`📋 סדר משימות עודכן ל-${date}:`, taskIds.length, 'משימות');
 }
 
 /**
@@ -118,7 +117,6 @@ export function reorderTask(date, taskId, fromIndex, toIndex) {
   
   // אם אין סדר - צריך ליצור
   if (order.length === 0) {
-    console.log('⚠️ אין סדר שמור - צריך לקבל רשימת משימות מלאה');
     return;
   }
   
@@ -156,7 +154,6 @@ export function moveTaskToDay(taskId, fromDate, toDate, toIndex = -1) {
   }
   setDayTaskOrder(toDate, toOrder);
   
-  console.log(`📦 משימה ${taskId} הועברה מ-${fromDate} ל-${toDate}`);
 }
 
 /**
@@ -198,7 +195,6 @@ export function cleanupOldOrders() {
   
   if (cleaned > 0) {
     saveTaskOrder(order);
-    console.log(`🧹 נוקו ${cleaned} סדרים ישנים`);
   }
 }
 

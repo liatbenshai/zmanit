@@ -128,7 +128,6 @@ export async function loadConfigFromSupabase(userId) {
     if (error) {
       if (error.code === 'PGRST116') {
         // אין הגדרות - יצירת ברירות מחדל
-        console.log('📝 יוצר הגדרות ברירת מחדל למשתמש');
         return await createDefaultConfig(userId);
       }
       throw error;
@@ -210,7 +209,6 @@ export async function saveConfigToSupabase(userId, config) {
     configCache = config;
     localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
     
-    console.log('✅ קונפיגורציה נשמרה בהצלחה');
     return true;
   } catch (err) {
     console.error('❌ שגיאה בשמירת קונפיגורציה:', err);

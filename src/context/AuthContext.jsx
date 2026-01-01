@@ -8,7 +8,6 @@ export const AuthContext = createContext(null);
  * ספק אותנטיקציה
  */
 export function AuthProvider({ children }) {
-  console.log('🔐 AuthProvider rendering...');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
@@ -104,7 +103,6 @@ export function AuthProvider({ children }) {
             updateUser(null);
           }
         } else if (session && !currentUser) {
-          console.log('🔄 סשן נמצא, טוען משתמש מחדש');
           await initializeAuth();
         }
       } catch (err) {
@@ -115,7 +113,6 @@ export function AuthProvider({ children }) {
     // טיפול ב-visibility change - כשהדפדפן חוזר להיות פעיל
     visibilityHandler = () => {
       if (document.visibilityState === 'visible') {
-        console.log('👁️ דפדפן חזר להיות פעיל, בודק סשן...');
         checkSession();
       }
     };
@@ -142,7 +139,6 @@ export function AuthProvider({ children }) {
         async (event, session) => {
           if (!mounted) return;
 
-          console.log('אירוע אותנטיקציה:', event, session ? 'יש סשן' : 'אין סשן');
           
           // התעלם מאירועים לא חשובים שלא צריכים לעדכן את המשתמש
           if (event === 'TOKEN_REFRESHED' || event === 'SIGNED_IN') {

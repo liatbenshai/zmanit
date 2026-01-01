@@ -1,4 +1,3 @@
-console.log('⚡ main.jsx loading...');
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -8,7 +7,6 @@ import { TaskProvider } from './context/TaskContext';
 import { NotificationProvider } from './context/NotificationContext';
 import './styles/globals.css';
 
-console.log('🚀 Starting app render...');
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <BrowserRouter>
@@ -22,4 +20,3 @@ ReactDOM.createRoot(document.getElementById('root')).render(
   </BrowserRouter>
 );
 
-console.log('🚀 Render called');

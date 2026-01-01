@@ -394,7 +394,6 @@ export function addCustomTaskType(taskType) {
   };
   
   saveCustomTaskTypes(customTypes);
-  console.log(`✅ נוסף סוג משימה: ${taskType.name}`);
   
   return customTypes[id];
 }
@@ -427,7 +426,6 @@ export function deleteCustomTaskType(id) {
   
   delete customTypes[id];
   saveCustomTaskTypes(customTypes);
-  console.log(`🗑️ נמחק סוג משימה: ${id}`);
   
   return true;
 }

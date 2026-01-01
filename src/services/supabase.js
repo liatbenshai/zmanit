@@ -67,7 +67,6 @@ export const supabase = createClient(
 // Debug: check session on load
 if (typeof window !== 'undefined') {
   supabase.auth.getSession().then(({ data, error }) => {
-    console.log('🔑 Session on load:', {
       hasSession: !!data?.session,
       email: data?.session?.user?.email,
       error: error?.message
@@ -237,7 +236,6 @@ async function ensureUserExists(userId, email = null) {
     }
     
     if (existingUser) {
-      console.log('✅ משתמש קיים בטבלת users:', userId);
       return true;
     }
     
@@ -270,7 +268,6 @@ async function ensureUserExists(userId, email = null) {
       is_active: true
     };
     
-    console.log('📤 יוצר משתמש בטבלת users:', userData);
     
     const { error: insertError } = await supabase
       .from('users')
@@ -286,7 +283,6 @@ async function ensureUserExists(userId, email = null) {
       
       // אם זה unique constraint error, המשתמש כבר קיים (race condition)
       if (insertError.code === '23505' || insertError.message?.includes('unique')) {
-        console.log('✅ משתמש כבר קיים (race condition)');
         return true;
       }
       
@@ -294,7 +290,6 @@ async function ensureUserExists(userId, email = null) {
       throw insertError;
     }
     
-    console.log('✅ משתמש נוצר בהצלחה בטבלת users:', userId);
     return true;
   } catch (err) {
     console.error('❌ שגיאה ב-ensureUserExists:', err);
@@ -303,7 +298,6 @@ async function ensureUserExists(userId, email = null) {
 }
 
 export async function createTask(task) {
-  console.log('🔵 createTask נקרא עם:', task);
   
   // בדיקת סשן אם אין user_id
   if (!task.user_id) {
@@ -316,7 +310,6 @@ export async function createTask(task) {
     }
     if (session?.user?.id) {
       task.user_id = session.user.id;
-      console.log('✅ נמצא user_id מהסשן:', task.user_id);
     } else {
       const error = new Error('❌ חסר user_id ואין סשן פעיל!');
       console.error(error);
@@ -359,11 +352,8 @@ export async function createTask(task) {
     is_completed: task.is_completed || false
   };
   
-  console.log('💾 שומר משימה עם נתונים:', taskData);
   
   try {
-    console.log('📤 שולח insert ל-Supabase...');
-    console.log('📋 נתונים שנשלחים:', JSON.stringify(taskData, null, 2));
     
     // בדיקת סשן לפני insert
     const { data: { session: checkSession }, error: sessionCheckError } = await supabase.auth.getSession();
@@ -380,7 +370,6 @@ export async function createTask(task) {
       });
       throw new Error('❌ אין משתמש מחובר. אנא התחברי מחדש.');
     }
-    console.log('✅ סשן תקין לפני insert:', {
       userId: checkSession.user.id,
       email: checkSession.user.email,
       expiresAt: checkSession.expires_at
@@ -393,14 +382,12 @@ export async function createTask(task) {
         sessionUserId: checkSession.user.id
       });
       taskData.user_id = checkSession.user.id; // תיקון אוטומטי
-      console.log('✅ תוקן user_id:', taskData.user_id);
     }
     
     const insertStartTime = Date.now();
     let data, error;
     
     try {
-      console.log('⏳ ממתין לתגובה מ-Supabase...');
       
       // יצירת Promise עם timeout למניעת תקיעות
       const insertPromise = supabase
@@ -422,7 +409,6 @@ export async function createTask(task) {
       error = result.error;
       
       const insertDuration = Date.now() - insertStartTime;
-      console.log(`📥 תגובה מ-Supabase (לקח ${insertDuration}ms):`, { 
         hasData: !!data, 
         hasError: !!error,
         dataId: data?.id,
@@ -482,8 +468,6 @@ export async function createTask(task) {
       throw new Error('❌ המשימה לא נוצרה (אין data)');
     }
     
-    console.log('✅ משימה נוצרה בהצלחה:', data);
-    console.log('🆔 ID של המשימה החדשה:', data.id);
     return data;
     
   } catch (err) {
@@ -559,7 +543,6 @@ export async function updateTask(taskId, updates) {
     updateData.priority = updates.priority;
   }
   
-  console.log('📤 מעדכן משימה:', { taskId, updateData });
   
   // עדכון עם time_spent
   const { data, error } = await supabase
@@ -617,7 +600,6 @@ export async function deleteTask(taskId) {
     throw error;
   }
   
-  console.log('✅ משימה נמחקה');
 }
 
 /**
@@ -725,7 +707,6 @@ export async function createProjectTask(projectData) {
     is_completed: false
   };
   
-  console.log('יוצר משימת פרויקט:', projectTaskData);
   
   const { data: projectTask, error: taskError } = await supabase
     .from('tasks')
@@ -777,7 +758,6 @@ export async function createProjectTask(projectData) {
       
       const quadrant = getQuadrantByDate(st.dueDate, taskData.quadrant);
       
-      console.log(`יוצר משימה לשלב ${i + 1}:`, {
         title: `${taskData.title} - ${st.title}`,
         dueDate: st.dueDate,
         quadrant: quadrant
@@ -836,7 +816,6 @@ export async function createProjectTask(projectData) {
       }
     }
     
-    console.log(`נוצרו ${createdTasks.length} משימות לשלבים`);
   }
   
   // קבלת הפרויקט עם השלבים
@@ -1284,7 +1263,6 @@ export async function saveInterruption(interruptionData) {
     throw error;
   }
 
-  console.log('✅ הפרעה נשמרה:', data);
   return data;
 }
 

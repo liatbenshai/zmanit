@@ -86,16 +86,12 @@ export function smartScheduleWeek(weekStart, allTasks) {
   const weekEndISO = toLocalISODate(weekEnd);
   const weekStartISO = toLocalISODate(weekStart);
   
-  console.log('🚀 Smart Scheduler v3 - Starting week planning');
-  console.log(`📅 Week: ${weekStartISO} - ${weekEndISO}`);
-  console.log(`📅 Today: ${todayISO}`);
   
   // שלב 1: יצירת מבנה ימים
   const days = initializeDays(weekStart, config);
   
   // שלב 2: בדיקה אם זה שבוע בעבר
   if (weekEndISO < todayISO) {
-    console.log('⏪ שבוע בעבר - לא משבצים משימות');
     return {
       weekStart: weekStartISO,
       days: days.map(formatDayForOutput),
@@ -128,18 +124,13 @@ export function smartScheduleWeek(weekStart, allTasks) {
   });
   
   // 🔍 DEBUG: הצגת המשימות שמתקבלות
-  console.log('🔍 DEBUG - allTasks received:', allTasks.length);
-  console.log('🔍 DEBUG - pendingTasks after filter:', pendingTasks.length);
   
   // 🔍 DEBUG מורחב: הצגת כל האינטרוולים (כולל הושלמו)
   const allIntervals = allTasks.filter(t => t.parent_task_id);
-  console.log('🔍 DEBUG - ALL intervals (including completed):', allIntervals.length);
   allIntervals.forEach(t => {
-    console.log(`  📌 "${t.title}" | due: ${t.due_date} | completed: ${t.is_completed} | parent: ${t.parent_task_id?.slice(0,8)}`);
   });
   
   pendingTasks.forEach(t => {
-    console.log(`  📌 Task: "${t.title}" | id: ${t.id} | parent_task_id: ${t.parent_task_id || 'none'} | duration: ${t.estimated_duration} | completed: ${t.is_completed}`);
   });
   
   // אם זה שבוע עתידי (לא השבוע הנוכחי), לא משבצים
@@ -148,7 +139,6 @@ export function smartScheduleWeek(weekStart, allTasks) {
   const isFutureWeek = weekStartISO > todayISO;
   
   if (isFutureWeek) {
-    console.log('⏩ שבוע עתידי - מציג תצוגה מקדימה');
     // בשבוע עתידי, נציג רק משימות עם due_date בשבוע הזה
     const tasksForThisWeek = pendingTasks.filter(t => {
       if (!t.due_date) return false;
@@ -181,7 +171,6 @@ export function smartScheduleWeek(weekStart, allTasks) {
   }
   
   // שבוע נוכחי - שיבוץ רגיל
-  console.log(`✅ Pending tasks: ${pendingTasks.length}`);
   
   const sortedTasks = prioritizeTasks(pendingTasks, todayISO);
   
@@ -191,7 +180,6 @@ export function smartScheduleWeek(weekStart, allTasks) {
   // שלב 5: חישוב סטטיסטיקות
   const stats = calculateStats(days, schedulingResult, config);
   
-  console.log('📈 Week stats:', stats);
   
   return {
     weekStart: weekStartISO,
@@ -397,7 +385,6 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
   // סינון ימים - רק מהיום והלאה וימי עבודה
   const relevantDays = extendedDays.filter(d => d.date >= todayISO && d.isWorkDay);
   
-  console.log(`📅 ימים זמינים לשיבוץ: ${relevantDays.length} (כולל הרחבה)`);
   
   // ✅ תיקון: עדכון due_date של משימות באיחור להיום
   // כדי שאינטרוולים שה-due_date שלהם עבר יופיעו היום
@@ -409,7 +396,6 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
     
     // אם זה אינטרוול (יש parent_task_id) וה-due_date עבר
     if (task.parent_task_id && task.due_date && task.due_date < todayISO) {
-      console.log(`📅 עדכון אינטרוול באיחור: "${task.title}" מ-${task.due_date} להיום`);
       return {
         ...task,
         original_due_date: task.due_date,
@@ -529,7 +515,6 @@ function scheduleTask(task, days, taskProgress, config) {
     
     // בדיקת תאריך התחלה - לא לשבץ לפני start_date!
     if (task.start_date && day.date < task.start_date) {
-      console.log(`📅 דילוג על ${day.date} - משימה "${task.title}" מתחילה רק ב-${task.start_date}`);
       continue;
     }
     

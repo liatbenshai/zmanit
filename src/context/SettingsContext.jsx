@@ -125,7 +125,6 @@ export function SettingsProvider({ children }) {
       if (fetchError) {
         // אם אין רשומה - ניצור אחת
         if (fetchError.code === 'PGRST116') {
-          console.log('📝 Creating default settings for user');
           const { data: newData, error: insertError } = await supabase
             .from('user_settings')
             .insert({ user_id: user.id })

@@ -88,10 +88,8 @@ export function NotificationProvider({ children }) {
       if (saved) {
         const parsed = JSON.parse(saved);
         setSettings({ ...DEFAULT_SETTINGS, ...parsed });
-        console.log('📋 הגדרות התראות נטענו:', parsed);
       }
     } catch (err) {
-      console.log('משתמש בהגדרות ברירת מחדל');
     }
   }, [user?.id]);
 
@@ -114,7 +112,6 @@ export function NotificationProvider({ children }) {
     try {
       localStorage.setItem(`notification_settings_${user.id}`, JSON.stringify(newSettings));
       setSettings(newSettings);
-      console.log('✅ הגדרות התראות נשמרו:', newSettings);
       return true;
     } catch (err) {
       console.error('שגיאה בשמירת הגדרות:', err);
@@ -155,7 +152,6 @@ export function NotificationProvider({ children }) {
         } catch (e) {}
       }, 250);
     } catch (e) {
-      console.log('לא ניתן להשמיע צליל');
     }
   }, [settings.soundEnabled]);
 

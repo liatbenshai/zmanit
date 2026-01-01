@@ -66,7 +66,6 @@ function saveLearningData(data) {
  */
 export function recordTaskCompletion(taskType, estimatedMinutes, actualMinutes, taskTitle = '') {
   if (!taskType || !estimatedMinutes || !actualMinutes) {
-    console.log('⚠️ חסרים נתונים ללמידה:', { taskType, estimatedMinutes, actualMinutes });
     return;
   }
   
@@ -106,7 +105,6 @@ export function recordTaskCompletion(taskType, estimatedMinutes, actualMinutes, 
   
   saveLearningData(data);
   
-  console.log(`📊 למידה: ${taskType} | הערכה: ${estimatedMinutes} | בפועל: ${actualMinutes} | יחס: ${typeData.ratio.toFixed(2)}`);
   
   return typeData;
 }
@@ -231,7 +229,6 @@ function getTaskTypeName(taskType) {
  */
 export function resetLearningData() {
   localStorage.removeItem(STORAGE_KEY);
-  console.log('🗑️ נתוני למידה אופסו');
 }
 
 /**
@@ -267,7 +264,6 @@ export function correctActualTime(taskType, originalActual, correctedActual) {
   
   saveLearningData(data);
   
-  console.log(`✏️ תיקון למידה: ${taskType} | מקורי: ${originalActual} | מתוקן: ${correctedActual}`);
 }
 
 // Alias for Settings page
