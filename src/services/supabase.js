@@ -396,16 +396,6 @@ export async function createTask(task) {
       error = result.error;
       
       const insertDuration = Date.now() - insertStartTime;
-        hasData: !!data, 
-        hasError: !!error,
-        dataId: data?.id,
-        error: error ? {
-          message: error.message,
-          code: error.code,
-          details: error.details,
-          hint: error.hint
-        } : null
-      });
       
       if (insertDuration > 5000) {
         console.warn('⚠️ Insert לקח יותר מ-5 שניות!', insertDuration);
@@ -745,10 +735,6 @@ export async function createProjectTask(projectData) {
       
       const quadrant = getQuadrantByDate(st.dueDate, taskData.quadrant);
       
-        title: `${taskData.title} - ${st.title}`,
-        dueDate: st.dueDate,
-        quadrant: quadrant
-      });
       
       // יצירת משימה לשלב
       const stageTaskData = {
