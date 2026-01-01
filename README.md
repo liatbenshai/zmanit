@@ -1,113 +1,174 @@
-# תיקון זמנית - 1.1.2025
+# 🛠️ מערכת הגדרות מותאמות אישית
 
-## 🔧 מה תוקן
+מערכת מלאה להגדרות משתמש עם שמירה ב-Supabase.
 
-### 1. ✅ חדש: שמירת זמן בהשהיית טיימר!
-כשעוצרים באמצע בגלל הפרעה - **הזמן נשמר אוטומטית**:
-- לחיצה על "השהה" → שומר את הדקות שעבדת
-- מעבר למשימה אחרת → שומר אוטומטית
-- סגירת הדף → שומר אוטומטית
-- רענון → שומר אוטומטית
-
-### 2. ✅ חדש: שמירת הפרעות ב-DB לניתוח!
-- הפרעות נשמרות ב-Supabase (לא רק localStorage)
-- סוג ההפרעה, זמן, ומשימה שהופסקה
-- דוח ניתוח הפרעות מהדשבורד
-- סטטיסטיקות: סה"כ, לפי סוג, ממוצע
-
-### 3. הוספת משימות מהדשבורד - תכנון שבועי
-- כפתור "הוסף עבודה חדשה" פותח טופס מלא
-- **בורר ימים שבועי** - לחיצה על יום פותחת טופס עם התאריך הנבחר
-- מאפשר תכנון שבועי ישירות מהדשבורד
-
-### 4. דיאלוג בחירת שיבוץ למשימות ארוכות
-
-### 5. תיקון שגיאת הגדרות (409 Conflict)
-
-### 6. תיקון עדכון ימי עבודה
-
-### 7. תיקון שיבוץ משימות שלא נכנסות
-
-### 8. תיקון "משוך להיום" / "העבר למחר"
-
----
-
-## 📦 קבצים בחבילה
+## 📁 מבנה הקבצים
 
 ```
-sql/
-└── create_interruptions_table.sql  ← ✅ חדש! טבלה ב-Supabase
-
-src/
-├── components/
-│   ├── Admin/
-│   │   └── AdminSettings.jsx
-│   ├── Dashboard/
-│   │   ├── Dashboard.jsx           ← תכנון שבועי + ניתוח הפרעות
-│   │   └── InterruptionsTracker.jsx ← ✅ חדש! שמירה ב-DB
-│   ├── DailyView/
-│   │   └── SimpleTaskForm.jsx
-│   └── Tasks/
-│       ├── TaskTimer.jsx           ← שמירה בהשהייה
-│       └── TaskTimerWithInterruptions.jsx
-├── config/
-│   └── appConfig.js
-├── services/
-│   └── taskIntervals.js
-└── utils/
-    ├── autoRescheduleDaily.js
-    └── smartScheduler.js
+settings-system/
+├── migrations/
+│   └── 001_user_settings.sql    # טבלת הגדרות ב-Supabase
+├── src/
+│   ├── context/
+│   │   └── SettingsContext.jsx  # Context להגדרות
+│   ├── hooks/
+│   │   └── useSettings.js       # Hook לשימוש בהגדרות
+│   └── components/
+│       └── Settings/
+│           ├── index.js
+│           ├── SettingsPage.jsx           # דף ראשי
+│           ├── TaskTypesSettings.jsx      # סוגי משימות
+│           ├── CategoriesSettings.jsx     # קטגוריות
+│           ├── WorkScheduleSettings.jsx   # ימים ושעות
+│           ├── NotificationsSettings.jsx  # התראות
+│           ├── DisplaySettings.jsx        # תצוגה
+│           └── TimerSettings.jsx          # טיימר
 ```
 
----
-
-## 📋 התקנה
+## 🚀 שלבי התקנה
 
 ### שלב 1: יצירת טבלה ב-Supabase
-1. לך ל-Supabase → SQL Editor
-2. העתק את התוכן של `sql/create_interruptions_table.sql`
-3. הרץ את הקוד
 
-### שלב 2: עדכון הקוד
-1. העתיקי את תיקיית `src/` לפרויקט
-2. רענני עם `Ctrl+Shift+R`
+1. פתחי את Supabase Dashboard
+2. לכי ל-SQL Editor
+3. העתיקי והריצי את הקוד מ-`migrations/001_user_settings.sql`
 
----
+### שלב 2: העתקת קבצים
 
-## ⏸️ ניתוח הפרעות
+העתיקי את הקבצים לפרויקט:
 
-### סוגי הפרעות שנשמרים:
-| סוג | אייקון |
-|-----|--------|
-| שיחת לקוח | 📞 |
-| שיחת טלפון אחרת | 📱 |
-| פגישה לא מתוכננת | 👥 |
-| הסחת דעת | 🎯 |
-| הפסקה | ☕ |
-| בעיה טכנית | 🔧 |
-| משימה דחופה | 🚨 |
-| אחר | ❓ |
+```bash
+# Context
+cp src/context/SettingsContext.jsx → src/context/
 
-### מה נשמר:
-- סוג ההפרעה
-- זמן (שניות)
-- שעת התחלה/סיום
-- שם המשימה שהופסקה
-- הערות
+# Hook
+cp src/hooks/useSettings.js → src/hooks/
 
-### איפה רואים את הניתוח:
-דשבורד → **⏸️ ניתוח הפרעות**
+# Components
+cp src/components/Settings/* → src/components/Settings/
+```
 
----
+### שלב 3: עדכון App.jsx
 
-## ⏱️ איך הטיימר עובד עכשיו:
+עטפי את האפליקציה ב-SettingsProvider:
 
-| פעולה | מה קורה |
-|-------|---------|
-| ⏸️ השהה | **שומר את הזמן** + הודעה "X דקות נשמרו" |
-| ⏹️ עצור | שומר + מאפס |
-| 🔄 מעבר למשימה אחרת | שומר אוטומטית |
-| ❌ סגירת דף | שומר אוטומטית |
-| 🔃 רענון | משחזר + שומר |
+```jsx
+import { SettingsProvider } from './context/SettingsContext';
 
-**הערה:** אם עבדת פחות מדקה, לא נשמר (אבל תראי הודעה)
+function App() {
+  return (
+    <AuthProvider>
+      <SettingsProvider>
+        <TaskProvider>
+          {/* שאר האפליקציה */}
+        </TaskProvider>
+      </SettingsProvider>
+    </AuthProvider>
+  );
+}
+```
+
+### שלב 4: הוספת נתיב להגדרות
+
+ב-Router או בניווט:
+
+```jsx
+import { SettingsPage } from './components/Settings';
+
+// בנתיבים
+<Route path="/settings" element={<SettingsPage />} />
+
+// או כמודל
+{showSettings && <SettingsPage onClose={() => setShowSettings(false)} />}
+```
+
+### שלב 5: שימוש בהגדרות
+
+```jsx
+import { useSettings } from '../hooks/useSettings';
+
+function MyComponent() {
+  const { 
+    taskTypes,           // סוגי משימות
+    categories,          // קטגוריות
+    workDays,            // ימי עבודה
+    workHours,           // שעות עבודה
+    getTaskType,         // קבלת סוג משימה
+    getTaskTypes,        // כל הסוגים (ממוינים)
+    updateSettings,      // עדכון הגדרות
+    addTaskType,         // הוספת סוג
+    updateTaskType,      // עדכון סוג
+    deleteTaskType,      // מחיקת סוג
+    minutesToTime,       // 510 → "08:30"
+    timeToMinutes,       // "08:30" → 510
+    isWorkDay,           // בדיקה אם יום עבודה
+  } = useSettings();
+
+  // שימוש
+  const types = getTaskTypes(); // מערך ממוין
+  const type = getTaskType('transcription'); // סוג ספציפי
+}
+```
+
+## ✨ פיצ'רים
+
+### 🏷️ סוגי משימות
+- הוספה/עריכה/מחיקה
+- בחירת אייקון וצבע
+- משך ברירת מחדל
+- שיוך לקטגוריה
+- סדר הצגה
+
+### 📁 קטגוריות
+- עבודה, מיזם, משפחה, אישי
+- הוספה של קטגוריות מותאמות
+- אייקונים וצבעים
+
+### 📅 לוח זמנים
+- הפעלה/כיבוי ימי עבודה
+- שעות התחלה וסיום לכל יום
+- משך בלוק והפסקה
+- חלונות בוקר/אחה"צ
+
+### 🔔 התראות
+- תזכורת לפני משימה
+- סיכום בוקר
+- תזכורת הפסקה
+- סיום יום עבודה
+- צלילים ורטט
+
+### 🎨 תצוגה
+- ערכת נושא (בהיר/כהה/מערכת)
+- תצוגת ברירת מחדל
+- הצגת משימות שהושלמו
+- מצב קומפקטי
+
+### ⏱️ טיימר
+- התחלה/השלמה אוטומטית
+- הצגה בכותרת הדף
+- מצב פומודורו מלא
+
+## 🔧 עדכון smartScheduler
+
+כדי שה-smartScheduler ישתמש בהגדרות המותאמות:
+
+```javascript
+// ב-smartScheduler.js
+import { DEFAULT_SETTINGS } from '../context/SettingsContext';
+
+// או - העברת הגדרות כפרמטר
+export function smartScheduleWeek(weekStart, allTasks, userSettings = DEFAULT_SETTINGS) {
+  const config = {
+    dayStart: userSettings.work_hours.dayStart,
+    dayEnd: userSettings.work_hours.dayEnd,
+    // ...
+  };
+}
+```
+
+## 📝 הערות
+
+- ההגדרות נשמרות אוטומטית ב-Supabase
+- משתמש חדש מקבל ברירות מחדל
+- אם אין חיבור - נעשה שימוש בברירות מחדל מקומיות
+- שינויים בהגדרות משפיעים מיד על כל האפליקציה
