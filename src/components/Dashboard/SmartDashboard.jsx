@@ -8,7 +8,8 @@ import { getLearningStats } from '../../utils/taskLearning';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import DailySummary from '../Analytics/DailySummary';
 import WeeklyReview from '../Analytics/WeeklyReview';
-import AdminSettings from '../Admin/AdminSettings'; // ✅ חדש: הגדרות
+import AdminSettings from '../Admin/AdminSettings';
+import InterruptionsTracker from './InterruptionsTracker'; // ✅ חדש
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
@@ -31,6 +32,8 @@ const MOTIVATIONAL_QUOTES = [
  * דשבורד חכם - עמוד הבית
  * ✅ משודרג עם מוטיבציה, סטריק, ועיצוב מרהיב
  * ✅ הוספת משימות לכל השבוע (לא רק להיום)
+ * ✅ כפתור הוספת עבודה חדשה
+ * ✅ ניתוח הפרעות
  */
 function SmartDashboard() {
   const { tasks, loading, toggleComplete, loadTasks } = useTasks();
@@ -38,13 +41,14 @@ function SmartDashboard() {
   
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [selectedDateForNewTask, setSelectedDateForNewTask] = useState(null); // ✅ תאריך לבחירה
+  const [selectedDateForNewTask, setSelectedDateForNewTask] = useState(null);
   const [dailyQuote, setDailyQuote] = useState(null);
   const [streak, setStreak] = useState(0);
   const [learningStats, setLearningStats] = useState(null);
-  const [showDailySummary, setShowDailySummary] = useState(false); // ✅ סיכום יומי
-  const [showWeeklySummary, setShowWeeklySummary] = useState(false); // ✅ סיכום שבועי
-  const [showSettings, setShowSettings] = useState(false); // ✅ חדש: הגדרות מערכת
+  const [showDailySummary, setShowDailySummary] = useState(false);
+  const [showWeeklySummary, setShowWeeklySummary] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showInterruptions, setShowInterruptions] = useState(false); // ✅ חדש
 
   // תאריכים
   const today = new Date();
@@ -416,6 +420,22 @@ function SmartDashboard() {
         </motion.div>
       )}
 
+      {/* ✅ כפתור הוספת עבודה חדשה */}
+      <motion.button
+        initial={{ opacity: 0, scale: 0.9 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ delay: 0.22 }}
+        onClick={() => {
+          setSelectedDateForNewTask(todayISO);
+          setEditingTask(null);
+          setShowTaskForm(true);
+        }}
+        className="w-full mb-4 bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium"
+      >
+        <span className="text-xl">📥</span>
+        <span>הוסף עבודה חדשה</span>
+      </motion.button>
+
       {/* ✅ תכנון השבוע - הוספת משימות */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -656,7 +676,7 @@ function SmartDashboard() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.6 }}
-        className="mt-4 grid grid-cols-2 gap-3"
+        className="mt-4 grid grid-cols-3 gap-3"
       >
         <button
           onClick={() => setShowDailySummary(true)}
@@ -671,6 +691,14 @@ function SmartDashboard() {
         >
           <span className="text-xl">📈</span>
           <span>סיכום השבוע</span>
+        </button>
+        {/* ✅ כפתור ניתוח הפרעות */}
+        <button
+          onClick={() => setShowInterruptions(true)}
+          className="flex items-center justify-center gap-2 p-4 bg-gradient-to-l from-orange-500 to-red-600 text-white rounded-xl font-medium hover:from-orange-600 hover:to-red-700 transition-all shadow-sm"
+        >
+          <span className="text-xl">⏸️</span>
+          <span>ניתוח הפרעות</span>
         </button>
       </motion.div>
 
@@ -746,6 +774,20 @@ function SmartDashboard() {
             maxWidth="max-w-4xl"
           >
             <AdminSettings onClose={() => setShowSettings(false)} />
+          </Modal>
+        )}
+      </AnimatePresence>
+
+      {/* ✅ מודל ניתוח הפרעות */}
+      <AnimatePresence>
+        {showInterruptions && (
+          <Modal
+            isOpen={showInterruptions}
+            onClose={() => setShowInterruptions(false)}
+            title="⏸️ ניתוח הפרעות"
+            maxWidth="max-w-2xl"
+          >
+            <InterruptionsTracker />
           </Modal>
         )}
       </AnimatePresence>
