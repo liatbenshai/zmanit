@@ -34,11 +34,6 @@ function WeeklyPlanner() {
     date.setDate(today.getDate() - dayOfWeek + (weekOffset * 7));
     date.setHours(0, 0, 0, 0);
     
-      today: today.toISOString(),
-      todayDay: dayOfWeek,
-      weekStart: date.toISOString(),
-      weekOffset
-    });
     
     return date;
   }, [weekOffset]);
@@ -49,19 +44,8 @@ function WeeklyPlanner() {
   // תכנון שבועי - משתמש במנוע החכם
   const plan = useMemo(() => {
     if (!tasks) return null;
-      id: t.id,
-      title: t.title,
-      duration: t.estimated_duration,
-      due: t.due_date,
-      completed: t.is_completed
-    })));
-    
     const weekPlan = smartScheduleWeek(weekStart, tasks);
     
-    weekPlan.days.forEach(day => {
-      day.blocks?.forEach(b => {
-      });
-    });
     
     return weekPlan;
   }, [tasks, weekStart]);

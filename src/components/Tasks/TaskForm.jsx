@@ -219,12 +219,6 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
 
     // אימות
     const validation = validateTaskForm(formData);
-      title: formData.title,
-      quadrant: formData.quadrant,
-      dueDate: formData.dueDate,
-      dueTime: formData.dueTime
-    });
-    
     if (!validation.valid) {
       console.error('❌ האימות נכשל:', validation.errors);
       console.error('📋 שגיאות מפורטות:', JSON.stringify(validation.errors, null, 2));

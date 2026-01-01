@@ -288,6 +288,7 @@ export function TaskProvider({ children }) {
       console.error('❌ לא נמצאה משימה:', taskId);
       return;
     }
+    
 
     try {
       const newCompleteStatus = !task.is_completed;

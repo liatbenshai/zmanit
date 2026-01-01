@@ -32,7 +32,6 @@ export function proactivePlan(allTasks, startDate = new Date(), daysAhead = 14) 
   
   // סינון משימות פעילות בלבד
   const pendingTasks = allTasks.filter(t => !t.is_completed);
-  
   // מיון משימות לפי דחיפות (קרוב יותר = דחוף יותר)
   const sortedTasks = sortByUrgency(pendingTasks);
   
