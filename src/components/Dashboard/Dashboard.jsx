@@ -12,6 +12,7 @@ import ClientTracker from '../Analytics/ClientTracker';
 import DailySummary from '../Analytics/DailySummary';
 import TimeGapsReport from '../Analytics/TimeGapsReport';
 import WorkPreferences from '../Settings/WorkPreferences';
+import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 
 /**
  * שעות העבודה
@@ -113,6 +114,10 @@ function Dashboard({ onNavigate }) {
   const [showPreferences, setShowPreferences] = useState(false);
   const [showDailySummary, setShowDailySummary] = useState(false);
   const [showTimeGaps, setShowTimeGaps] = useState(false);
+  
+  // ✅ חדש: מודל הוספת משימה עם תכנון שבועי
+  const [showAddTask, setShowAddTask] = useState(false);
+  const [selectedTaskDate, setSelectedTaskDate] = useState(null);
   
   // עדכון שעה כל דקה
   useEffect(() => {
@@ -521,12 +526,66 @@ function Dashboard({ onNavigate }) {
           initial={{ opacity: 0, scale: 0.9 }}
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.6 }}
-          onClick={() => onNavigate?.('addWork')}
+          onClick={() => {
+            setSelectedTaskDate(today);
+            setShowAddTask(true);
+          }}
           className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium"
         >
           <span className="text-xl">📥</span>
           <span>הוסף עבודה חדשה</span>
         </motion.button>
+
+        {/* ✅ תכנון שבועי - בורר ימים מהיר */}
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ delay: 0.65 }}
+          className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow border border-gray-100 dark:border-gray-700"
+        >
+          <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+            <span>📆</span> הוסף משימה ליום...
+          </h3>
+          <div className="flex gap-2 overflow-x-auto pb-2">
+            {(() => {
+              const days = [];
+              const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+              for (let i = 0; i < 7; i++) {
+                const date = new Date();
+                date.setDate(date.getDate() + i);
+                const dateISO = date.toISOString().split('T')[0];
+                const dayNum = date.getDay();
+                const isWeekend = dayNum === 5 || dayNum === 6;
+                const isToday = i === 0;
+                
+                days.push(
+                  <button
+                    key={dateISO}
+                    onClick={() => {
+                      setSelectedTaskDate(dateISO);
+                      setShowAddTask(true);
+                    }}
+                    disabled={isWeekend}
+                    className={`
+                      flex-shrink-0 w-14 py-2 px-1 rounded-lg text-center transition-all
+                      ${isWeekend 
+                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                        : isToday
+                          ? 'bg-blue-500 text-white hover:bg-blue-600'
+                          : 'bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300'
+                      }
+                    `}
+                  >
+                    <div className="text-xs opacity-75">{dayNames[dayNum]}</div>
+                    <div className="font-bold">{date.getDate()}</div>
+                    {isToday && <div className="text-[10px]">היום</div>}
+                  </button>
+                );
+              }
+              return days;
+            })()}
+          </div>
+        </motion.div>
 
         {/* כפתורי דוחות והגדרות */}
         <motion.div
@@ -642,6 +701,21 @@ function Dashboard({ onNavigate }) {
         <TimeGapsReport 
           tasks={tasks}
           onClose={() => setShowTimeGaps(false)}
+        />
+      </Modal>
+
+      {/* ✅ חדש: מודל הוספת משימה */}
+      <Modal
+        isOpen={showAddTask}
+        onClose={() => setShowAddTask(false)}
+        title={`➕ הוסף משימה ${selectedTaskDate === today ? 'להיום' : `ל-${new Date(selectedTaskDate + 'T00:00:00').toLocaleDateString('he-IL', { weekday: 'long', day: 'numeric', month: 'numeric' })}`}`}
+      >
+        <SimpleTaskForm
+          defaultDate={selectedTaskDate}
+          onClose={() => {
+            setShowAddTask(false);
+            loadTasks();
+          }}
         />
       </Modal>
     </div>
