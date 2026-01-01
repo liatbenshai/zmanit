@@ -264,6 +264,7 @@ export function calculateAutoReschedule(tasks, editTask) {
 
 /**
  * ביצוע הדחיות האוטומטיות
+ * ✅ תיקון: שומר את כל נתוני המשימה המקוריים
  */
 export async function executeAutoReschedule(editTask, rescheduleData) {
   const { today, tomorrow, tasksToMoveToTomorrow, tasksToMoveToToday } = rescheduleData;
@@ -276,6 +277,16 @@ export async function executeAutoReschedule(editTask, rescheduleData) {
       task,
       action: 'moveToTomorrow',
       promise: editTask(task.id, {
+        // ✅ שומר את כל הנתונים המקוריים
+        title: task.title,
+        description: task.description,
+        quadrant: task.quadrant,
+        estimated_duration: task.estimated_duration,
+        task_type: task.task_type,
+        task_parameter: task.task_parameter,
+        priority: task.priority,
+        reminder_minutes: task.reminder_minutes,
+        // ✅ משנה רק את התאריכים
         due_date: tomorrow,
         start_date: task.start_date === today ? tomorrow : task.start_date,
         due_time: null // איפוס השעה - יתוזמן מחדש
@@ -289,6 +300,16 @@ export async function executeAutoReschedule(editTask, rescheduleData) {
       task,
       action: 'moveToToday',
       promise: editTask(task.id, {
+        // ✅ שומר את כל הנתונים המקוריים
+        title: task.title,
+        description: task.description,
+        quadrant: task.quadrant,
+        estimated_duration: task.estimated_duration,
+        task_type: task.task_type,
+        task_parameter: task.task_parameter,
+        priority: task.priority,
+        reminder_minutes: task.reminder_minutes,
+        // ✅ משנה רק את התאריכים
         due_date: today,
         start_date: task.start_date === tomorrow ? today : task.start_date,
         due_time: null
