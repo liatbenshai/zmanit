@@ -59,16 +59,13 @@ function AutoScheduler() {
 
   const calculateSchedule = () => {
     try {
-      console.log('📅 AutoScheduler: מחשב תכנון עבור', tasks.length, 'משימות');
       
       if (viewMode === 'day') {
         const daySchedule = scheduleDay(tasks, selectedDate, workPatterns, []);
-        console.log('📅 תכנון יום:', daySchedule);
         setSchedule(daySchedule);
       } else {
         const weekStart = startOfWeek(selectedDate, { weekStartsOn: 0 });
         const weekSchedule = scheduleWeek(tasks, weekStart, workPatterns, []);
-        console.log('📅 תכנון שבוע:', weekSchedule);
         setSchedule(weekSchedule);
       }
     } catch (err) {

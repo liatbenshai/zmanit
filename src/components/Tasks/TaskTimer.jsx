@@ -18,7 +18,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     if (found) {
       // אם time_spent השתנה, נדווח
       if (found.time_spent !== task.time_spent) {
-        console.log('🔄 TaskTimer: משימה עודכנה מה-context', {
           id: found.id,
           time_spent_old: task.time_spent,
           time_spent_new: found.time_spent
@@ -123,7 +122,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         const elapsed = Math.floor((now - start) / 1000);
 
         if (elapsed > 0) {
-          console.log('⏰ נמצא טיימר פעיל ב-localStorage:', {
             startTime: start.toISOString(),
             elapsedSeconds: elapsed,
             elapsedMinutes: Math.floor(elapsed / 60)
@@ -137,7 +135,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
           if (savedOriginalStartTime) {
             const originalStart = new Date(savedOriginalStartTime);
             setOriginalStartTime(originalStart);
-            console.log('⏰ זמן התחלה מקורי נטען:', originalStart.toISOString());
           } else {
             // אם אין, נשתמש ב-startTime כ-originalStartTime
             setOriginalStartTime(start);
@@ -152,7 +149,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
             if (saveProgressRef.current) {
               const minutesToSave = Math.floor(elapsed / 60);
               if (minutesToSave > 0) {
-                console.log('💾 שומר זמן שצבר אחרי רענון:', minutesToSave, 'דקות');
                 saveProgressRef.current(false, true).catch(err => {
                   console.warn('⚠️ שמירה אוטומטית אחרי רענון נכשלה:', err);
                 });
@@ -203,7 +199,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
 
         if (elapsed > elapsedSeconds) {
           const diffMinutes = Math.floor((elapsed - elapsedSeconds) / 60);
-          console.log('👁️ דפדפן חזר להיות פעיל - עדכון זמן:', {
             elapsedSeconds,
             newElapsed: elapsed,
             diffMinutes
@@ -305,7 +300,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         // שמירת זמן התחלה ב-localStorage
         if (currentTask?.id) {
           localStorage.setItem(timerStorageKey, now.toISOString());
-          console.log('💾 זמן התחלה נשמר ב-localStorage:', now.toISOString());
         }
       }
       // שמירת זמן התחלה מקורי (אם עדיין לא נשמר)
@@ -314,7 +308,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         // שמירה ב-localStorage
         if (currentTask?.id) {
           localStorage.setItem(`${timerStorageKey}_original`, now.toISOString());
-          console.log('⏰ זמן התחלה מקורי נשמר:', now.toISOString());
         }
       }
       setIsRunning(true);
@@ -365,7 +358,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     // ניקוי מ-localStorage
     if (currentTask?.id) {
       localStorage.removeItem(timerStorageKey);
-      console.log('🗑️ זמן התחלה נמחק מ-localStorage');
     }
     
     setElapsedSeconds(0);
@@ -383,7 +375,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     if (currentTask?.id) {
       localStorage.removeItem(timerStorageKey);
       localStorage.removeItem(`${timerStorageKey}_original`);
-      console.log('🗑️ זמן התחלה נמחק מ-localStorage (reset)');
     }
   };
 
@@ -409,7 +400,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         const currentTimeSpent = (latestTask.time_spent) ? parseInt(latestTask.time_spent) : 0;
         const newTimeSpent = currentTimeSpent + minutesToAdd;
         
-        console.log('💾 saveProgress:', { 
           minutesToAdd, 
           actualElapsedSeconds,
           elapsedSeconds,
@@ -423,7 +413,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         });
         
         // עדכון המשימה דרך TaskContext - זה יעדכן גם את ה-DB וגם את ה-state
-        console.log('📤 שולח עדכון ל-Supabase:', {
           taskId: latestTask.id,
           currentTimeSpent,
           minutesToAdd,
@@ -447,7 +436,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
           // עדכון localStorage
           if (currentTask?.id) {
             localStorage.setItem(timerStorageKey, now.toISOString());
-            console.log('🔄 startTime אופס אחרי שמירה:', now.toISOString());
           }
           // מאפסים את elapsedSeconds כי הזמן כבר נשמר
           setElapsedSeconds(0);
@@ -495,7 +483,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     
     // אם עברנו למשימה אחרת וטיימר היה רץ
     if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
-      console.log('🔄 עוברים משימה - שומר זמן אוטומטית:', {
         prevId,
         newId,
         elapsedSeconds: elapsedSecondsRef.current
@@ -521,7 +508,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     return () => {
       // cleanup - שמור אם יש זמן
       if (isRunningRef.current && elapsedSecondsRef.current >= 60 && saveProgressRef.current) {
-        console.log('💾 שומר זמן לפני unmount:', elapsedSecondsRef.current, 'שניות');
         saveProgressRef.current(true, true).catch(err => {
           console.warn('⚠️ שמירה לפני unmount נכשלה:', err);
         });
@@ -534,7 +520,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     const handleBeforeUnload = (e) => {
       // אם יש זמן שצבר, נשמור אותו
       if (isRunning && elapsedSeconds > 0 && saveProgressRef.current) {
-        console.log('💾 שומר זמן לפני סגירת הדף...');
         // נשתמש ב-sendBeacon אם אפשר, אחרת ננסה לשמור רגיל
         const minutesToSave = Math.floor(elapsedSeconds / 60);
         if (minutesToSave > 0) {
@@ -704,7 +689,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
               </Button>
               <Button
                 onClick={async () => {
-                  console.log('🟢 לחיצה על: שמור וסיים (אחרי הגעה ליעד)');
                   try {
                     const result = await saveProgress(true, true); // reset + skipUpdate
                     if (result && result.success) {
@@ -777,7 +761,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                 {/* כפתור מהיר - שומר ומסמן כהושלם */}
                 <Button
                   onClick={async () => {
-                    console.log('🟢 לחיצה על: שמור וסמן כהושלם');
                     
                     try {
                       // שמירה עם retry במקרה של timeout
@@ -787,7 +770,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                       
                       while (attempts < maxAttempts && (!result || !result.success)) {
                         attempts++;
-                        console.log(`💾 ניסיון שמירה ${attempts}/${maxAttempts}...`);
                         
                         try {
                           result = await saveProgress(true, true);
@@ -804,11 +786,9 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                       }
                       
                       if (result && result.success) {
-                        console.log('✅ שמירה הצליחה:', result);
                         resetTimer();
                         
                         if (onComplete) {
-                          console.log('🎯 מסמן משימה כהושלמה');
                           // סימון המשימה כהושלמה - זה יעדכן הכל
                           try {
                             await onComplete();
@@ -851,7 +831,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                 <div className="flex gap-2">
                   <Button
                     onClick={async () => {
-                      console.log('💾 לחיצה על: רק שמור');
                       const result = await saveProgress(true, true); // reset + skipUpdate
                       if (result && result.success) {
                         resetTimer();

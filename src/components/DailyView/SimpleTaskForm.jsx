@@ -416,7 +416,6 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     setLoading(true);
     
     try {
-      console.log('📝 Creating task:', {
         ...taskData,
         blocksForToday,
         blocksCount
@@ -488,7 +487,6 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null
     };
 
-    console.log('📝 SimpleTaskForm - Preparing task:', {
       taskType: formData.taskType,
       calculatedDuration,
       blocksCount,

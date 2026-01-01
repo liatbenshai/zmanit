@@ -11,7 +11,6 @@ function TimeAnalytics() {
   
   // חישוב סטטיסטיקות זמן
   const timeStats = useMemo(() => {
-    console.log('⏱️ TimeAnalytics: מחשב סטטיסטיקות עבור', tasks.length, 'משימות');
     
     const now = new Date();
     const last7Days = subDays(now, 7);

@@ -27,17 +27,14 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
 
   // קבלת המשימה העדכנית
   const currentTask = useMemo(() => {
-    console.log('⏱️ TaskTimerWithInterruptions - קיבלתי:', {
       taskProp: task ? { id: task.id, title: task.title } : 'null',
       tasksCount: tasks?.length
     });
     
     if (!task || !task.id) {
-      console.log('⏱️ אין משימה או אין ID');
       return null;
     }
     const found = tasks.find(t => t.id === task.id);
-    console.log('⏱️ משימה נמצאה:', found ? 'כן' : 'לא');
     return found || task;
   }, [tasks, task?.id]);
 
@@ -268,7 +265,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
           ended_at: new Date().toISOString(),
           task_title: currentTask?.title || null
         });
-        console.log('✅ הפרעה נשמרה ב-DB');
       } catch (err) {
         console.error('❌ שגיאה בשמירת הפרעה:', err);
         // ממשיכים גם אם השמירה נכשלה
@@ -289,12 +285,8 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
 
   // שמירת התקדמות
   const saveProgress = async (reset = false) => {
-    console.log('💾 saveProgress called, reset:', reset);
-    console.log('💾 currentTask:', currentTask ? { id: currentTask.id, title: currentTask.title } : 'null');
-    console.log('💾 elapsedSeconds:', elapsedSeconds);
     
     if (savingRef.current) {
-      console.log('💾 Already saving, skip');
       return;
     }
     savingRef.current = true;
@@ -308,10 +300,8 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     }
 
     const minutesToAdd = Math.floor(elapsedSeconds / 60);
-    console.log('💾 minutesToAdd:', minutesToAdd);
     
     if (minutesToAdd < 1) {
-      console.log('💾 Less than 1 minute, skip');
       savingRef.current = false;
       if (reset) {
         // אם ביקשו reset, לפחות לאפס את הטיימר
@@ -323,9 +313,7 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
 
     try {
       const newTimeSpent = timeSpent + minutesToAdd;
-      console.log('💾 Saving newTimeSpent:', newTimeSpent);
       await updateTaskTime(currentTask.id, newTimeSpent);
-      console.log('💾 Save successful!');
 
       // תיעוד פרודוקטיביות
       try {
@@ -336,7 +324,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
           interruption: interruptions.length > 0
         });
       } catch (e) {
-        console.log('Productivity tracking not available');
       }
 
       // שמירת היסטוריית הפרעות
@@ -386,7 +373,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     const newId = currentTask?.id;
     
     if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
-      console.log('🔄 עוברים משימה - שומר זמן:', {
         prevId,
         newId,
         elapsedSeconds: elapsedSecondsRef.current
@@ -411,7 +397,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   useEffect(() => {
     return () => {
       if (isRunningRef.current && elapsedSecondsRef.current >= 60 && saveProgressRef.current) {
-        console.log('💾 שומר זמן לפני unmount:', elapsedSecondsRef.current, 'שניות');
         saveProgressRef.current(true).catch(err => {
           console.warn('⚠️ שמירה לפני unmount נכשלה:', err);
         });
@@ -441,10 +426,8 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   const stopAndSaveRef = useRef(null);
   
   const stopAndSave = async (e) => {
-    console.log('⏹ stopAndSave called');
     if (e) e.stopPropagation();
     const result = await saveProgress(true);
-    console.log('⏹ saveProgress result:', result);
     if (result?.success) {
       toast.success(`💾 נשמר! ${result.minutesToAdd} דקות נוספו`);
     }
@@ -523,7 +506,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   }, [isRunning]);
 
   if (!currentTask) {
-    console.log('⏱️ אין currentTask - מציג הודעת "בחרי משימה"');
     return (
       <div className="p-4 text-center text-gray-500">
         בחרי משימה להתחיל
@@ -531,7 +513,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     );
   }
 
-  console.log('⏱️ מציג טיימר למשימה:', currentTask.title);
 
   // עוצר כל לחיצה מלהגיע ל-div ההורה (שסוגר/פותח את הכרטיס)
   const handleContainerClick = (e) => {
@@ -650,7 +631,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
                   </Button>
                   <Button
                     onClick={(e) => {
-                      console.log('⏹ Stop button clicked!');
                       stopAndSave(e);
                     }}
                     className="flex-1 bg-red-500 hover:bg-red-600 text-white"

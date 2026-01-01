@@ -34,7 +34,6 @@ function WeeklyPlanner() {
     date.setDate(today.getDate() - dayOfWeek + (weekOffset * 7));
     date.setHours(0, 0, 0, 0);
     
-    console.log('📅 Week calculation:', {
       today: today.toISOString(),
       todayDay: dayOfWeek,
       weekStart: date.toISOString(),
@@ -50,8 +49,6 @@ function WeeklyPlanner() {
   // תכנון שבועי - משתמש במנוע החכם
   const plan = useMemo(() => {
     if (!tasks) return null;
-    console.log('🔄 WeeklyPlanner calling smartScheduleWeek');
-    console.log('📋 Tasks from DB:', tasks.map(t => ({
       id: t.id,
       title: t.title,
       duration: t.estimated_duration,
@@ -61,11 +58,8 @@ function WeeklyPlanner() {
     
     const weekPlan = smartScheduleWeek(weekStart, tasks);
     
-    console.log('📊 Week plan result:');
     weekPlan.days.forEach(day => {
-      console.log(`  ${day.date} (${day.dayName}): ${day.blocks?.length || 0} blocks, ${day.usagePercent}% usage`);
       day.blocks?.forEach(b => {
-        console.log(`    - ${b.startTime}-${b.endTime}: ${b.title} (${b.duration}min)`);
       });
     });
     
@@ -113,7 +107,6 @@ function WeeklyPlanner() {
 
   // הפעלת טיימר למשימה
   const handleStartTimer = (task) => {
-    console.log('🎬 handleStartTimer called with:', task);
     if (!task) {
       console.error('❌ No task provided to handleStartTimer');
       return;
@@ -680,7 +673,6 @@ function TaskSlot({ slot, onEdit, onComplete, onStartTimer, compact = false }) {
 
   const handleStartTimer = (e) => {
     e.stopPropagation();
-    console.log('▶ TaskSlot handleStartTimer:', { task, onStartTimer: !!onStartTimer });
     if (task && onStartTimer) {
       onStartTimer();
     }

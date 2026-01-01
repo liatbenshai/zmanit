@@ -171,7 +171,6 @@ function ProjectTaskForm({ defaultQuadrant = 1, onClose }) {
 
     setLoading(true);
     try {
-      console.log('יוצר פרויקט עם שלבים:', { formData, subtasks });
       await addProjectTask({
         ...formData,
         subtasks

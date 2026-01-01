@@ -22,7 +22,6 @@ function HabitTracker() {
   // ניתוח הרגלים
   const habitsAnalysis = useMemo(() => {
     if (!tasks || tasks.length === 0) {
-      console.log('📊 Habits: אין משימות');
       return null;
     }
 
@@ -35,10 +34,8 @@ function HabitTracker() {
       return isCompleted && hasCompletedAt;
     });
     
-    console.log(`📊 Habits: מצאתי ${completedTasks.length} משימות שהושלמו מתוך ${tasks.length}`);
     
     if (completedTasks.length === 0) {
-      console.log('📊 Habits: אין משימות שהושלמו');
       return null;
     }
     

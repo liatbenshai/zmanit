@@ -17,7 +17,6 @@ function WorkloadAnalysis() {
 
   useEffect(() => {
     if (!tasks || tasks.length === 0) {
-      console.log('⚖️ WorkloadAnalysis: אין משימות');
       setAnalysis({
         totalTasks: 0,
         overdueTasks: 0,
@@ -36,9 +35,7 @@ function WorkloadAnalysis() {
     }
 
     try {
-      console.log('⚖️ WorkloadAnalysis: מנתח', tasks.length, 'משימות');
       const workload = analyzeWorkload(tasks, [], selectedDate);
-      console.log('⚖️ ניתוח עומס:', workload);
       setAnalysis(workload);
       setError(null);
       

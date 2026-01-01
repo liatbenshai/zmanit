@@ -61,7 +61,6 @@ function playSound(type) {
     gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
     oscillator.stop(audioContext.currentTime + 0.5);
   } catch (e) {
-    console.log('Sound not available');
   }
 }
 

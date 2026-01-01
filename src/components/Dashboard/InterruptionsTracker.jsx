@@ -146,7 +146,6 @@ function InterruptionsTracker() {
           taskTitle: int.task_title
         }));
         setInterruptions(formatted);
-        console.log(`✅ נטענו ${formatted.length} הפרעות מ-DB`);
       }
     } catch (err) {
       console.error('שגיאה בטעינת הפרעות:', err);
@@ -183,7 +182,6 @@ function InterruptionsTracker() {
         list.unshift(interruptionRecord);
         localStorage.setItem(`interruptions_${user.id}`, JSON.stringify(list));
       } else {
-        console.log('✅ הפרעה נשמרה ל-DB');
       }
     } catch (err) {
       console.error('שגיאה בשמירה:', err);

@@ -25,7 +25,6 @@ function isTimerRunning(taskId) {
       const data = JSON.parse(saved);
       const running = data.isRunning && !data.isInterrupted;
       if (running) {
-        console.log(`✅ טיימר רץ על משימה ${taskId}`);
       }
       return running;
     }
@@ -44,7 +43,6 @@ function getActiveTaskId(tasks) {
   
   for (const task of tasks) {
     if (isTimerRunning(task.id)) {
-      console.log(`🏃 משימה פעילה נמצאה: ${task.id} - ${task.title}`);
       return task.id;
     }
   }
@@ -57,7 +55,6 @@ function getActiveTaskId(tasks) {
         const data = JSON.parse(localStorage.getItem(key));
         if (data.isRunning && !data.isInterrupted) {
           const taskId = key.replace('timer_v2_', '');
-          console.log(`🔍 נמצא טיימר רץ ב-localStorage: ${taskId}`);
           return taskId;
         }
       }
@@ -218,7 +215,6 @@ function NotificationChecker() {
   // בדיקת משימות ושליחת התראות
   const checkAndNotify = useCallback(() => {
     if (permission !== 'granted') {
-      console.log('⚠️ NotificationChecker: אין הרשאה להתראות');
       return;
     }
     
@@ -235,7 +231,6 @@ function NotificationChecker() {
     const repeatEveryMinutes = settings?.repeatEveryMinutes || 10;
     const notifyOnTime = settings?.notifyOnTime !== false;
 
-    console.log(`🔔 בודק ${tasks.length} משימות (${now.toLocaleTimeString('he-IL')}) | תאריך: ${today}`);
 
     // ✅ עדכון רשימת המשימות שהושלמו
     tasks.forEach(task => {
@@ -247,12 +242,10 @@ function NotificationChecker() {
     // ✅ תיקון חדש: בדיקה אם יש משימה פעילה עכשיו
     const activeTaskId = getActiveTaskId(tasks);
     if (activeTaskId) {
-      console.log(`⏱️ יש משימה פעילה: ${activeTaskId} - לא נשלח התראות "הגיע הזמן" למשימות אחרות`);
     }
 
     // ✅ חישוב לו"ז דינמי פעם אחת (מחוץ ל-loop)
     const dynamicSchedule = calculateDynamicSchedule(tasks, currentMinutes);
-    console.log(`📅 לו"ז דינמי: ${dynamicSchedule.size} משימות`);
 
     let notificationsSent = 0;
 
@@ -271,7 +264,6 @@ function NotificationChecker() {
         // התראה 5 דקות לפני סיום
         if (remaining > 0 && remaining <= 5) {
           if (canNotify(task.id, 'endingSoon', 5)) {
-            console.log(`⏳ הזמן עומד להיגמר: ${task.title} (נשארו ${remaining} דק')`);
             sendNotification(`⏳ ${task.title}`, {
               body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
               tag: `task-ending-${task.id}`
@@ -284,7 +276,6 @@ function NotificationChecker() {
         // התראה כשהזמן נגמר (אבל עדיין עובדים)
         if (remaining <= 0 && remaining > -2) {
           if (canNotify(task.id, 'timeUp', 5)) {
-            console.log(`🔔 הזמן נגמר: ${task.title}`);
             sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
               body: 'הזמן המוקצב הסתיים. לסיים או להמשיך?',
               tag: `task-timeup-${task.id}`
@@ -298,7 +289,6 @@ function NotificationChecker() {
         if (remaining < -2) {
           if (canNotify(task.id, 'overtime', repeatEveryMinutes)) {
             const overtimeMinutes = Math.abs(remaining);
-            console.log(`⚠️ חריגה מהזמן: ${task.title} (+${overtimeMinutes} דק')`);
             sendNotification(`⚠️ חריגה: ${task.title}`, {
               body: `חרגת ב-${overtimeMinutes} דקות מהזמן המוקצב`,
               tag: `task-overtime-${task.id}`
@@ -312,7 +302,6 @@ function NotificationChecker() {
       // === התראות על זמן התחלה - לפי לו"ז דינמי! ===
       // ✅ תיקון: אם המשימה הזו היא המשימה הפעילה - לא צריך התראות "הגיע הזמן"
       if (activeTaskId === task.id) {
-        console.log(`⏭️ דילוג על התראות התחלה ל"${task.title}" - זו המשימה הפעילה!`);
         return; // עוברים למשימה הבאה
       }
       
@@ -328,18 +317,15 @@ function NotificationChecker() {
       const diff = taskSchedule.startMinutes - currentMinutes; // חיובי = עתידי
       const endDiff = taskSchedule.endMinutes - currentMinutes; // מתי המשימה אמורה להסתיים
       
-      console.log(`📋 ${task.title}: מתוכנן ${minutesToTimeString(taskSchedule.startMinutes)}-${minutesToTimeString(taskSchedule.endMinutes)} | diff=${diff} דק'`);
 
       // === התראה לפני המשימה ===
       if (diff > 0 && diff <= reminderMinutes) {
         // אם יש משימה פעילה אחרת - לא מתריעים
         if (activeTaskId && activeTaskId !== task.id) {
-          console.log(`⏭️ דילוג על התראה מקדימה ל"${task.title}" - עובדים על משימה אחרת`);
           return;
         }
         
         if (canNotify(task.id, 'before', reminderMinutes)) {
-          console.log(`⏰ התראה לפני: ${task.title} (בעוד ${diff} דק')`);
           sendNotification(`⏰ ${task.title}`, {
             body: `מתחיל בעוד ${diff} דקות (${minutesToTimeString(taskSchedule.startMinutes)})`,
             tag: `task-before-${task.id}`
@@ -353,12 +339,10 @@ function NotificationChecker() {
       if (notifyOnTime && diff >= -1 && diff <= 1) {
         // אם יש משימה פעילה אחרת - לא מתריעים
         if (activeTaskId && activeTaskId !== task.id) {
-          console.log(`⏭️ דילוג על התראת "הגיע הזמן" ל"${task.title}" - עובדים על משימה אחרת`);
           return;
         }
         
         if (canNotify(task.id, 'onTime', 5)) {
-          console.log(`🔔 התראה בזמן: ${task.title}`);
           sendNotification(`🔔 ${task.title}`, {
             body: `הגיע הזמן להתחיל! (${taskSchedule.duration} דק')`,
             tag: `task-ontime-${task.id}`
@@ -372,7 +356,6 @@ function NotificationChecker() {
       // אם המשימה אמורה להסתיים בעוד 5 דקות (לפי הלו"ז)
       if (!isTimerRunning(task.id) && endDiff > 0 && endDiff <= 5) {
         if (canNotify(task.id, 'shouldEnd', 5)) {
-          console.log(`⏳ המשימה אמורה להסתיים בקרוב: ${task.title} (בעוד ${endDiff} דק')`);
           sendNotification(`⏳ ${task.title}`, {
             body: `לפי הלו"ז, המשימה אמורה להסתיים ב-${minutesToTimeString(taskSchedule.endMinutes)}`,
             tag: `task-shouldend-${task.id}`
@@ -387,25 +370,21 @@ function NotificationChecker() {
       if (diff < -1 && diff > -30) { // בין 1 דקה ל-30 דקות באיחור
         // אם יש משימה פעילה - לא מתריעים על איחור
         if (activeTaskId) {
-          console.log(`⏭️ דילוג על התראת איחור ל"${task.title}" - יש משימה פעילה`);
           return;
         }
         
         // אם כבר עבדו על המשימה - לא מתריעים
         if (task.time_spent && task.time_spent > 0) {
-          console.log(`⏭️ דילוג על "${task.title}" - כבר עבדו עליה (${task.time_spent} דקות)`);
           return;
         }
         
         // בדיקה אם הטיימר רץ (ב-localStorage)
         if (isTimerRunning(task.id)) {
-          console.log(`⏭️ דילוג על "${task.title}" - טיימר פעיל`);
           return;
         }
         
         if (canNotify(task.id, 'late', repeatEveryMinutes)) {
           const lateMinutes = Math.abs(Math.round(diff));
-          console.log(`⏰ התראה על איחור: ${task.title} (${lateMinutes} דק' באיחור)`);
           sendNotification(`⏰ ${task.title}`, {
             body: `היית אמור להתחיל לפני ${lateMinutes} דקות`,
             tag: `task-late-${task.id}`
@@ -417,18 +396,15 @@ function NotificationChecker() {
     });
 
     if (notificationsSent > 0) {
-      console.log(`📤 נשלחו ${notificationsSent} התראות`);
     }
   }, [tasks, permission, settings, canNotify, markNotified, sendNotification]);
 
   // הפעלת בדיקה תקופתית
   useEffect(() => {
     if (permission !== 'granted') {
-      console.log('⚠️ NotificationChecker: ממתין להרשאת התראות');
       return;
     }
 
-    console.log('🚀 NotificationChecker: מתחיל בדיקת התראות תקופתית');
 
     // בדיקה ראשונית מיידית
     checkAndNotify();
@@ -441,7 +417,6 @@ function NotificationChecker() {
     return () => {
       if (checkIntervalRef.current) {
         clearInterval(checkIntervalRef.current);
-        console.log('⏹️ NotificationChecker: הופסקה בדיקת התראות');
       }
     };
   }, [permission, checkAndNotify]);

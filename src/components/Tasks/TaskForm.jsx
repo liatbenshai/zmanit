@@ -50,7 +50,6 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
 
   // בדיקת חפיפות בזמן אמת
   const conflictInfo = useMemo(() => {
-    console.log('🔍 בדיקת חפיפות:', {
       dueDate: formData.dueDate,
       dueTime: formData.dueTime,
       estimatedDuration: formData.estimatedDuration,
@@ -66,7 +65,6 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
     });
     
     if (!formData.dueDate || !formData.dueTime || isEditing) {
-      console.log('⏭️ דילוג על בדיקת חפיפות - חסרים נתונים');
       return null;
     }
     
@@ -77,15 +75,12 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
     };
     
     const overlapping = findOverlappingTasks(newTask, tasks);
-    console.log('🔄 תוצאת חפיפות:', overlapping);
     
     const availableMinutes = getAvailableMinutesForDay(formData.dueDate, tasks);
-    console.log('⏰ דקות פנויות:', availableMinutes);
     
     const isOverloaded = availableMinutes < newTask.estimatedDuration;
     
     if (overlapping.length > 0 || isOverloaded) {
-      console.log('⚠️ נמצאה חפיפה!', { overlapping: overlapping.length, isOverloaded });
       return {
         hasConflict: true,
         overlappingTasks: overlapping,
@@ -94,7 +89,6 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
         overloadAmount: isOverloaded ? newTask.estimatedDuration - availableMinutes : 0
       };
     }
-    console.log('✅ אין חפיפות');
     return null;
   }, [formData.dueDate, formData.dueTime, formData.estimatedDuration, tasks, isEditing]);
 
@@ -222,13 +216,9 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-    console.log('🟢 handleSubmit נקרא');
-    console.log('📋 formData:', formData);
 
     // אימות
     const validation = validateTaskForm(formData);
-    console.log('🔍 תוצאת אימות:', validation);
-    console.log('📝 formData שנשלח לאימות:', {
       title: formData.title,
       quadrant: formData.quadrant,
       dueDate: formData.dueDate,
@@ -261,19 +251,13 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
           return;
         }
         
-        console.log('✏️ עורך משימה קיימת:', task.id);
         const result = await editTask(task.id, formData);
-        console.log('✅ תוצאת עריכה:', result);
         toast.success('המשימה עודכנה');
       } else {
-        console.log('➕ מוסיף משימה חדשה:', formData);
-        console.log('👤 User:', user?.id);
         const result = await addTask(formData);
-        console.log('✅ תוצאת הוספה:', result);
         toast.success('✅ המשימה נוספה בהצלחה!');
       }
       
-      console.log('✨ הכל עבר בהצלחה, סוגר טופס');
       
       // סגירת הטופס תמיד צריכה לקרות - גם אם יש שגיאה
       setLoading(false); // וידוא שהספינר נעלם לפני סגירה
@@ -281,7 +265,6 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
       // המתנה קצרה כדי שהמשתמש יראה את ההודעה
       setTimeout(() => {
         if (typeof onClose === 'function') {
-          console.log('🔒 קורא ל-onClose');
           onClose();
         } else {
           console.error('⚠️ onClose is not a function!', typeof onClose);

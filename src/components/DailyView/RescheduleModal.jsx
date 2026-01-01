@@ -114,7 +114,6 @@ function RescheduleModal({ isOpen, onClose, overdueBlocks, allBlocks, selectedDa
       return;
     }
     
-    console.log('🔄 Starting reschedule to date:', actualDate);
     setProcessing(true);
     
     try {
@@ -132,7 +131,6 @@ function RescheduleModal({ isOpen, onClose, overdueBlocks, allBlocks, selectedDa
           }
         });
       
-      console.log('📋 Tasks to reschedule:', [...uniqueTaskIds]);
       
       // עדכון כל משימה
       let successCount = 0;
@@ -140,14 +138,12 @@ function RescheduleModal({ isOpen, onClose, overdueBlocks, allBlocks, selectedDa
       
       for (const taskId of uniqueTaskIds) {
         try {
-          console.log(`📝 Rescheduling task ${taskId} to ${actualDate}`);
           await editTask(taskId, {
             due_date: actualDate,
             start_date: actualDate,
             due_time: null // השעה תחושב מחדש
           });
           successCount++;
-          console.log(`✅ Task ${taskId} rescheduled successfully`);
         } catch (err) {
           console.error(`❌ Error rescheduling task ${taskId}:`, err);
           errors.push({ taskId, error: err.message });

@@ -236,6 +236,22 @@ function DailyView() {
   const [googleEvents, setGoogleEvents] = useState([]);
   const [showGoogleMenu, setShowGoogleMenu] = useState(false);
   
+  // ✅ טעינה אוטומטית של אירועי גוגל כשמשנים תאריך
+  useEffect(() => {
+    const loadGoogleEventsForDate = async () => {
+      if (!isGoogleConnected || isGoogleLoading) return;
+      
+      try {
+        const events = await importDayEvents(selectedDate);
+        setGoogleEvents(events);
+      } catch (err) {
+        // שגיאה שקטה - לא נציג הודעה כי זה קורה ברקע
+      }
+    };
+    
+    loadGoogleEventsForDate();
+  }, [selectedDate, isGoogleConnected, isGoogleLoading, importDayEvents]);
+  
   // שעה נוכחית
   const [currentTime, setCurrentTime] = useState(() => {
     const now = new Date();
@@ -279,7 +295,6 @@ function DailyView() {
     const info = calculateAutoReschedule(tasks, editTask);
     setRescheduleInfo(info);
     
-    console.log('📊 Auto-reschedule info:', {
       remainingToday: info.remainingToday,
       timeNeededToday: info.timeNeededToday,
       freeTimeToday: info.freeTimeToday,
@@ -334,14 +349,11 @@ function DailyView() {
   const weekPlan = useMemo(() => {
     if (!tasks || tasks.length === 0) return null;
     const weekStart = getWeekStart(selectedDate);
-    console.log('📅 DailyView: Computing week plan from', getDateISO(weekStart));
     
     // 🔍 DEBUG: הצגת כל האינטרוולים של משימות עם parent
     const intervals = tasks.filter(t => t.parent_task_id && !t.is_completed);
     if (intervals.length > 0) {
-      console.log('🔍 DEBUG - All intervals (not completed):');
       intervals.forEach(t => {
-        console.log(`  📌 "${t.title}" | due_date: ${t.due_date} | parent: ${t.parent_task_id?.slice(0,8)}`);
       });
     }
     
@@ -356,11 +368,9 @@ function DailyView() {
     const dayPlan = weekPlan.days.find(d => d.date === dateISO);
     
     if (!dayPlan) {
-      console.log('📅 No plan found for', dateISO);
       return { blocks: [], tasks: [] };
     }
     
-    console.log('📅 Day plan for', dateISO, ':', dayPlan.blocks?.length || 0, 'blocks');
     return {
       blocks: dayPlan.blocks || [],
       usagePercent: dayPlan.usagePercent || 0,
@@ -674,8 +684,36 @@ function DailyView() {
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
   
-  // מיון בלוקים
-  const allBlocks = [...(selectedDayData.blocks || [])].sort((a, b) => {
+  // ✅ המרת אירועי גוגל לפורמט של בלוקים
+  const googleBlocks = googleEvents
+    .filter(e => !e.isZmanitTask) // רק אירועים חיצוניים
+    .map(event => {
+      const startTime = event.startTime instanceof Date 
+        ? event.startTime 
+        : new Date(event.startTime);
+      const endTime = event.endTime instanceof Date 
+        ? event.endTime 
+        : new Date(event.endTime);
+      
+      const durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
+      
+      return {
+        id: `google-${event.id}`,
+        taskId: `google-${event.id}`,
+        title: event.title,
+        startTime: startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        endTime: endTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
+        duration: durationMinutes,
+        isGoogleEvent: true,
+        isCompleted: false,
+        taskType: 'google_calendar',
+        icon: '📅',
+        isLocked: true // אירועי גוגל לא ניתנים לגרירה
+      };
+    });
+  
+  // מיון בלוקים - כולל אירועי גוגל
+  const allBlocks = [...(selectedDayData.blocks || []), ...googleBlocks].sort((a, b) => {
     if (a.startTime && b.startTime) {
       const aTime = a.startTime.split(':').map(Number);
       const bTime = b.startTime.split(':').map(Number);
@@ -723,20 +761,23 @@ function DailyView() {
     }
   }
   
-  // ✅ מיון לפי סדר שמור (אם יש)
+  // ✅ מיון לפי סדר שמור (אם יש) - רק משימות רגילות, לא אירועי גוגל
   const dateISO = getDateISO(selectedDate);
-  activeBlocks = sortTasksByOrder(activeBlocks.map(b => ({
+  const regularBlocks = activeBlocks.filter(b => !b.isGoogleEvent);
+  const googleCalendarBlocks = activeBlocks.filter(b => b.isGoogleEvent);
+  
+  let sortedRegularBlocks = sortTasksByOrder(regularBlocks.map(b => ({
     ...b,
     id: b.taskId || b.id,
-    parentId: b.parentId || b.task?.parent_task_id, // ✅ העברת parentId
-    blockIndex: b.blockIndex, // ✅ העברת blockIndex
-    isRunning: isTimerRunning(b.taskId || b.task?.id || b.id) // ✅ סימון משימה פעילה
+    parentId: b.parentId || b.task?.parent_task_id,
+    blockIndex: b.blockIndex,
+    isRunning: isTimerRunning(b.taskId || b.task?.id || b.id)
   })), dateISO);
   
-  // חישוב זמנים מחדש
+  // חישוב זמנים מחדש - רק למשימות רגילות
   let nextStartMinutes = isViewingToday ? currentTime.minutes : WORK_HOURS.start * 60;
   
-  const rescheduledBlocks = activeBlocks.map(block => {
+  const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
     const duration = block.duration || 30;
     const startMinutes = nextStartMinutes;
     const endMinutes = startMinutes + duration;
@@ -754,13 +795,55 @@ function DailyView() {
     };
   });
   
+  // ✅ אירועי גוגל שומרים על הזמנים המקוריים שלהם
+  const googleEventsWithOriginalTimes = googleCalendarBlocks.map(block => ({
+    ...block,
+    isPostponed: false,
+    isRescheduled: false
+  }));
+  
+  // ✅ מיזוג: משימות רגילות + אירועי גוגל, ממוינים לפי זמן התחלה
+  const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleEventsWithOriginalTimes].sort((a, b) => {
+    const aTime = a.startTime?.split(':').map(Number) || [0, 0];
+    const bTime = b.startTime?.split(':').map(Number) || [0, 0];
+    return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
+  });
+  
   const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
   const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
 
   // ===============================
   // רנדור כרטיס עם גרירה
   // ===============================
-  const renderDraggableCard = (block, index, blocksArray) => (
+  const renderDraggableCard = (block, index, blocksArray) => {
+    // ✅ רנדור מיוחד לאירועי גוגל - לא ניתן לגרירה
+    if (block.isGoogleEvent) {
+      return (
+        <motion.div
+          key={block.id || `google-${index}`}
+          layout
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl border-2 border-blue-300 dark:border-blue-700 border-dashed"
+        >
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">📅</span>
+            <div className="flex-1">
+              <h4 className="font-medium text-blue-900 dark:text-blue-100">{block.title}</h4>
+              <p className="text-sm text-blue-600 dark:text-blue-300">
+                {block.startTime} - {block.endTime} • יומן גוגל
+              </p>
+            </div>
+            <div className="text-xs text-blue-500 dark:text-blue-400 bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded-full">
+              {block.duration} דק׳
+            </div>
+          </div>
+        </motion.div>
+      );
+    }
+    
+    // רנדור רגיל למשימות
+    return (
     <motion.div
       key={block.id || block.taskId || `block-${index}`}
       layout
@@ -826,6 +909,7 @@ function DailyView() {
       />
     </motion.div>
   );
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-4">
