@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
+import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
 import { smartScheduleWeek } from '../../utils/smartScheduler';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
@@ -184,9 +185,24 @@ function formatMinutes(minutes) {
   return `${hours}:${String(mins).padStart(2, '0')} שעות`;
 }
 
+// =====================================
+// Google Icon Component
+// =====================================
+function GoogleIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24">
+      <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/>
+      <path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/>
+      <path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/>
+      <path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/>
+    </svg>
+  );
+}
+
 /**
  * תצוגת יום עבודה - מסך ראשי חדש
  * ✅ כולל גרירה לשינוי סדר משימות
+ * ✅ כולל סנכרון יומן גוגל
  */
 function DailyView() {
   const { user } = useAuth();
@@ -202,6 +218,23 @@ function DailyView() {
   // ✅ גרירה לשינוי סדר
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
+  
+  // ✅ Google Calendar
+  const { 
+    isConnected: isGoogleConnected, 
+    isLoading: isGoogleLoading,
+    isSyncing: isGoogleSyncing,
+    connect: connectGoogle,
+    disconnect: disconnectGoogle,
+    exportTasks: exportToGoogle,
+    importDayEvents,
+    calendars,
+    selectedCalendarId,
+    setSelectedCalendarId
+  } = useGoogleCalendar();
+  
+  const [googleEvents, setGoogleEvents] = useState([]);
+  const [showGoogleMenu, setShowGoogleMenu] = useState(false);
   
   // שעה נוכחית
   const [currentTime, setCurrentTime] = useState(() => {
@@ -418,6 +451,54 @@ function DailyView() {
     setShowTaskForm(false);
     setEditingTask(null);
     loadTasks();
+  };
+
+  // ===============================
+  // ✅ Google Calendar Functions
+  // ===============================
+  
+  const handleExportToGoogle = async () => {
+    if (!isGoogleConnected) {
+      connectGoogle();
+      return;
+    }
+    
+    // ייצוא כל הבלוקים שלא הושלמו
+    const blocksToExport = (selectedDayData.blocks || [])
+      .filter(b => !b.isCompleted)
+      .map(b => ({
+        ...b,
+        date: getDateISO(selectedDate)
+      }));
+    
+    if (blocksToExport.length === 0) {
+      toast.error('אין משימות לייצוא');
+      return;
+    }
+    
+    await exportToGoogle(blocksToExport);
+    setShowGoogleMenu(false);
+  };
+  
+  const handleImportFromGoogle = async () => {
+    if (!isGoogleConnected) {
+      connectGoogle();
+      return;
+    }
+    
+    const events = await importDayEvents(selectedDate);
+    setGoogleEvents(events);
+    
+    // סינון אירועים שאינם מזמנית
+    const externalEvents = events.filter(e => !e.isZmanitTask);
+    
+    if (externalEvents.length > 0) {
+      toast.success(`📥 יובאו ${externalEvents.length} אירועים מיומן גוגל`);
+    } else {
+      toast.success('אין אירועים חדשים ביומן');
+    }
+    
+    setShowGoogleMenu(false);
   };
 
   // ===============================
@@ -756,7 +837,104 @@ function DailyView() {
       >
         {/* כותרת */}
         <div className="flex items-center justify-between mb-4">
-          <div></div>
+          {/* ✅ כפתור יומן גוגל */}
+          <div className="relative">
+            <button
+              onClick={() => setShowGoogleMenu(!showGoogleMenu)}
+              disabled={isGoogleLoading}
+              className={`
+                flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm
+                ${isGoogleConnected
+                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
+                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                }
+              `}
+            >
+              {isGoogleLoading || isGoogleSyncing ? (
+                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
+              ) : (
+                <GoogleIcon />
+              )}
+              <span>{isGoogleConnected ? 'יומן גוגל' : 'חבר יומן'}</span>
+              <span className="text-xs">▼</span>
+            </button>
+            
+            {/* תפריט יומן גוגל */}
+            <AnimatePresence>
+              {showGoogleMenu && (
+                <motion.div
+                  initial={{ opacity: 0, y: -10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50"
+                >
+                  {isGoogleConnected ? (
+                    <>
+                      {/* בחירת יומן */}
+                      {calendars.length > 0 && (
+                        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
+                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">יומן:</label>
+                          <select
+                            value={selectedCalendarId}
+                            onChange={(e) => setSelectedCalendarId(e.target.value)}
+                            className="w-full text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
+                          >
+                            {calendars.map(cal => (
+                              <option key={cal.id} value={cal.id}>
+                                {cal.summary} {cal.primary && '(ראשי)'}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      )}
+                      
+                      <button
+                        onClick={handleExportToGoogle}
+                        disabled={isGoogleSyncing}
+                        className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                      >
+                        <span>📤</span>
+                        <span>ייצא משימות ליומן</span>
+                      </button>
+                      
+                      <button
+                        onClick={handleImportFromGoogle}
+                        disabled={isGoogleSyncing}
+                        className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                      >
+                        <span>📥</span>
+                        <span>ייבא מיומן גוגל</span>
+                      </button>
+                      
+                      <div className="border-t border-gray-200 dark:border-gray-700">
+                        <button
+                          onClick={() => {
+                            disconnectGoogle();
+                            setShowGoogleMenu(false);
+                          }}
+                          className="w-full px-4 py-3 text-right hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors flex items-center gap-2"
+                        >
+                          <span>🔌</span>
+                          <span>נתק יומן גוגל</span>
+                        </button>
+                      </div>
+                    </>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        connectGoogle();
+                        setShowGoogleMenu(false);
+                      }}
+                      className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
+                    >
+                      <GoogleIcon />
+                      <span>התחבר עם Google</span>
+                    </button>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
           
           {!isToday(selectedDate) && (
             <button
@@ -805,6 +983,37 @@ function DailyView() {
           שעות עבודה: 08:30 - 16:15
         </p>
       </motion.div>
+
+      {/* ✅ אירועים מיובאים מגוגל */}
+      {googleEvents.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-800"
+        >
+          <h4 className="font-medium text-orange-800 dark:text-orange-200 mb-2 flex items-center gap-2">
+            <GoogleIcon />
+            <span>אירועים מיומן גוגל ({googleEvents.filter(e => !e.isZmanitTask).length})</span>
+          </h4>
+          
+          <div className="space-y-1">
+            {googleEvents.filter(e => !e.isZmanitTask).map(event => (
+              <div
+                key={event.id}
+                className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 bg-white dark:bg-gray-800 rounded-lg px-3 py-2"
+              >
+                <span>📌</span>
+                <span className="font-medium flex-1">{event.title}</span>
+                <span className="text-orange-500 dark:text-orange-400">
+                  {event.startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                  {' - '}
+                  {event.endTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+            ))}
+          </div>
+        </motion.div>
+      )}
 
       {/* סרגל זמן */}
       <motion.div
@@ -1093,6 +1302,14 @@ function DailyView() {
         allBlocks={rescheduledBlocks}
         selectedDate={selectedDate}
       />
+      
+      {/* סגירת תפריט גוגל בלחיצה מחוץ */}
+      {showGoogleMenu && (
+        <div 
+          className="fixed inset-0 z-40" 
+          onClick={() => setShowGoogleMenu(false)}
+        />
+      )}
     </div>
   );
 }
