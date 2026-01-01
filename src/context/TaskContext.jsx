@@ -192,6 +192,7 @@ export function TaskProvider({ children }) {
       const taskType = updates.taskType ?? updates.task_type ?? null;
       const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
       
+      
       const updatedTask = await updateTask(taskId, {
         title: updates.title,
         description: updates.description || null,
@@ -287,13 +288,6 @@ export function TaskProvider({ children }) {
       console.error('❌ לא נמצאה משימה:', taskId);
       return;
     }
-    
-      id: task.id, 
-      title: task.title, 
-      is_completed: task.is_completed,
-      parent_task_id: task.parent_task_id,
-      isInterval: !!task.parent_task_id
-    });
 
     try {
       const newCompleteStatus = !task.is_completed;
