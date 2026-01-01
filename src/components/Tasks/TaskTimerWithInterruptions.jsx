@@ -61,6 +61,12 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   const intervalRef = useRef(null);
   const interruptionIntervalRef = useRef(null);
   const savingRef = useRef(false);
+  
+  // ✅ Refs לשמירה על unmount ומעבר משימה
+  const saveProgressRef = useRef(null);
+  const elapsedSecondsRef = useRef(0);
+  const isRunningRef = useRef(false);
+  const previousTaskIdRef = useRef(currentTask?.id);
 
   // מפתח localStorage
   const timerStorageKey = currentTask ? `timer_v2_${currentTask.id}` : null;
@@ -190,12 +196,26 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     toast.success('▶ התחלנו לעבוד!');
   };
 
-  // השהיה
-  const pauseTimer = (e) => {
+  // השהיה - ✅ תיקון: שמירת הזמן לפני השהייה
+  const pauseTimer = async (e) => {
     if (e) e.stopPropagation();
     setIsRunning(false);
     setIsPaused(true);
-    toast('⏸ טיימר מושהה');
+    
+    // ✅ שמירת הזמן שעבד עד עכשיו
+    if (elapsedSeconds >= 60) {
+      const result = await saveProgress(false);
+      if (result && result.success) {
+        toast.success(`⏸️ הושהה! ${result.minutesToAdd} דקות נשמרו`, {
+          duration: 3000,
+          icon: '💾'
+        });
+      } else {
+        toast('⏸ טיימר מושהה');
+      }
+    } else {
+      toast('⏸ טיימר מושהה (פחות מדקה - לא נשמר עדיין)');
+    }
   };
 
   // המשך
@@ -350,6 +370,54 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
       return { success: false, error: err };
     }
   };
+
+  // ✅ שמירת הפונקציה ב-ref
+  saveProgressRef.current = saveProgress;
+  
+  // ✅ עדכון refs לשמירה
+  useEffect(() => {
+    elapsedSecondsRef.current = elapsedSeconds;
+    isRunningRef.current = isRunning;
+  }, [elapsedSeconds, isRunning]);
+  
+  // ✅ שמירה כשעוברים משימה
+  useEffect(() => {
+    const prevId = previousTaskIdRef.current;
+    const newId = currentTask?.id;
+    
+    if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
+      console.log('🔄 עוברים משימה - שומר זמן:', {
+        prevId,
+        newId,
+        elapsedSeconds: elapsedSecondsRef.current
+      });
+      
+      if (saveProgressRef.current) {
+        saveProgressRef.current(true).catch(err => {
+          console.warn('⚠️ שמירה בעת מעבר משימה נכשלה:', err);
+        });
+      }
+      
+      // איפוס
+      setIsRunning(false);
+      setElapsedSeconds(0);
+      setStartTime(null);
+    }
+    
+    previousTaskIdRef.current = newId;
+  }, [currentTask?.id]);
+  
+  // ✅ שמירה כשהקומפוננטה מתפרקת
+  useEffect(() => {
+    return () => {
+      if (isRunningRef.current && elapsedSecondsRef.current >= 60 && saveProgressRef.current) {
+        console.log('💾 שומר זמן לפני unmount:', elapsedSecondsRef.current, 'שניות');
+        saveProgressRef.current(true).catch(err => {
+          console.warn('⚠️ שמירה לפני unmount נכשלה:', err);
+        });
+      }
+    };
+  }, []);
 
   // איפוס
   const resetTimer = (e) => {

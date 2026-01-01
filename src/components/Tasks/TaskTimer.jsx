@@ -322,9 +322,23 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     }
   };
   
-  const pauseTimer = () => {
+  const pauseTimer = async () => {
     setIsRunning(false);
-    toast.success('טיימר הושהה - יכול לעבור למשימה אחרת');
+    
+    // ✅ שמירת הזמן שעבד עד עכשיו
+    if (elapsedSeconds >= 60) {
+      const result = await saveProgress(false, true); // שמירה בלי איפוס
+      if (result && result.success) {
+        toast.success(`⏸️ הושהה! ${result.minutesToAdd} דקות נשמרו`, {
+          duration: 3000,
+          icon: '💾'
+        });
+      } else {
+        toast.success('טיימר הושהה');
+      }
+    } else {
+      toast.success('טיימר הושהה (פחות מדקה - לא נשמר עדיין)');
+    }
   };
   
   const stopTimer = async () => {
@@ -462,6 +476,58 @@ function TaskTimer({ task, onUpdate, onComplete }) {
 
   // שמירת הפונקציה ב-ref כדי שה-useEffect יוכל לקרוא לה
   saveProgressRef.current = saveProgress;
+  
+  // ✅ שמירה אוטומטית כשעוברים למשימה אחרת או כשהקומפוננטה מתפרקת
+  const previousTaskIdRef = useRef(currentTask?.id);
+  const elapsedSecondsRef = useRef(elapsedSeconds);
+  const isRunningRef = useRef(isRunning);
+  
+  // עדכון refs
+  useEffect(() => {
+    elapsedSecondsRef.current = elapsedSeconds;
+    isRunningRef.current = isRunning;
+  }, [elapsedSeconds, isRunning]);
+  
+  // שמירה כשעוברים משימה
+  useEffect(() => {
+    const prevId = previousTaskIdRef.current;
+    const newId = currentTask?.id;
+    
+    // אם עברנו למשימה אחרת וטיימר היה רץ
+    if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
+      console.log('🔄 עוברים משימה - שומר זמן אוטומטית:', {
+        prevId,
+        newId,
+        elapsedSeconds: elapsedSecondsRef.current
+      });
+      
+      if (saveProgressRef.current) {
+        saveProgressRef.current(true, true).catch(err => {
+          console.warn('⚠️ שמירה בעת מעבר משימה נכשלה:', err);
+        });
+      }
+      
+      // איפוס הטיימר
+      setIsRunning(false);
+      setElapsedSeconds(0);
+      setStartTime(null);
+    }
+    
+    previousTaskIdRef.current = newId;
+  }, [currentTask?.id]);
+  
+  // ✅ שמירה כשהקומפוננטה מתפרקת
+  useEffect(() => {
+    return () => {
+      // cleanup - שמור אם יש זמן
+      if (isRunningRef.current && elapsedSecondsRef.current >= 60 && saveProgressRef.current) {
+        console.log('💾 שומר זמן לפני unmount:', elapsedSecondsRef.current, 'שניות');
+        saveProgressRef.current(true, true).catch(err => {
+          console.warn('⚠️ שמירה לפני unmount נכשלה:', err);
+        });
+      }
+    };
+  }, []); // רק פעם אחת - cleanup בסוף
   
   // שמירה אוטומטית לפני שהדף נסגר
   useEffect(() => {
