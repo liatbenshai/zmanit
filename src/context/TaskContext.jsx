@@ -121,12 +121,6 @@ export function TaskProvider({ children }) {
       
       const duration = taskToCreate.estimated_duration || 0;
       
-        duration, 
-        due_time: taskToCreate.due_time,
-        due_date: taskToCreate.due_date,
-        currentTime: new Date().toLocaleTimeString('he-IL')
-      });
-      
       // אם המשימה ארוכה מ-45 דקות - פיצול אוטומטי
       if (duration > INTERVAL_DURATION) {
         
