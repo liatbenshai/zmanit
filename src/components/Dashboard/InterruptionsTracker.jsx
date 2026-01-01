@@ -84,7 +84,7 @@ function InterruptionsTracker() {
     if (user?.id) {
       loadInterruptions();
     }
-  }, [user?.id]);
+  }, [user?.id, viewMode]); // ✅ גם כשמשתנה viewMode
 
   // טיימר להפרעה נוכחית
   useEffect(() => {
@@ -99,22 +99,98 @@ function InterruptionsTracker() {
     return () => clearInterval(interval);
   }, [isTracking, startTime]);
 
-  // טעינת הפרעות
+  // טעינת הפרעות מה-DB
   const loadInterruptions = async () => {
     try {
-      // נשתמש ב-localStorage עד שניצור טבלה
+      setLoading(true);
+      
+      // ✅ טעינה מ-Supabase
+      let query = supabase
+        .from('interruptions')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('started_at', { ascending: false });
+      
+      // פילטר לפי תקופה
+      if (viewMode === 'today') {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        query = query.gte('started_at', today.toISOString());
+      } else if (viewMode === 'week') {
+        const weekAgo = new Date();
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        query = query.gte('started_at', weekAgo.toISOString());
+      }
+      
+      const { data, error } = await query.limit(100);
+      
+      if (error) {
+        console.error('שגיאה בטעינת הפרעות מ-DB:', error);
+        // fallback ל-localStorage
+        const stored = localStorage.getItem(`interruptions_${user.id}`);
+        if (stored) {
+          setInterruptions(JSON.parse(stored));
+        }
+      } else {
+        // המרה לפורמט הקומפוננטה
+        const formatted = (data || []).map(int => ({
+          id: int.id,
+          type: int.type,
+          description: int.notes || '',
+          duration: Math.ceil((int.duration_seconds || 0) / 60),
+          durationSeconds: int.duration_seconds || 0,
+          startTime: int.started_at,
+          endTime: int.ended_at,
+          date: int.started_at?.split('T')[0],
+          taskId: int.task_id,
+          taskTitle: int.task_title
+        }));
+        setInterruptions(formatted);
+        console.log(`✅ נטענו ${formatted.length} הפרעות מ-DB`);
+      }
+    } catch (err) {
+      console.error('שגיאה בטעינת הפרעות:', err);
+      // fallback ל-localStorage
       const stored = localStorage.getItem(`interruptions_${user.id}`);
       if (stored) {
         setInterruptions(JSON.parse(stored));
       }
-    } catch (err) {
-      console.error('שגיאה בטעינת הפרעות:', err);
     } finally {
       setLoading(false);
     }
   };
 
-  // שמירת הפרעות
+  // שמירת הפרעה ל-DB
+  const saveInterruptionToDB = async (interruptionRecord) => {
+    try {
+      const { error } = await supabase
+        .from('interruptions')
+        .insert([{
+          user_id: user.id,
+          type: interruptionRecord.type,
+          duration_seconds: interruptionRecord.durationSeconds || interruptionRecord.duration * 60,
+          started_at: interruptionRecord.startTime,
+          ended_at: interruptionRecord.endTime,
+          notes: interruptionRecord.description || null,
+          task_title: interruptionRecord.taskTitle || null
+        }]);
+      
+      if (error) {
+        console.error('שגיאה בשמירת הפרעה ל-DB:', error);
+        // fallback ל-localStorage
+        const stored = localStorage.getItem(`interruptions_${user.id}`);
+        const list = stored ? JSON.parse(stored) : [];
+        list.unshift(interruptionRecord);
+        localStorage.setItem(`interruptions_${user.id}`, JSON.stringify(list));
+      } else {
+        console.log('✅ הפרעה נשמרה ל-DB');
+      }
+    } catch (err) {
+      console.error('שגיאה בשמירה:', err);
+    }
+  };
+
+  // שמירת הפרעות (לתאימות אחורה)
   const saveInterruptions = (newList) => {
     localStorage.setItem(`interruptions_${user.id}`, JSON.stringify(newList));
     setInterruptions(newList);
@@ -130,22 +206,28 @@ function InterruptionsTracker() {
   };
 
   // סיום מעקב הפרעה
-  const stopInterruptionTracking = (description = '') => {
+  const stopInterruptionTracking = async (description = '') => {
     if (!isTracking || !currentInterruption) return;
 
-    const duration = Math.ceil(elapsedSeconds / 60); // בדקות
+    const durationSeconds = elapsedSeconds;
+    const duration = Math.ceil(durationSeconds / 60); // בדקות
     const newInterruptionRecord = {
       id: Date.now().toString(),
       type: currentInterruption,
       description,
       duration,
+      durationSeconds,
       startTime: startTime.toISOString(),
       endTime: new Date().toISOString(),
       date: new Date().toISOString().split('T')[0]
     };
 
+    // ✅ שמירה ב-DB
+    await saveInterruptionToDB(newInterruptionRecord);
+    
+    // עדכון state מקומי
     const newList = [newInterruptionRecord, ...interruptions];
-    saveInterruptions(newList);
+    setInterruptions(newList);
 
     setIsTracking(false);
     setCurrentInterruption(null);
@@ -156,23 +238,32 @@ function InterruptionsTracker() {
   };
 
   // הוספת הפרעה ידנית
-  const addManualInterruption = () => {
+  const addManualInterruption = async () => {
     if (!newInterruption.duration || parseInt(newInterruption.duration) <= 0) {
       toast.error('נא להזין זמן תקין');
       return;
     }
 
+    const durationMinutes = parseInt(newInterruption.duration);
+    const now = new Date();
     const record = {
       id: Date.now().toString(),
       type: newInterruption.type,
       description: newInterruption.description,
-      duration: parseInt(newInterruption.duration),
-      date: new Date().toISOString().split('T')[0],
+      duration: durationMinutes,
+      durationSeconds: durationMinutes * 60,
+      startTime: new Date(now.getTime() - durationMinutes * 60000).toISOString(),
+      endTime: now.toISOString(),
+      date: now.toISOString().split('T')[0],
       manual: true
     };
 
+    // ✅ שמירה ב-DB
+    await saveInterruptionToDB(record);
+    
+    // עדכון state מקומי
     const newList = [record, ...interruptions];
-    saveInterruptions(newList);
+    setInterruptions(newList);
 
     setNewInterruption({ type: 'client_call', description: '', duration: '' });
     setShowAddForm(false);
@@ -180,9 +271,24 @@ function InterruptionsTracker() {
   };
 
   // מחיקת הפרעה
-  const deleteInterruption = (id) => {
+  const deleteInterruption = async (id) => {
+    try {
+      // ✅ מחיקה מ-DB
+      const { error } = await supabase
+        .from('interruptions')
+        .delete()
+        .eq('id', id);
+      
+      if (error) {
+        console.error('שגיאה במחיקה מ-DB:', error);
+      }
+    } catch (err) {
+      console.error('שגיאה במחיקה:', err);
+    }
+    
+    // עדכון state מקומי
     const newList = interruptions.filter(i => i.id !== id);
-    saveInterruptions(newList);
+    setInterruptions(newList);
     toast.success('🗑️ נמחק');
   };
 

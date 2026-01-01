@@ -13,6 +13,7 @@ import DailySummary from '../Analytics/DailySummary';
 import TimeGapsReport from '../Analytics/TimeGapsReport';
 import WorkPreferences from '../Settings/WorkPreferences';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
+import InterruptionsTracker from './InterruptionsTracker';
 
 /**
  * שעות העבודה
@@ -118,6 +119,9 @@ function Dashboard({ onNavigate }) {
   // ✅ חדש: מודל הוספת משימה עם תכנון שבועי
   const [showAddTask, setShowAddTask] = useState(false);
   const [selectedTaskDate, setSelectedTaskDate] = useState(null);
+  
+  // ✅ חדש: מודל ניתוח הפרעות
+  const [showInterruptions, setShowInterruptions] = useState(false);
   
   // עדכון שעה כל דקה
   useEffect(() => {
@@ -607,6 +611,12 @@ function Dashboard({ onNavigate }) {
             <span>📈</span> איפה הזמן הלך?
           </button>
           <button
+            onClick={() => setShowInterruptions(true)}
+            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1"
+          >
+            <span>⏸️</span> ניתוח הפרעות
+          </button>
+          <button
             onClick={() => setShowWeeklyReview(true)}
             className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1"
           >
@@ -702,6 +712,15 @@ function Dashboard({ onNavigate }) {
           tasks={tasks}
           onClose={() => setShowTimeGaps(false)}
         />
+      </Modal>
+
+      {/* ✅ ניתוח הפרעות */}
+      <Modal
+        isOpen={showInterruptions}
+        onClose={() => setShowInterruptions(false)}
+        title="⏸️ ניתוח הפרעות"
+      >
+        <InterruptionsTracker />
       </Modal>
 
       {/* ✅ חדש: מודל הוספת משימה */}
