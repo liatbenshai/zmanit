@@ -22,6 +22,7 @@
  * - הגהה/תרגום/אחר: 12:00-16:00
  * 
  * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
+ * ✅ תיקון: הצגת משימות שהושלמו ביום/שבוע הנוכחי
  */
 
 import { WORK_HOURS } from '../config/workSchedule';
@@ -106,12 +107,23 @@ export function smartScheduleWeek(weekStart, allTasks) {
   }
   
   // שלב 3: סינון משימות
-  // סינון משימות שהושלמו ומשימות-הורה (is_project) שיש להן ילדים
+  // ✅ תיקון: כוללים משימות שהושלמו אם יש להן due_date בשבוע הנוכחי
   const pendingTasks = allTasks.filter(t => {
-    // לא מציגים משימות שהושלמו
-    if (t.is_completed) return false;
     // לא מציגים משימות-הורה (הילדים שלהן יוצגו במקום)
     if (t.is_project) return false;
+    
+    // ✅ משימות שהושלמו - מציגים רק אם יש להן due_date בשבוע הנוכחי
+    if (t.is_completed) {
+      // אם אין due_date - לא מציגים
+      if (!t.due_date) return false;
+      // אם ה-due_date בשבוע הנוכחי - מציגים!
+      if (t.due_date >= weekStartISO && t.due_date <= weekEndISO) {
+        return true;
+      }
+      // אחרת - לא מציגים
+      return false;
+    }
+    
     return true;
   });
   
@@ -127,7 +139,7 @@ export function smartScheduleWeek(weekStart, allTasks) {
   });
   
   pendingTasks.forEach(t => {
-    console.log(`  📌 Task: "${t.title}" | id: ${t.id} | parent_task_id: ${t.parent_task_id || 'none'} | duration: ${t.estimated_duration}`);
+    console.log(`  📌 Task: "${t.title}" | id: ${t.id} | parent_task_id: ${t.parent_task_id || 'none'} | duration: ${t.estimated_duration} | completed: ${t.is_completed}`);
   });
   
   // אם זה שבוע עתידי (לא השבוע הנוכחי), לא משבצים
@@ -236,9 +248,22 @@ function initializeDays(weekStart, config) {
 
 /**
  * מיון משימות - הכי דחוף קודם, אבל תמיד לסיים מהר!
+ * ✅ תיקון: משימות שהושלמו נשארות במקומן לפי due_date
  */
 function prioritizeTasks(tasks, todayISO) {
   return [...tasks].sort((a, b) => {
+    // ✅ משימות שהושלמו - לפי due_date בלבד (לא משנה עדיפות)
+    if (a.is_completed && b.is_completed) {
+      if (a.due_date && b.due_date) {
+        return a.due_date.localeCompare(b.due_date);
+      }
+      return 0;
+    }
+    
+    // ✅ משימה שהושלמה מול משימה פעילה - הפעילה קודם
+    if (a.is_completed && !b.is_completed) return 1;
+    if (!a.is_completed && b.is_completed) return -1;
+    
     // ✅ תיקון חשוב: אינטרוולים של אותו הורה - לפי מספר בלוק!
     // זה צריך להיות ראשון כדי שאינטרוולים ישארו ביחד
     if (a.parent_task_id && b.parent_task_id && a.parent_task_id === b.parent_task_id) {
@@ -301,7 +326,7 @@ function scheduleAllTasks(sortedTasks, days, config) {
       task,
       total: task.estimated_duration || 30,
       scheduled: 0,
-      remaining: task.estimated_duration || 30,
+      remaining: task.is_completed ? 0 : (task.estimated_duration || 30), // ✅ משימה שהושלמה = 0 remaining
       blocks: []
     });
   }
@@ -311,9 +336,9 @@ function scheduleAllTasks(sortedTasks, days, config) {
     scheduleTask(task, days, taskProgress, config);
   }
   
-  // איסוף משימות שלא שובצו
+  // איסוף משימות שלא שובצו (לא כולל משימות שהושלמו)
   for (const [taskId, progress] of taskProgress) {
-    if (progress.remaining > 0) {
+    if (progress.remaining > 0 && !progress.task.is_completed) {
       unscheduledTasks.push(progress.task);
       warnings.push({
         type: 'not_scheduled',
@@ -377,6 +402,11 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
   // ✅ תיקון: עדכון due_date של משימות באיחור להיום
   // כדי שאינטרוולים שה-due_date שלהם עבר יופיעו היום
   const tasksWithUpdatedDates = sortedTasks.map(task => {
+    // ✅ לא משנים due_date למשימות שהושלמו!
+    if (task.is_completed) {
+      return task;
+    }
+    
     // אם זה אינטרוול (יש parent_task_id) וה-due_date עבר
     if (task.parent_task_id && task.due_date && task.due_date < todayISO) {
       console.log(`📅 עדכון אינטרוול באיחור: "${task.title}" מ-${task.due_date} להיום`);
@@ -396,7 +426,7 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
       task,
       total: task.estimated_duration || 30,
       scheduled: 0,
-      remaining: task.estimated_duration || 30,
+      remaining: task.is_completed ? 0 : (task.estimated_duration || 30), // ✅ משימה שהושלמה = 0 remaining
       blocks: []
     });
   }
@@ -406,9 +436,9 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
     scheduleTask(task, relevantDays, taskProgress, config);
   }
   
-  // איסוף משימות שלא שובצו
+  // איסוף משימות שלא שובצו (לא כולל משימות שהושלמו)
   for (const [taskId, progress] of taskProgress) {
-    if (progress.remaining > 0) {
+    if (progress.remaining > 0 && !progress.task.is_completed) {
       unscheduledTasks.push(progress.task);
       warnings.push({
         type: 'not_scheduled',
@@ -438,10 +468,53 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
 
 /**
  * שיבוץ משימה בודדת - למלא ימים ברצף!
+ * ✅ תיקון: משימות שהושלמו משובצות ביום ה-due_date שלהן
  */
 function scheduleTask(task, days, taskProgress, config) {
   const progress = taskProgress.get(task.id);
-  if (!progress || progress.remaining <= 0) return;
+  if (!progress) return;
+  
+  // ✅ משימה שהושלמה - משבצים אותה ביום ה-due_date שלה
+  if (task.is_completed) {
+    const targetDay = days.find(d => d.date === task.due_date);
+    if (targetDay) {
+      const duration = task.estimated_duration || 30;
+      const block = {
+        id: `${task.id}-block-1`,
+        taskId: task.id,
+        task: task,
+        type: task.task_type || 'other',
+        taskType: task.task_type || 'other',
+        priority: task.priority || 'normal',
+        title: task.title,
+        startMinute: config.dayStart,
+        endMinute: config.dayStart + duration,
+        startTime: minutesToTime(config.dayStart),
+        endTime: minutesToTime(config.dayStart + duration),
+        duration: duration,
+        blockIndex: 1,
+        totalBlocks: 1,
+        dayDate: targetDay.date,
+        isCompleted: true,  // ✅ מסומן כהושלם!
+        timeSpent: task.time_spent || 0
+      };
+      
+      targetDay.blocks.push(block);
+      progress.blocks.push(block);
+      progress.scheduled = duration;
+      
+      // ✅ מיון בלוקים - משימות שהושלמו בסוף
+      targetDay.blocks.sort((a, b) => {
+        if (a.isCompleted && !b.isCompleted) return 1;
+        if (!a.isCompleted && b.isCompleted) return -1;
+        return a.startMinute - b.startMinute;
+      });
+    }
+    return;
+  }
+  
+  // משימה רגילה (לא הושלמה)
+  if (progress.remaining <= 0) return;
   
   const isMorningTask = isMorningTaskType(task, config);
   
@@ -622,8 +695,12 @@ function formatDayForOutput(day) {
   const config = SMART_SCHEDULE_CONFIG;
   const dayCapacity = day.isWorkDay ? (config.dayEnd - config.dayStart) : 0;
   
-  // ✅ תיקון: מיון בלוקים לפי זמן התחלה
+  // ✅ תיקון: מיון בלוקים - משימות פעילות קודם, אח"כ הושלמו
   const sortedBlocks = [...(day.blocks || [])].sort((a, b) => {
+    // משימות שהושלמו בסוף
+    if (a.isCompleted && !b.isCompleted) return 1;
+    if (!a.isCompleted && b.isCompleted) return -1;
+    
     // קודם לפי זמן התחלה
     if (a.startMinute !== b.startMinute) {
       return a.startMinute - b.startMinute;
