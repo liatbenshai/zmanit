@@ -192,6 +192,10 @@ export function TaskProvider({ children }) {
       const taskType = updates.taskType ?? updates.task_type ?? null;
       const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
       
+        taskId, 
+        updates,
+        resolved: { startDate, dueDate, dueTime }
+      });
       
       const updatedTask = await updateTask(taskId, {
         title: updates.title,
@@ -289,6 +293,12 @@ export function TaskProvider({ children }) {
       return;
     }
     
+      id: task.id, 
+      title: task.title, 
+      is_completed: task.is_completed,
+      parent_task_id: task.parent_task_id,
+      isInterval: !!task.parent_task_id
+    });
 
     try {
       const newCompleteStatus = !task.is_completed;
