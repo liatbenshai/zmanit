@@ -144,24 +144,84 @@ export function calculateAutoReschedule(tasks, editTask) {
   const tasksToMoveToTomorrow = [];
   const tasksToKeepToday = [];
   
+  // ✅ חדש: זיהוי אינטרוולים לפי מספר
+  const getIntervalInfo = (task) => {
+    const match = task.title?.match(/\((\d+)\/(\d+)\)/);
+    if (match) {
+      return { index: parseInt(match[1]), total: parseInt(match[2]) };
+    }
+    return null;
+  };
+  
+  // ✅ קיבוץ משימות: רגילות בנפרד, אינטרוולים לפי הורה
+  const regularTasks = [];
+  const intervalsByParent = new Map(); // parent_id -> [tasks sorted by index]
+  
   sortedTodayTasks.forEach(task => {
+    if (task.parent_task_id) {
+      const parentId = task.parent_task_id;
+      if (!intervalsByParent.has(parentId)) {
+        intervalsByParent.set(parentId, []);
+      }
+      intervalsByParent.get(parentId).push(task);
+    } else {
+      regularTasks.push(task);
+    }
+  });
+  
+  // מיון אינטרוולים לפי סדר המספור
+  intervalsByParent.forEach((intervals, parentId) => {
+    intervals.sort((a, b) => {
+      const aInfo = getIntervalInfo(a);
+      const bInfo = getIntervalInfo(b);
+      return (aInfo?.index || 0) - (bInfo?.index || 0);
+    });
+  });
+  
+  // ✅ שלב 1: טיפול במשימות רגילות
+  regularTasks.forEach(task => {
     const taskTime = getRemainingTaskTime(task);
     
-    // משימות עם טיימר פעיל - תמיד נשארות
     if (isTimerRunning(task.id)) {
       tasksToKeepToday.push(task);
       timeNeededToday += taskTime;
       return;
     }
     
-    // בדיקה אם יש מקום
     if (timeNeededToday + taskTime <= remainingToday) {
       tasksToKeepToday.push(task);
       timeNeededToday += taskTime;
     } else {
-      // אין מקום - להעביר למחר
       tasksToMoveToTomorrow.push(task);
     }
+  });
+  
+  // ✅ שלב 2: טיפול באינטרוולים - שומרים על רצף!
+  // עוברים על כל קבוצת אינטרוולים ומחליטים כמה נכנסים
+  intervalsByParent.forEach((intervals, parentId) => {
+    // מוצאים את האינטרוולים שכבר רצים
+    const runningIdx = intervals.findIndex(t => isTimerRunning(t.id));
+    
+    intervals.forEach((task, idx) => {
+      const taskTime = getRemainingTaskTime(task);
+      
+      // אם טיימר רץ - תמיד נשאר
+      if (isTimerRunning(task.id)) {
+        tasksToKeepToday.push(task);
+        timeNeededToday += taskTime;
+        return;
+      }
+      
+      // ✅ לוגיקה חדשה: שומרים על רצף מההתחלה
+      // אם יש מקום - נשאר, אם אין - כל השאר עוברים למחר
+      if (timeNeededToday + taskTime <= remainingToday) {
+        tasksToKeepToday.push(task);
+        timeNeededToday += taskTime;
+      } else {
+        // מרגע שאין מקום - כל השאר עוברים למחר
+        tasksToMoveToTomorrow.push(task);
+      }
+    });
   });
   
   // חישוב זמן פנוי שנשאר אחרי המשימות שנשארו

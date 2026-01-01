@@ -43,6 +43,7 @@ function toLocalISODate(date) {
  */
 export async function createTaskWithIntervals(task) {
   const duration = task.estimated_duration || 0;
+  const blocksForToday = task.blocksForToday; // ✅ כמה בלוקים להיום (מהדיאלוג)
   
   // אם המשימה קצרה - יוצרים רגיל בלי פיצול
   if (duration < CONFIG.MIN_DURATION_TO_SPLIT) {
@@ -78,6 +79,9 @@ export async function createTaskWithIntervals(task) {
   const remainder = duration % numIntervals;
   
   console.log(`🔄 יוצר משימה עם ${numIntervals} אינטרוולים של ~${baseIntervalDuration} דקות`);
+  if (blocksForToday !== undefined && blocksForToday !== null) {
+    console.log(`📅 בחירת משתמש: ${blocksForToday} בלוקים להיום`);
+  }
   
   // יצירת המשימה ההורית (כפרויקט)
   const { data: parentTask, error: parentError } = await supabase
@@ -112,6 +116,12 @@ export async function createTaskWithIntervals(task) {
   
   // תאריך התחלה - אם יש start_date משתמשים בו, אחרת היום
   let currentDate = task.start_date || task.due_date || todayISO;
+  
+  // ✅ חדש: ספירת בלוקים שנשבצו להיום
+  let blocksScheduledToday = 0;
+  const effectiveBlocksForToday = blocksForToday !== undefined && blocksForToday !== null 
+    ? blocksForToday 
+    : numIntervals; // אם לא צוין - הכל
   
   // אם תאריך ההתחלה הוא בעתיד - מתחילים ב-9:00
   // אם תאריך ההתחלה הוא היום - מתחילים מהשעה הנוכחית
@@ -154,6 +164,15 @@ export async function createTaskWithIntervals(task) {
     // חישוב זמן סיום
     const endTime = addMinutes(currentTime, intervalDuration);
     
+    // ✅ חדש: בדיקה אם עברנו את מכסת הבלוקים להיום
+    const isToday = currentDate === todayISO;
+    if (isToday && blocksScheduledToday >= effectiveBlocksForToday) {
+      // עברנו את המכסה - עוברים ליום הבא
+      currentDate = getNextWorkDay(currentDate);
+      currentTime = { hours: 9, minutes: 0 };
+      console.log(`📅 עברנו מכסת ${effectiveBlocksForToday} להיום - עובר ליום הבא: ${currentDate}`);
+    }
+    
     // בדיקה אם עוברים את סוף יום העבודה (16:00)
     if (endTime.hours >= 16 && i < numIntervals - 1) {
       // עוברים ליום הבא
@@ -184,6 +203,11 @@ export async function createTaskWithIntervals(task) {
     
     intervals.push(intervalData);
     
+    // ✅ עדכון ספירה
+    if (currentDate === todayISO) {
+      blocksScheduledToday++;
+    }
+    
     // התקדמות לאינטרוול הבא (עם 5 דקות הפסקה)
     currentTime = addMinutes(endTime, 5);
   }
@@ -201,6 +225,7 @@ export async function createTaskWithIntervals(task) {
   }
   
   console.log(`✅ נוצרו ${createdIntervals.length} אינטרוולים למשימה "${task.title}"`);
+  console.log(`   📅 היום: ${blocksScheduledToday}, ימים הבאים: ${numIntervals - blocksScheduledToday}`);
   
   return { parentTask, intervals: createdIntervals };
 }

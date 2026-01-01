@@ -27,6 +27,166 @@ function getLocalDateISO(date) {
 }
 
 /**
+ * חישוב זמן פנוי היום
+ */
+function getAvailableMinutesToday() {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const endOfDay = 16 * 60 + 15; // 16:15
+  return Math.max(0, endOfDay - currentMinutes);
+}
+
+/**
+ * דיאלוג בחירת שיבוץ לפני יצירת משימה ארוכה
+ */
+function ScheduleDialog({ 
+  isOpen, 
+  onClose, 
+  onConfirm, 
+  totalBlocks, 
+  blockDuration = 45,
+  taskTitle,
+  priority
+}) {
+  const [blocksForToday, setBlocksForToday] = useState(1);
+  const availableMinutes = getAvailableMinutesToday();
+  const maxBlocksToday = Math.floor(availableMinutes / (blockDuration + 5)); // +5 להפסקות
+  
+  // חישוב ימים נדרשים
+  const blocksPerDay = 8; // מקסימום בלוקים ביום
+  const blocksForOtherDays = totalBlocks - blocksForToday;
+  const daysNeeded = Math.ceil(blocksForOtherDays / blocksPerDay);
+  
+  useEffect(() => {
+    // ברירת מחדל - כמה שנכנס היום (עד 4)
+    const defaultBlocks = Math.min(maxBlocksToday, totalBlocks, 4);
+    setBlocksForToday(Math.max(1, defaultBlocks));
+  }, [totalBlocks, maxBlocksToday]);
+  
+  if (!isOpen) return null;
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6" dir="rtl">
+        <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+          📅 תכנון משימה: {taskTitle}
+        </h3>
+        
+        <div className="space-y-4">
+          {/* סיכום המשימה */}
+          <div className="bg-blue-50 dark:bg-blue-900/30 rounded-lg p-4">
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-600 dark:text-gray-300">סה"כ בלוקים:</span>
+              <span className="font-bold text-blue-600 dark:text-blue-400">{totalBlocks} × {blockDuration} דק'</span>
+            </div>
+            <div className="flex justify-between items-center mb-2">
+              <span className="text-gray-600 dark:text-gray-300">זמן פנוי היום:</span>
+              <span className="font-medium">
+                {Math.floor(availableMinutes / 60)}:{String(availableMinutes % 60).padStart(2, '0')} שעות
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-gray-600 dark:text-gray-300">מקסימום בלוקים להיום:</span>
+              <span className="font-medium">{maxBlocksToday}</span>
+            </div>
+          </div>
+          
+          {/* בחירת כמות להיום */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              כמה בלוקים לשבץ להיום?
+            </label>
+            <div className="flex items-center gap-3">
+              <input
+                type="range"
+                min="0"
+                max={Math.min(totalBlocks, maxBlocksToday)}
+                value={blocksForToday}
+                onChange={(e) => setBlocksForToday(parseInt(e.target.value))}
+                className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer"
+              />
+              <span className="w-12 text-center font-bold text-lg text-blue-600 dark:text-blue-400">
+                {blocksForToday}
+              </span>
+            </div>
+            
+            {/* כפתורי בחירה מהירה */}
+            <div className="flex gap-2 mt-3">
+              <button
+                type="button"
+                onClick={() => setBlocksForToday(0)}
+                className="flex-1 py-2 px-3 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                הכל למחר
+              </button>
+              <button
+                type="button"
+                onClick={() => setBlocksForToday(Math.min(2, totalBlocks, maxBlocksToday))}
+                className="flex-1 py-2 px-3 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                2 להיום
+              </button>
+              <button
+                type="button"
+                onClick={() => setBlocksForToday(Math.min(totalBlocks, maxBlocksToday))}
+                className="flex-1 py-2 px-3 text-sm rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600"
+              >
+                מקסימום
+              </button>
+            </div>
+          </div>
+          
+          {/* תצוגה מקדימה */}
+          <div className="bg-gray-50 dark:bg-gray-700/50 rounded-lg p-4 text-sm">
+            <div className="font-medium mb-2">תוכנית שיבוץ:</div>
+            {blocksForToday > 0 && (
+              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                <span>✓</span>
+                <span>היום: {blocksForToday} בלוקים ({blocksForToday * blockDuration} דק')</span>
+              </div>
+            )}
+            {blocksForOtherDays > 0 && (
+              <div className="flex items-center gap-2 text-blue-600 dark:text-blue-400 mt-1">
+                <span>📆</span>
+                <span>
+                  ימים הבאים: {blocksForOtherDays} בלוקים 
+                  ({daysNeeded > 1 ? `~${daysNeeded} ימים` : 'יום אחד'})
+                </span>
+              </div>
+            )}
+          </div>
+          
+          {/* אזהרה אם אין מספיק זמן */}
+          {maxBlocksToday === 0 && (
+            <div className="bg-yellow-50 dark:bg-yellow-900/30 border border-yellow-200 dark:border-yellow-700 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200">
+              ⚠️ אין מספיק זמן להיום - המשימה תשובץ מהיום הבא
+            </div>
+          )}
+        </div>
+        
+        {/* כפתורים */}
+        <div className="flex gap-3 mt-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-3 px-4 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
+          >
+            ביטול
+          </button>
+          <button
+            type="button"
+            onClick={() => onConfirm(blocksForToday)}
+            className="flex-1 py-3 px-4 rounded-xl bg-blue-500 text-white hover:bg-blue-600 font-medium"
+          >
+            ✓ צור משימה
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
  * רכיב הצעת הערכה חכמה
  */
 function EstimateSuggestion({ taskType, currentEstimate, onAcceptSuggestion }) {
@@ -136,6 +296,10 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('work');
   const [showTimeField, setShowTimeField] = useState(false);
+  
+  // ✅ חדש: דיאלוג בחירת שיבוץ
+  const [showScheduleDialog, setShowScheduleDialog] = useState(false);
+  const [pendingTaskData, setPendingTaskData] = useState(null);
   
   // ✅ חדש: האם לעדכן את ההערכה מההמלצה
   const [manualDurationOverride, setManualDurationOverride] = useState(null);
@@ -247,6 +411,50 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     toast.success(`הערכה עודכנה ל-${suggestedMinutes} דק'`);
   };
 
+  // ✅ יצירת משימה בפועל (אחרי בחירת שיבוץ)
+  const createTask = async (taskData, blocksForToday = null) => {
+    setLoading(true);
+    
+    try {
+      console.log('📝 Creating task:', {
+        ...taskData,
+        blocksForToday,
+        blocksCount
+      });
+
+      // העברת blocksForToday ל-addTask
+      await addTask({
+        ...taskData,
+        blocksForToday  // ✅ חדש: כמה בלוקים להיום
+      });
+      
+      const todayBlocks = blocksForToday !== null ? blocksForToday : blocksCount;
+      const otherBlocks = blocksCount - todayBlocks;
+      
+      if (otherBlocks > 0) {
+        toast.success(`✓ נוספה משימה: ${todayBlocks} בלוקים להיום, ${otherBlocks} לימים הבאים`);
+      } else {
+        toast.success(`✓ נוספה משימה: ${blocksCount} בלוקים של 45 דק'`);
+      }
+
+      onClose();
+    } catch (error) {
+      console.error('שגיאה בשמירת משימה:', error);
+      toast.error('שגיאה בשמירת המשימה');
+    } finally {
+      setLoading(false);
+      setPendingTaskData(null);
+    }
+  };
+
+  // ✅ אישור מהדיאלוג
+  const handleScheduleConfirm = (blocksForToday) => {
+    setShowScheduleDialog(false);
+    if (pendingTaskData) {
+      createTask(pendingTaskData, blocksForToday);
+    }
+  };
+
   // שליחת הטופס
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -267,50 +475,51 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       return;
     }
 
-    setLoading(true);
+    const taskData = {
+      title: formData.title.trim(),
+      task_type: formData.taskType,
+      estimated_duration: calculatedDuration,
+      start_date: formData.startDate || null,
+      due_date: formData.dueDate || null,
+      due_time: formData.dueTime || null,
+      description: formData.description || null,
+      priority: formData.priority,
+      recording_duration: currentTaskType.inputType === 'recording' ? parseFloat(formData.inputValue) : null,
+      page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null
+    };
 
-    try {
-      const taskData = {
-        title: formData.title.trim(),
-        task_type: formData.taskType,
-        estimated_duration: calculatedDuration,
-        start_date: formData.startDate || null, // תאריך התחלה
-        due_date: formData.dueDate || null,     // תאריך יעד
-        due_time: formData.dueTime || null,     // שעה ספציפית
-        description: formData.description || null,
-        priority: formData.priority,
-        // שמירת הקלט המקורי ללמידה עתידית
-        recording_duration: currentTaskType.inputType === 'recording' ? parseFloat(formData.inputValue) : null,
-        page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null
-      };
+    console.log('📝 SimpleTaskForm - Preparing task:', {
+      taskType: formData.taskType,
+      calculatedDuration,
+      blocksCount,
+      isEditing
+    });
 
-      console.log('📝 SimpleTaskForm - Saving task:', {
-        taskType: formData.taskType,
-        inputType: currentTaskType.inputType,
-        inputValue: formData.inputValue,
-        calculatedDuration,
-        startDate: taskData.start_date,
-        dueDate: taskData.due_date,
-        dueTime: taskData.due_time,
-        wasAdjusted: manualDurationOverride !== null,
-        isEditing
-      });
-
-      if (isEditing) {
+    // עריכה - פשוט מעדכן
+    if (isEditing) {
+      setLoading(true);
+      try {
         await editTask(task.id, taskData);
         toast.success('המשימה עודכנה');
-      } else {
-        await addTask(taskData);
-        toast.success(`נוספה משימה: ${blocksCount} בלוקים של 45 דק'`);
+        onClose();
+      } catch (error) {
+        console.error('שגיאה בעדכון משימה:', error);
+        toast.error('שגיאה בעדכון המשימה');
+      } finally {
+        setLoading(false);
       }
-
-      onClose();
-    } catch (error) {
-      console.error('שגיאה בשמירת משימה:', error);
-      toast.error('שגיאה בשמירת המשימה');
-    } finally {
-      setLoading(false);
+      return;
     }
+
+    // ✅ משימה חדשה עם יותר מבלוק אחד - הצג דיאלוג בחירה
+    if (blocksCount > 1) {
+      setPendingTaskData(taskData);
+      setShowScheduleDialog(true);
+      return;
+    }
+
+    // משימה קצרה - יוצרים ישר
+    createTask(taskData, 1);
   };
 
   return (
@@ -537,6 +746,20 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
           ביטול
         </Button>
       </div>
+      
+      {/* ✅ דיאלוג בחירת שיבוץ */}
+      <ScheduleDialog
+        isOpen={showScheduleDialog}
+        onClose={() => {
+          setShowScheduleDialog(false);
+          setPendingTaskData(null);
+        }}
+        onConfirm={handleScheduleConfirm}
+        totalBlocks={blocksCount}
+        blockDuration={45}
+        taskTitle={formData.title}
+        priority={formData.priority}
+      />
     </form>
   );
 }

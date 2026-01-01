@@ -1,164 +1,72 @@
-# עדכון זמנית - 31/12/2024 (גרסה 8)
+# תיקון זמנית - 1.1.2025
 
-## 🆕 חדש: מערכת קונפיגורציה מודולרית!
+## 🔧 מה תוקן
 
-### מה חדש?
-- **הגדרות מרכזיות** - כל ההגדרות במקום אחד
-- **שמירה ב-Supabase** - סנכרון בין מכשירים
-- **ממשק אדמין** - עריכה נוחה של שעות עבודה, התראות ועוד
+### 1. דיאלוג בחירת שיבוץ למשימות ארוכות
+כשיוצרים משימה שמתחלקת ליותר מבלוק אחד, נפתח דיאלוג ששואל:
+- כמה בלוקים לשבץ להיום
+- מציג זמן פנוי היום
+- מאפשר בחירה ידנית
+
+### 2. תיקון שגיאת הגדרות (409 Conflict)
+שגיאת `duplicate key value violates unique constraint` תוקנה
+
+### 3. תיקון עדכון ימי עבודה
+ימי העבודה נשמרים כראוי כמערך
+
+### 4. תיקון שיבוץ משימות שלא נכנסות
+משימות שלא נכנסות בשלמותן לחלון זמן פנוי - עכשיו משובצות לפי מה שנכנס
 
 ---
 
-## 📦 קבצים בעדכון (14 קבצים)
+## 📦 קבצים בחבילה
 
 ```
 src/
-├── config/
-│   └── appConfig.js          ← 🆕 קונפיגורציה מרכזית
-├── hooks/
-│   └── useConfig.js          ← 🆕 Hook לשימוש בקונפיגורציה
 ├── components/
 │   ├── Admin/
-│   │   └── AdminSettings.jsx ← 🆕 ממשק אדמין
-│   ├── Analytics/
-│   │   ├── DailySummary.jsx
-│   │   └── WeeklyReview.jsx
-│   ├── DailyView/
-│   │   ├── DailyView.jsx
-│   │   └── SimpleTaskForm.jsx
-│   ├── Dashboard/
-│   │   └── SmartDashboard.jsx
-│   ├── Notifications/
-│   │   └── NotificationChecker.jsx
-│   └── Tasks/
-│       └── TaskTimerWithInterruptions.jsx
+│   │   └── AdminSettings.jsx     ← תיקון workDays
+│   └── DailyView/
+│       └── SimpleTaskForm.jsx    ← דיאלוג בחירת שיבוץ
+├── config/
+│   └── appConfig.js              ← תיקון upsert 409
+├── services/
+│   └── taskIntervals.js          ← תמיכה ב-blocksForToday
 └── utils/
-    ├── autoRescheduleDaily.js
-    └── taskOrder.js
-
-supabase-migrations/
-└── create_app_settings.sql   ← 🆕 טבלאות חדשות
+    └── smartScheduler.js         ← תיקון שיבוץ חלקי
 ```
 
 ---
 
-## 🔧 התקנה - 3 שלבים
+## 📋 התקנה
 
-### שלב 1: העתקת קבצים
-חלצי את ה-ZIP והעתיקי את תיקיית `src/` לפרויקט.
-
-### שלב 2: יצירת טבלאות ב-Supabase
-הריצי את ה-SQL מהקובץ `supabase-migrations/create_app_settings.sql`:
-
-1. כנסי ל-Supabase Dashboard
-2. לכי ל-SQL Editor
-3. העתיקי את כל התוכן מהקובץ
-4. לחצי Run
-
-### שלב 3: רענון
-```bash
-npm run dev
-# או
-Ctrl+Shift+R בדפדפן
-```
+1. העתיקי את תיקיית `src/` לפרויקט
+2. רענני עם `Ctrl+Shift+R`
 
 ---
 
-## ⚙️ איך להשתמש בממשק האדמין
+## 🎯 איך זה עובד עכשיו
 
-### אפשרות 1: הוספה לדשבורד
-ב-SmartDashboard.jsx, הוסיפי כפתור:
+### יצירת משימה ארוכה (יותר מ-45 דקות):
 
-```jsx
-import AdminSettings from '../Admin/AdminSettings';
-import Modal from '../UI/Modal';
+1. ממלאים את הטופס כרגיל
+2. לוחצים "הוסף משימה"
+3. **דיאלוג חדש נפתח** עם:
+   - סה"כ בלוקים
+   - זמן פנוי היום
+   - סליידר לבחירת כמה להיום
+   - כפתורי בחירה מהירה: "הכל למחר", "2 להיום", "מקסימום"
+4. לוחצים "צור משימה"
 
-// בתוך הקומפוננטה:
-const [showSettings, setShowSettings] = useState(false);
-
-// בתוך ה-return:
-<button onClick={() => setShowSettings(true)}>
-  ⚙️ הגדרות
-</button>
-
-{showSettings && (
-  <Modal onClose={() => setShowSettings(false)}>
-    <AdminSettings onClose={() => setShowSettings(false)} />
-  </Modal>
-)}
-```
-
-### אפשרות 2: דף נפרד
-צרי נתיב חדש ב-Router:
-
-```jsx
-import AdminSettings from './components/Admin/AdminSettings';
-
-<Route path="/settings" element={<AdminSettings />} />
-```
+### התוצאה:
+- הבלוקים שבחרת משובצים להיום
+- השאר משובצים לימים הבאים
+- כל הבלוקים ממוספרים: `(1/14)`, `(2/14)` וכו'
 
 ---
 
-## 📋 מה ניתן להגדיר
+## ⚠️ הערות
 
-### 🕐 שעות עבודה
-- שעת התחלה (ברירת מחדל: 08:30)
-- שעת סיום (ברירת מחדל: 16:15)
-- ימי עבודה (א'-ה')
-- שישי - שעות מיוחדות
-- הפסקת צהריים
-
-### 🔔 התראות
-- כמה דקות לפני משימה
-- התראה בזמן ההתחלה
-- התראה בסיום
-- תדירות חזרה
-
-### ⏱️ טיימר
-- משך ברירת מחדל למשימה
-- גודל בלוק מינימלי/מקסימלי
-
----
-
-## 🐛 תיקוני באגים (מגרסאות קודמות)
-
-1. ✅ ספירה כפולה של אינטרוולים
-2. ✅ התראות על משימה פעילה
-3. ✅ התראות לפי לו"ז דינמי
-4. ✅ סדר בלוקים של פרויקטים
-5. ✅ כפל זמן בעריכה
-
----
-
-## 🔮 בקרוב
-
-- [ ] ממשק לעריכת סוגי משימות
-- [ ] אינטגרציה עם Google Calendar
-- [ ] למידה מהיסטוריה
-- [ ] Hook אחיד ללו"ז
-
----
-
-## 💡 שימוש ב-Hook
-
-```jsx
-import { useConfig, useWorkHours, useRemainingWorkTime } from '../hooks/useConfig';
-
-function MyComponent() {
-  // קונפיגורציה מלאה
-  const { config, workHours, update } = useConfig();
-  
-  // רק שעות עבודה
-  const { start, end, totalMinutes } = useWorkHours();
-  
-  // זמן נותר היום
-  const remainingMinutes = useRemainingWorkTime();
-  
-  return (
-    <div>
-      שעות עבודה: {start} - {end}
-      נותרו: {remainingMinutes} דקות
-    </div>
-  );
-}
-```
+- "בחירה ידנית" כבר קיימת בהודעת "לא יספיק"
+- משימות שהועברו למחר נשארות שם
+- עדיפות: דחוף → בינוני → רגיל

@@ -480,6 +480,7 @@ function scheduleTask(task, days, taskProgress, config) {
 
 /**
  * שיבוץ בלוקים בחלון זמן מסוים
+ * ✅ תיקון: משבצים גם אם אין מספיק מקום - המשימה תמשיך ביום הבא
  */
 function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
   // מציאת סלוטים פנויים בחלון
@@ -489,11 +490,13 @@ function scheduleInWindow(task, day, window, progress, totalBlocks, config) {
     if (progress.remaining <= 0) break;
     
     let currentStart = slot.start;
+    const slotDuration = slot.end - currentStart;
     
-    // 🆕 שיבוץ המשימה כולה כבלוק אחד (לא מפצלים!)
-    // בודקים אם יש מספיק מקום למשימה
-    if (progress.remaining > 0 && currentStart + progress.remaining <= slot.end) {
-      const blockDuration = progress.remaining; // כל המשימה
+    // ✅ תיקון: משבצים את מה שנכנס, גם אם לא הכל
+    // מינימום 15 דקות כדי שיהיה משמעותי
+    if (progress.remaining > 0 && slotDuration >= config.blockDuration) {
+      // לוקחים את מה שנכנס או את מה שנשאר - הקטן מביניהם
+      const blockDuration = Math.min(progress.remaining, slotDuration);
       const blockEnd = currentStart + blockDuration;
       
       const blockIndex = 1; // תמיד בלוק אחד
