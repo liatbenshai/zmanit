@@ -192,11 +192,6 @@ export function TaskProvider({ children }) {
       const taskType = updates.taskType ?? updates.task_type ?? null;
       const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
       
-        taskId, 
-        updates,
-        resolved: { startDate, dueDate, dueTime }
-      });
-      
       const updatedTask = await updateTask(taskId, {
         title: updates.title,
         description: updates.description || null,
