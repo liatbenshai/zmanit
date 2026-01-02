@@ -295,6 +295,7 @@ function DailyView() {
     const info = calculateAutoReschedule(tasks, editTask);
     setRescheduleInfo(info);
     
+    console.log('📊 Reschedule info:', {
       remainingToday: info.remainingToday,
       timeNeededToday: info.timeNeededToday,
       freeTimeToday: info.freeTimeToday,
