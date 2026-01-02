@@ -764,9 +764,8 @@ function DailyView() {
     }
   }
   
-  // ✅ מיון לפי סדר שמור (אם יש) - רק משימות רגילות, לא אירועי גוגל
+  // ✅ מיון לפי סדר שמור (אם יש) - רק משימות רגילות, לא אירועי גוגל ולא מחוץ לשעות עבודה
   const dateISO = getDateISO(selectedDate);
-  // ✅ תיקון: הפרדת משימות מחוץ לשעות עבודה
   const outsideWorkHoursBlocks = activeBlocks.filter(b => b.isOutsideWorkHours);
   const regularBlocks = activeBlocks.filter(b => !b.isGoogleEvent && !b.isOutsideWorkHours);
   const googleCalendarBlocks = activeBlocks.filter(b => b.isGoogleEvent);
@@ -779,7 +778,7 @@ function DailyView() {
     isRunning: isTimerRunning(b.taskId || b.task?.id || b.id)
   })), dateISO);
   
-  // חישוב זמנים מחדש - רק למשימות רגילות (בתוך שעות עבודה)
+  // חישוב זמנים מחדש - רק למשימות רגילות
   let nextStartMinutes = isViewingToday ? currentTime.minutes : WORK_HOURS.start * 60;
   
   const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
@@ -807,20 +806,13 @@ function DailyView() {
     isRescheduled: false
   }));
   
-  // ✅ חדש: משימות מחוץ לשעות עבודה - שומרות על הזמנים המקוריים שלהן!
+  // ✅ חדש: משימות מחוץ לשעות עבודה - שומרות על הזמנים המקוריים!
   const outsideHoursWithOriginalTimes = outsideWorkHoursBlocks.map(block => ({
     ...block,
     isPostponed: false,
     isRescheduled: false,
     isOutsideWorkHours: true
   }));
-  
-  // ✅ מיזוג: משימות רגילות + אירועי גוגל, ממוינים לפי זמן התחלה
-  const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleEventsWithOriginalTimes].sort((a, b) => {
-    const aTime = a.startTime?.split(':').map(Number) || [0, 0];
-    const bTime = b.startTime?.split(':').map(Number) || [0, 0];
-    return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
-  });
   
   // ✅ חדש: משימות ערב (אחרי 16:00)
   const eveningBlocks = outsideHoursWithOriginalTimes.filter(b => {
@@ -842,8 +834,16 @@ function DailyView() {
     return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
   });
   
+  // ✅ מיזוג: משימות רגילות + אירועי גוגל, ממוינים לפי זמן התחלה
+  const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleEventsWithOriginalTimes].sort((a, b) => {
+    const aTime = a.startTime?.split(':').map(Number) || [0, 0];
+    const bTime = b.startTime?.split(':').map(Number) || [0, 0];
+    return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
+  });
+  
   const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
   const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
+
   // ===============================
   // רנדור כרטיס עם גרירה
   // ===============================
@@ -1313,17 +1313,6 @@ function DailyView() {
 
         {/* רשימת משימות */}
         <div className="flex-1 space-y-3">
-        {allBlocks.length === 0 ? (
-          <div className="card p-8 text-center">
-            <span className="text-4xl mb-4 block">📝</span>
-            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
-              אין משימות ל{isToday(selectedDate) ? 'היום' : 'תאריך זה'}
-            </h3>
-            <p className="text-gray-500 dark:text-gray-400">
-              הוסיפי משימה חדשה להתחיל
-            </p>
-          </div>
-        ) : (
         {allBlocks.length === 0 && outsideHoursWithOriginalTimes.length === 0 ? (
           <div className="card p-8 text-center">
             <span className="text-4xl mb-4 block">📝</span>
