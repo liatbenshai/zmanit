@@ -19,6 +19,7 @@ import {
 } from '../../config/taskTypes';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
+import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
 
 // =====================================
 // לשוניות
@@ -27,6 +28,7 @@ import toast from 'react-hot-toast';
 const TABS = [
   { id: 'workHours', name: 'שעות עבודה', icon: '🕐' },
   { id: 'taskTypes', name: 'סוגי משימות', icon: '📋' },
+  { id: 'googleCalendar', name: 'יומן גוגל', icon: '📅' },
   { id: 'notifications', name: 'התראות', icon: '🔔' },
   { id: 'timer', name: 'טיימר', icon: '⏱️' }
 ];
@@ -165,6 +167,9 @@ export default function AdminSettings({ onClose }) {
             )}
             {activeTab === 'taskTypes' && (
               <TaskTypesSettings />
+            )}
+            {activeTab === 'googleCalendar' && (
+              <GoogleCalendarSettings />
             )}
             {activeTab === 'notifications' && (
               <NotificationsSettings config={config} updateField={updateField} />
@@ -881,6 +886,174 @@ function TaskTypesSettings() {
       {Object.keys(customTypes).length === 0 && (
         <div className="text-center py-4 text-gray-500 dark:text-gray-400 text-sm">
           💡 טיפ: לחצי על "סוג חדש" להוספת סוגי משימות מותאמים אישית
+        </div>
+      )}
+    </div>
+  );
+}
+
+// =====================================
+// הגדרות יומן גוגל
+// =====================================
+
+function GoogleCalendarSettings() {
+  const {
+    isConnected,
+    isLoading,
+    isSyncing,
+    googleEmail,
+    lastSyncAt,
+    calendars,
+    selectedCalendarId,
+    setSelectedCalendarId,
+    connect,
+    disconnect,
+    syncEvents,
+  } = useGoogleCalendar();
+
+  const formatDate = (dateStr) => {
+    if (!dateStr) return 'אף פעם';
+    const date = new Date(dateStr);
+    return date.toLocaleString('he-IL', {
+      day: 'numeric',
+      month: 'numeric',
+      year: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
+        <span className="mr-3 text-gray-600">בודק חיבור...</span>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* סטטוס חיבור */}
+      <div className={`rounded-lg p-6 ${
+        isConnected 
+          ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800' 
+          : 'bg-gray-50 dark:bg-gray-900/20 border border-gray-200 dark:border-gray-700'
+      }`}>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className={`w-12 h-12 rounded-full flex items-center justify-center ${
+              isConnected ? 'bg-green-100 dark:bg-green-800' : 'bg-gray-100 dark:bg-gray-700'
+            }`}>
+              <span className="text-2xl">{isConnected ? '✅' : '📅'}</span>
+            </div>
+            <div>
+              <h3 className="font-bold text-lg text-gray-800 dark:text-white">
+                {isConnected ? 'מחובר ליומן גוגל' : 'יומן גוגל לא מחובר'}
+              </h3>
+              {isConnected && googleEmail && (
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {googleEmail}
+                </p>
+              )}
+            </div>
+          </div>
+          
+          {isConnected ? (
+            <button
+              onClick={disconnect}
+              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg transition-colors"
+            >
+              🔌 התנתק
+            </button>
+          ) : (
+            <button
+              onClick={connect}
+              className="px-6 py-3 bg-blue-500 hover:bg-blue-600 text-white rounded-lg font-medium transition-colors flex items-center gap-2"
+            >
+              <svg className="w-5 h-5" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M12.545,10.239v3.821h5.445c-0.712,2.315-2.647,3.972-5.445,3.972c-3.332,0-6.033-2.701-6.033-6.032s2.701-6.032,6.033-6.032c1.498,0,2.866,0.549,3.921,1.453l2.814-2.814C17.503,2.988,15.139,2,12.545,2C7.021,2,2.543,6.477,2.543,12s4.478,10,10.002,10c8.396,0,10.249-7.85,9.426-11.748L12.545,10.239z"/>
+              </svg>
+              התחבר ליומן גוגל
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* אפשרויות נוספות - רק אם מחובר */}
+      {isConnected && (
+        <>
+          {/* בחירת יומן */}
+          {calendars.length > 1 && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+              <h4 className="font-medium text-gray-800 dark:text-white mb-3">
+                📋 בחירת יומן
+              </h4>
+              <select
+                value={selectedCalendarId}
+                onChange={(e) => setSelectedCalendarId(e.target.value)}
+                className="w-full px-3 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+              >
+                {calendars.map(cal => (
+                  <option key={cal.id} value={cal.id}>
+                    {cal.summary} {cal.primary && '(ראשי)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {/* סנכרון */}
+          <div className="bg-purple-50 dark:bg-purple-900/20 rounded-lg p-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h4 className="font-medium text-gray-800 dark:text-white">
+                  🔄 סנכרון אירועים
+                </h4>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  סנכרון אחרון: {formatDate(lastSyncAt)}
+                </p>
+              </div>
+              <button
+                onClick={() => syncEvents()}
+                disabled={isSyncing}
+                className={`px-4 py-2 rounded-lg transition-colors ${
+                  isSyncing 
+                    ? 'bg-gray-300 cursor-not-allowed' 
+                    : 'bg-purple-500 hover:bg-purple-600 text-white'
+                }`}
+              >
+                {isSyncing ? '⏳ מסנכרן...' : '🔄 סנכרן עכשיו'}
+              </button>
+            </div>
+          </div>
+
+          {/* הסבר */}
+          <div className="bg-yellow-50 dark:bg-yellow-900/20 rounded-lg p-4">
+            <h4 className="font-medium text-yellow-800 dark:text-yellow-200 mb-2">
+              💡 מה זה עושה?
+            </h4>
+            <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1">
+              <li>• אירועים מיומן גוגל מוצגים בתצוגה היומית</li>
+              <li>• המערכת מתחשבת בפגישות בעת תזמון משימות</li>
+              <li>• אפשר לייצא משימות ליומן גוגל</li>
+            </ul>
+          </div>
+        </>
+      )}
+
+      {/* הסבר למי שלא מחובר */}
+      {!isConnected && (
+        <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-4">
+          <h4 className="font-medium text-blue-800 dark:text-blue-200 mb-2">
+            🤔 למה כדאי להתחבר?
+          </h4>
+          <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
+            <li>• הצגת פגישות מיומן גוגל בתצוגה היומית</li>
+            <li>• תזמון חכם שמתחשב בפגישות קיימות</li>
+            <li>• ייצוא משימות ליומן גוגל</li>
+            <li>• סנכרון אוטומטי בין המערכות</li>
+          </ul>
         </div>
       )}
     </div>
