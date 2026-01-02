@@ -1,10 +1,10 @@
 /**
- * useGoogleCalendar Hook - Vercel API Version
- * ============================================
- * חיבור ליומן גוגל דרך Vercel Serverless Functions
+ * useGoogleCalendar Hook - Redirect Flow Version
+ * ===============================================
+ * חיבור ליומן גוגל באמצעות redirect (לא popup)
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '../services/supabase';
 import toast from 'react-hot-toast';
 
@@ -19,6 +19,9 @@ const SCOPES = [
   'https://www.googleapis.com/auth/calendar.events',
   'https://www.googleapis.com/auth/calendar.readonly',
 ].join(' ');
+
+// מפתח לשמירת מצב בזמן ה-redirect
+const GOOGLE_AUTH_STATE_KEY = 'zmanit_google_auth_state';
 
 // =====================================
 // Helper - קריאה ל-API
@@ -60,18 +63,85 @@ export function useGoogleCalendar() {
   const [calendars, setCalendars] = useState([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState('primary');
   const [lastSyncAt, setLastSyncAt] = useState(null);
-  
-  const popupRef = useRef(null);
-  const popupCheckInterval = useRef(null);
 
   // =====================================
-  // בדיקת מצב התחברות בטעינה
+  // טיפול בחזרה מגוגל (redirect)
   // =====================================
   
   useEffect(() => {
-    checkConnectionStatus();
+    handleGoogleCallback();
   }, []);
 
+  const handleGoogleCallback = async () => {
+    // בדיקה אם חזרנו מגוגל
+    const urlParams = new URLSearchParams(window.location.search);
+    const code = urlParams.get('code');
+    const state = urlParams.get('state');
+    const error = urlParams.get('error');
+    
+    // אם יש שגיאה מגוגל
+    if (error) {
+      console.error('Google auth error:', error);
+      toast.error('שגיאה באימות מול גוגל');
+      window.history.replaceState({}, '', window.location.pathname);
+      setIsLoading(false);
+      return;
+    }
+
+    // אם יש קוד - זה אומר שחזרנו מגוגל
+    if (code && state) {
+      const savedState = sessionStorage.getItem(GOOGLE_AUTH_STATE_KEY);
+      
+      // בדיקת אבטחה - ה-state חייב להתאים
+      if (state !== savedState) {
+        console.error('State mismatch - possible CSRF attack');
+        toast.error('שגיאת אבטחה - נסי שוב');
+        window.history.replaceState({}, '', window.location.pathname);
+        setIsLoading(false);
+        return;
+      }
+
+      // ניקוי ה-state
+      sessionStorage.removeItem(GOOGLE_AUTH_STATE_KEY);
+
+      try {
+        setIsLoading(true);
+        
+        const redirectUri = `${window.location.origin}${window.location.pathname}`;
+        
+        const data = await callApi('google-auth', {
+          action: 'exchange',
+          code: code,
+          redirect_uri: redirectUri,
+        });
+
+        setIsConnected(true);
+        setGoogleEmail(data.email);
+        toast.success('✅ מחובר ליומן גוגל!');
+        
+        // טעינת יומנים וסנכרון
+        await loadCalendars();
+        await syncEventsInternal();
+        
+      } catch (err) {
+        console.error('Error exchanging code:', err);
+        toast.error('שגיאה בהתחברות לגוגל: ' + err.message);
+      } finally {
+        // ניקוי ה-URL מהפרמטרים
+        window.history.replaceState({}, '', window.location.pathname);
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    // אם אין קוד - בדיקת סטטוס רגילה
+    await checkConnectionStatus();
+  };
+
+  // =====================================
+  // בדיקת מצב התחברות
+  // =====================================
+  
   const checkConnectionStatus = async () => {
     try {
       setIsLoading(true);
@@ -121,12 +191,17 @@ export function useGoogleCalendar() {
   };
 
   // =====================================
-  // התחברות - פותח popup
+  // התחברות - redirect לגוגל
   // =====================================
   
   const connect = useCallback(async () => {
     try {
-      const redirectUri = `${window.location.origin}/auth/google/callback`;
+      // יצירת state לאבטחה
+      const state = crypto.randomUUID();
+      sessionStorage.setItem(GOOGLE_AUTH_STATE_KEY, state);
+      
+      // ה-redirect URI הוא הדף הנוכחי
+      const redirectUri = `${window.location.origin}${window.location.pathname}`;
       
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
@@ -135,65 +210,14 @@ export function useGoogleCalendar() {
       authUrl.searchParams.set('scope', SCOPES);
       authUrl.searchParams.set('access_type', 'offline');
       authUrl.searchParams.set('prompt', 'consent');
-      authUrl.searchParams.set('state', crypto.randomUUID());
+      authUrl.searchParams.set('state', state);
 
-      const width = 500;
-      const height = 600;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-
-      popupRef.current = window.open(
-        authUrl.toString(),
-        'google-auth',
-        `width=${width},height=${height},left=${left},top=${top},popup=1`
-      );
-
-      const handleMessage = async (event) => {
-        if (event.origin !== window.location.origin) return;
-        
-        if (event.data?.type === 'GOOGLE_AUTH_CODE') {
-          window.removeEventListener('message', handleMessage);
-          clearInterval(popupCheckInterval.current);
-          
-          if (popupRef.current) {
-            popupRef.current.close();
-          }
-
-          setIsLoading(true);
-          try {
-            const data = await callApi('google-auth', {
-              action: 'exchange',
-              code: event.data.code,
-              redirect_uri: redirectUri,
-            });
-
-            setIsConnected(true);
-            setGoogleEmail(data.email);
-            toast.success('✅ מחובר ליומן גוגל!');
-            
-            await loadCalendars();
-            await syncEvents();
-          } catch (err) {
-            console.error('Error exchanging code:', err);
-            toast.error('שגיאה בהתחברות לגוגל');
-          } finally {
-            setIsLoading(false);
-          }
-        }
-      };
-
-      window.addEventListener('message', handleMessage);
-
-      popupCheckInterval.current = setInterval(() => {
-        if (popupRef.current?.closed) {
-          clearInterval(popupCheckInterval.current);
-          window.removeEventListener('message', handleMessage);
-        }
-      }, 500);
+      // מעבר לגוגל
+      window.location.href = authUrl.toString();
 
     } catch (err) {
       console.error('Error connecting:', err);
-      toast.error('שגיאה בפתיחת חלון התחברות');
+      toast.error('שגיאה בהתחברות');
     }
   }, []);
 
@@ -236,15 +260,11 @@ export function useGoogleCalendar() {
   };
 
   // =====================================
-  // סנכרון אירועים
+  // סנכרון אירועים (פנימי)
   // =====================================
   
-  const syncEvents = useCallback(async (startDate, endDate) => {
-    if (!isConnected) return [];
-    
+  const syncEventsInternal = async (startDate, endDate) => {
     try {
-      setIsSyncing(true);
-
       const start = startDate || new Date();
       start.setHours(0, 0, 0, 0);
       
@@ -260,6 +280,22 @@ export function useGoogleCalendar() {
 
       setLastSyncAt(new Date().toISOString());
       return data.events || [];
+    } catch (err) {
+      console.error('Error syncing events:', err);
+      return [];
+    }
+  };
+
+  // =====================================
+  // סנכרון אירועים (חיצוני)
+  // =====================================
+  
+  const syncEvents = useCallback(async (startDate, endDate) => {
+    if (!isConnected) return [];
+    
+    try {
+      setIsSyncing(true);
+      return await syncEventsInternal(startDate, endDate);
     } catch (err) {
       console.error('Error syncing events:', err);
       
@@ -316,15 +352,12 @@ export function useGoogleCalendar() {
   // =====================================
   
   const importDayEvents = useCallback(async (date) => {
-    // קודם מסנכרנים
     const start = new Date(date);
     start.setHours(0, 0, 0, 0);
     const end = new Date(start);
     end.setDate(end.getDate() + 1);
     
     await syncEvents(start, end);
-    
-    // ואז מחזירים את האירועים
     return getDayEvents(date);
   }, [syncEvents, getDayEvents]);
 
@@ -415,7 +448,7 @@ export function useGoogleCalendar() {
     isSyncing,
     googleEmail,
     lastSyncAt,
-    gapiReady: true, // תאימות לאחור
+    gapiReady: true,
     
     // יומנים
     calendars,
@@ -431,8 +464,8 @@ export function useGoogleCalendar() {
     syncEvents,
     getEvents,
     getDayEvents,
-    importDayEvents, // תאימות לאחור
-    importEvents: syncEvents, // תאימות לאחור
+    importDayEvents,
+    importEvents: syncEvents,
     
     // ייצוא
     exportTask,
