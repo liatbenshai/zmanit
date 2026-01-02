@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
-import { smartScheduleWeek } from '../../utils/smartScheduler';
+import { smartScheduleWeekV4 } from '../../utils/smartSchedulerV4';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
 import RescheduleModal from './RescheduleModal';
@@ -343,7 +343,7 @@ function DailyView() {
     setSelectedDate(new Date());
   };
 
-  // חישוב תוכנית שבועית עם smartScheduler
+  // חישוב תוכנית שבועית עם smartSchedulerV4
   const weekPlan = useMemo(() => {
     if (!tasks || tasks.length === 0) return null;
     const weekStart = getWeekStart(selectedDate);
@@ -355,7 +355,7 @@ function DailyView() {
       });
     }
     
-    return smartScheduleWeek(weekStart, tasks);
+    return smartScheduleWeekV4(weekStart, tasks);
   }, [tasks, selectedDate]);
 
   // קבלת הבלוקים ליום הנבחר מתוך התוכנית השבועית
