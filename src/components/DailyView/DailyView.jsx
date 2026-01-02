@@ -295,6 +295,7 @@ function DailyView() {
     const info = calculateAutoReschedule(tasks, editTask);
     setRescheduleInfo(info);
     
+    console.log('📊 Reschedule info:', {
       remainingToday: info.remainingToday,
       timeNeededToday: info.timeNeededToday,
       freeTimeToday: info.freeTimeToday,
@@ -353,7 +354,9 @@ function DailyView() {
     // 🔍 DEBUG: הצגת כל האינטרוולים של משימות עם parent
     const intervals = tasks.filter(t => t.parent_task_id && !t.is_completed);
     if (intervals.length > 0) {
+      console.log('🔍 Intervals found:', intervals.length);
       intervals.forEach(t => {
+        console.log('Interval:', t.id, t.title);
       });
     }
     
