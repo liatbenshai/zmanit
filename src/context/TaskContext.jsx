@@ -192,6 +192,7 @@ export function TaskProvider({ children }) {
       const taskType = updates.taskType ?? updates.task_type ?? null;
       const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
       
+      console.log('📝 עדכון משימה:', {
         taskId, 
         updates,
         resolved: { startDate, dueDate, dueTime }
@@ -293,6 +294,7 @@ export function TaskProvider({ children }) {
       return;
     }
     
+    console.log('🔄 toggleComplete:', {
       id: task.id, 
       title: task.title, 
       is_completed: task.is_completed,
