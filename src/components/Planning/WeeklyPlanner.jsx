@@ -34,6 +34,7 @@ function WeeklyPlanner() {
     date.setDate(today.getDate() - dayOfWeek + (weekOffset * 7));
     date.setHours(0, 0, 0, 0);
     
+    console.log('📅 חישוב תחילת שבוע:', {
       today: today.toISOString(),
       todayDay: dayOfWeek,
       weekStart: date.toISOString(),
@@ -49,6 +50,7 @@ function WeeklyPlanner() {
   // תכנון שבועי - משתמש במנוע החכם
   const plan = useMemo(() => {
     if (!tasks) return null;
+    console.log('📋 משימות לתכנון:', tasks.map(t => ({
       id: t.id,
       title: t.title,
       duration: t.estimated_duration,
@@ -60,6 +62,7 @@ function WeeklyPlanner() {
     
     weekPlan.days.forEach(day => {
       day.blocks?.forEach(b => {
+        console.log('block:', b);
       });
     });
     
