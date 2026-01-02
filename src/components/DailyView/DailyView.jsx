@@ -766,7 +766,9 @@ function DailyView() {
   
   // ✅ מיון לפי סדר שמור (אם יש) - רק משימות רגילות, לא אירועי גוגל
   const dateISO = getDateISO(selectedDate);
-  const regularBlocks = activeBlocks.filter(b => !b.isGoogleEvent);
+  // ✅ תיקון: הפרדת משימות מחוץ לשעות עבודה
+  const outsideWorkHoursBlocks = activeBlocks.filter(b => b.isOutsideWorkHours);
+  const regularBlocks = activeBlocks.filter(b => !b.isGoogleEvent && !b.isOutsideWorkHours);
   const googleCalendarBlocks = activeBlocks.filter(b => b.isGoogleEvent);
   
   let sortedRegularBlocks = sortTasksByOrder(regularBlocks.map(b => ({
@@ -777,7 +779,7 @@ function DailyView() {
     isRunning: isTimerRunning(b.taskId || b.task?.id || b.id)
   })), dateISO);
   
-  // חישוב זמנים מחדש - רק למשימות רגילות
+  // חישוב זמנים מחדש - רק למשימות רגילות (בתוך שעות עבודה)
   let nextStartMinutes = isViewingToday ? currentTime.minutes : WORK_HOURS.start * 60;
   
   const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
@@ -805,6 +807,14 @@ function DailyView() {
     isRescheduled: false
   }));
   
+  // ✅ חדש: משימות מחוץ לשעות עבודה - שומרות על הזמנים המקוריים שלהן!
+  const outsideHoursWithOriginalTimes = outsideWorkHoursBlocks.map(block => ({
+    ...block,
+    isPostponed: false,
+    isRescheduled: false,
+    isOutsideWorkHours: true
+  }));
+  
   // ✅ מיזוג: משימות רגילות + אירועי גוגל, ממוינים לפי זמן התחלה
   const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleEventsWithOriginalTimes].sort((a, b) => {
     const aTime = a.startTime?.split(':').map(Number) || [0, 0];
@@ -812,9 +822,28 @@ function DailyView() {
     return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
   });
   
+  // ✅ חדש: משימות ערב (אחרי 16:00)
+  const eveningBlocks = outsideHoursWithOriginalTimes.filter(b => {
+    const time = b.startTime?.split(':').map(Number) || [0, 0];
+    return time[0] >= 16;
+  }).sort((a, b) => {
+    const aTime = a.startTime?.split(':').map(Number) || [0, 0];
+    const bTime = b.startTime?.split(':').map(Number) || [0, 0];
+    return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
+  });
+  
+  // ✅ חדש: משימות בוקר מוקדם (לפני 08:00)
+  const earlyMorningBlocks = outsideHoursWithOriginalTimes.filter(b => {
+    const time = b.startTime?.split(':').map(Number) || [0, 0];
+    return time[0] < 8;
+  }).sort((a, b) => {
+    const aTime = a.startTime?.split(':').map(Number) || [0, 0];
+    const bTime = b.startTime?.split(':').map(Number) || [0, 0];
+    return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
+  });
+  
   const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
   const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
-
   // ===============================
   // רנדור כרטיס עם גרירה
   // ===============================
@@ -1295,7 +1324,30 @@ function DailyView() {
             </p>
           </div>
         ) : (
+        {allBlocks.length === 0 && outsideHoursWithOriginalTimes.length === 0 ? (
+          <div className="card p-8 text-center">
+            <span className="text-4xl mb-4 block">📝</span>
+            <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
+              אין משימות ל{isToday(selectedDate) ? 'היום' : 'תאריך זה'}
+            </h3>
+            <p className="text-gray-500 dark:text-gray-400">
+              הוסיפי משימה חדשה להתחיל
+            </p>
+          </div>
+        ) : (
           <>
+            {/* ✅ חדש: משימות בוקר מוקדם (לפני 08:00) */}
+            {earlyMorningBlocks.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-purple-600 dark:text-purple-400 mb-2 flex items-center gap-2">
+                  🌅 בוקר מוקדם ({earlyMorningBlocks.length})
+                </h3>
+                <div className="space-y-2 border-r-4 border-purple-400 pr-2">
+                  {earlyMorningBlocks.map((block, index) => renderDraggableCard(block, index, earlyMorningBlocks))}
+                </div>
+              </div>
+            )}
+            
             {/* משימות שנדחו */}
             {overdueBlocks.length > 0 && (
               <div className="mb-4">
@@ -1326,6 +1378,18 @@ function DailyView() {
                     💡 גררי משימה כדי לשנות את הסדר
                   </p>
                 )}
+              </div>
+            )}
+            
+            {/* ✅ חדש: משימות ערב (אחרי 16:00) */}
+            {eveningBlocks.length > 0 && (
+              <div className="mb-4">
+                <h3 className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-2 flex items-center gap-2">
+                  🌙 אחרי שעות העבודה ({eveningBlocks.length})
+                </h3>
+                <div className="space-y-2 border-r-4 border-indigo-400 pr-2">
+                  {eveningBlocks.map((block, index) => renderDraggableCard(block, index, eveningBlocks))}
+                </div>
               </div>
             )}
             

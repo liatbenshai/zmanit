@@ -23,6 +23,7 @@
  * 
  * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
  * ✅ תיקון: הצגת משימות שהושלמו ביום/שבוע הנוכחי
+ * ✅ חדש: תמיכה במשימות מחוץ לשעות העבודה!
  */
 
 import { WORK_HOURS } from '../config/workSchedule';
@@ -453,18 +454,44 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
 }
 
 /**
+ * ✅ חדש: המרת שעה (HH:MM) לדקות מתחילת היום
+ */
+function timeToMinutes(timeStr) {
+  if (!timeStr) return null;
+  const [hours, minutes] = timeStr.split(':').map(Number);
+  return hours * 60 + (minutes || 0);
+}
+
+/**
+ * ✅ חדש: בדיקה אם השעה מחוץ לשעות העבודה
+ */
+function isOutsideWorkHours(timeMinutes, config) {
+  if (timeMinutes === null) return false;
+  return timeMinutes < config.dayStart || timeMinutes >= config.dayEnd;
+}
+
+/**
  * שיבוץ משימה בודדת - למלא ימים ברצף!
  * ✅ תיקון: משימות שהושלמו משובצות ביום ה-due_date שלהן
+ * ✅ חדש: משימות עם שעה מחוץ לשעות עבודה משובצות בשעה שלהן!
  */
 function scheduleTask(task, days, taskProgress, config) {
   const progress = taskProgress.get(task.id);
   if (!progress) return;
   
-  // ✅ משימה שהושלמה - משבצים אותה ביום ה-due_date שלה
-  if (task.is_completed) {
+  // ✅ חדש: משימה עם שעה ספציפית מחוץ לשעות עבודה
+  const taskTimeMinutes = timeToMinutes(task.due_time);
+  const isOutsideHours = isOutsideWorkHours(taskTimeMinutes, config);
+  
+  if (task.due_time && task.due_date && isOutsideHours && !task.is_completed) {
+    // מציאת היום המתאים
     const targetDay = days.find(d => d.date === task.due_date);
+    
     if (targetDay) {
       const duration = task.estimated_duration || 30;
+      const startMinute = taskTimeMinutes;
+      const endMinute = startMinute + duration;
+      
       const block = {
         id: `${task.id}-block-1`,
         taskId: task.id,
@@ -473,16 +500,69 @@ function scheduleTask(task, days, taskProgress, config) {
         taskType: task.task_type || 'other',
         priority: task.priority || 'normal',
         title: task.title,
-        startMinute: config.dayStart,
-        endMinute: config.dayStart + duration,
-        startTime: minutesToTime(config.dayStart),
-        endTime: minutesToTime(config.dayStart + duration),
+        startMinute: startMinute,
+        endMinute: endMinute,
+        startTime: task.due_time,
+        endTime: minutesToTime(endMinute),
+        duration: duration,
+        blockIndex: 1,
+        totalBlocks: 1,
+        dayDate: targetDay.date,
+        isCompleted: false,
+        timeSpent: task.time_spent || 0,
+        isOutsideWorkHours: true  // ✅ סימון מיוחד!
+      };
+      
+      targetDay.blocks.push(block);
+      progress.blocks.push(block);
+      progress.scheduled = duration;
+      progress.remaining = 0;
+      
+      // לא מעדכנים את totalScheduledMinutes כי זה מחוץ לשעות עבודה
+      
+      console.log('📌 משימה מחוץ לשעות עבודה:', {
+        title: task.title,
+        time: task.due_time,
+        date: task.due_date
+      });
+    }
+    return;
+  }
+  
+  // ✅ משימה שהושלמה - משבצים אותה ביום ה-due_date שלה
+  if (task.is_completed) {
+    const targetDay = days.find(d => d.date === task.due_date);
+    if (targetDay) {
+      const duration = task.estimated_duration || 30;
+      
+      // אם יש שעה ספציפית - משתמשים בה
+      let startMinute = config.dayStart;
+      if (task.due_time) {
+        const timeMin = timeToMinutes(task.due_time);
+        if (timeMin !== null) {
+          startMinute = timeMin;
+        }
+      }
+      
+      const block = {
+        id: `${task.id}-block-1`,
+        taskId: task.id,
+        task: task,
+        type: task.task_type || 'other',
+        taskType: task.task_type || 'other',
+        priority: task.priority || 'normal',
+        title: task.title,
+        startMinute: startMinute,
+        endMinute: startMinute + duration,
+        startTime: minutesToTime(startMinute),
+        endTime: minutesToTime(startMinute + duration),
         duration: duration,
         blockIndex: 1,
         totalBlocks: 1,
         dayDate: targetDay.date,
         isCompleted: true,  // ✅ מסומן כהושלם!
-        timeSpent: task.time_spent || 0
+        timeSpent: task.time_spent || 0,
+        isOutsideWorkHours: isOutsideWorkHours(startMinute, config)
       };
       
       targetDay.blocks.push(block);
