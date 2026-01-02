@@ -295,7 +295,6 @@ function DailyView() {
     const info = calculateAutoReschedule(tasks, editTask);
     setRescheduleInfo(info);
     
-    console.log('📊 Reschedule info:', {
       remainingToday: info.remainingToday,
       timeNeededToday: info.timeNeededToday,
       freeTimeToday: info.freeTimeToday,
@@ -354,9 +353,7 @@ function DailyView() {
     // 🔍 DEBUG: הצגת כל האינטרוולים של משימות עם parent
     const intervals = tasks.filter(t => t.parent_task_id && !t.is_completed);
     if (intervals.length > 0) {
-      console.log('🔍 Intervals found:', intervals.length);
       intervals.forEach(t => {
-        console.log('Interval:', t.id, t.title);
       });
     }
     
@@ -365,50 +362,22 @@ function DailyView() {
 
   // קבלת הבלוקים ליום הנבחר מתוך התוכנית השבועית
   const selectedDayData = useMemo(() => {
-    if (!weekPlan) return { blocks: [], tasks: [], isWeekend: false };
+    if (!weekPlan) return { blocks: [], tasks: [] };
     
     const dateISO = getDateISO(selectedDate);
     const dayPlan = weekPlan.days.find(d => d.date === dateISO);
     
-    // ✅ חדש: אם אין תוכנית ליום הזה (סוף שבוע), מחפשים משימות ישירות
     if (!dayPlan) {
-      // חיפוש משימות עם due_date ליום הזה
-      const dayTasks = tasks?.filter(t => t.due_date === dateISO && !t.is_completed) || [];
-      const dayOfWeek = selectedDate.getDay();
-      const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
-      
-      return { 
-        blocks: dayTasks.map(task => ({
-          id: `${task.id}-block-1`,
-          taskId: task.id,
-          task: task,
-          type: task.task_type || 'other',
-          taskType: task.task_type || 'other',
-          priority: task.priority || 'normal',
-          title: task.title,
-          startTime: task.due_time || '09:00',
-          endTime: task.due_time ? 
-            `${String(parseInt(task.due_time.split(':')[0]) + 1).padStart(2, '0')}:${task.due_time.split(':')[1] || '00'}` : 
-            '10:00',
-          duration: task.estimated_duration || 30,
-          isCompleted: task.is_completed || false,
-          timeSpent: task.time_spent || 0,
-          isWeekend: true,
-          isOutsideWorkHours: true
-        })),
-        tasks: dayTasks,
-        isWeekend: isWeekend 
-      };
+      return { blocks: [], tasks: [] };
     }
     
     return {
       blocks: dayPlan.blocks || [],
       usagePercent: dayPlan.usagePercent || 0,
       plannedMinutes: dayPlan.plannedMinutes || 0,
-      completedMinutes: dayPlan.completedMinutes || 0,
-      isWeekend: dayPlan.isWeekend || false
+      completedMinutes: dayPlan.completedMinutes || 0
     };
-  }, [weekPlan, selectedDate, tasks]);
+  }, [weekPlan, selectedDate]);
 
   // חישוב זמנים
   const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;
@@ -717,20 +686,29 @@ function DailyView() {
   
   // ✅ המרת אירועי גוגל לפורמט של בלוקים
   const googleBlocks = googleEvents
-    .filter(e => !e.isZmanitTask) // רק אירועים חיצוניים
+    .filter(e => !e.isZmanitTask && e.start_time) // רק אירועים חיצוניים עם שעה תקינה
     .map(event => {
-      const startTime = event.startTime instanceof Date 
-        ? event.startTime 
-        : new Date(event.startTime);
-      const endTime = event.endTime instanceof Date 
-        ? event.endTime 
-        : new Date(event.endTime);
+      // תמיכה בשני פורמטים: startTime או start_time
+      const rawStart = event.startTime || event.start_time;
+      const rawEnd = event.endTime || event.end_time;
+      
+      if (!rawStart || !rawEnd) return null;
+      
+      const startTime = rawStart instanceof Date 
+        ? rawStart 
+        : new Date(rawStart);
+      const endTime = rawEnd instanceof Date 
+        ? rawEnd 
+        : new Date(rawEnd);
+      
+      // בדיקה שהתאריכים תקינים
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) return null;
       
       const durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
       
       return {
-        id: `google-${event.id}`,
-        taskId: `google-${event.id}`,
+        id: `google-${event.id || event.google_event_id}`,
+        taskId: `google-${event.id || event.google_event_id}`,
         title: event.title,
         startTime: startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
         endTime: endTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
@@ -741,7 +719,8 @@ function DailyView() {
         icon: '📅',
         isLocked: true // אירועי גוגל לא ניתנים לגרירה
       };
-    });
+    })
+    .filter(Boolean); // סינון אירועים לא תקינים
   
   // מיון בלוקים - כולל אירועי גוגל
   const allBlocks = [...(selectedDayData.blocks || []), ...googleBlocks].sort((a, b) => {
@@ -792,10 +771,9 @@ function DailyView() {
     }
   }
   
-  // ✅ מיון לפי סדר שמור (אם יש) - רק משימות רגילות, לא אירועי גוגל ולא מחוץ לשעות עבודה
+  // ✅ מיון לפי סדר שמור (אם יש) - רק משימות רגילות, לא אירועי גוגל
   const dateISO = getDateISO(selectedDate);
-  const outsideWorkHoursBlocks = activeBlocks.filter(b => b.isOutsideWorkHours);
-  const regularBlocks = activeBlocks.filter(b => !b.isGoogleEvent && !b.isOutsideWorkHours);
+  const regularBlocks = activeBlocks.filter(b => !b.isGoogleEvent);
   const googleCalendarBlocks = activeBlocks.filter(b => b.isGoogleEvent);
   
   let sortedRegularBlocks = sortTasksByOrder(regularBlocks.map(b => ({
@@ -833,34 +811,6 @@ function DailyView() {
     isPostponed: false,
     isRescheduled: false
   }));
-  
-  // ✅ חדש: משימות מחוץ לשעות עבודה - שומרות על הזמנים המקוריים!
-  const outsideHoursWithOriginalTimes = outsideWorkHoursBlocks.map(block => ({
-    ...block,
-    isPostponed: false,
-    isRescheduled: false,
-    isOutsideWorkHours: true
-  }));
-  
-  // ✅ חדש: משימות ערב (אחרי 16:00)
-  const eveningBlocks = outsideHoursWithOriginalTimes.filter(b => {
-    const time = b.startTime?.split(':').map(Number) || [0, 0];
-    return time[0] >= 16;
-  }).sort((a, b) => {
-    const aTime = a.startTime?.split(':').map(Number) || [0, 0];
-    const bTime = b.startTime?.split(':').map(Number) || [0, 0];
-    return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
-  });
-  
-  // ✅ חדש: משימות בוקר מוקדם (לפני 08:00)
-  const earlyMorningBlocks = outsideHoursWithOriginalTimes.filter(b => {
-    const time = b.startTime?.split(':').map(Number) || [0, 0];
-    return time[0] < 8;
-  }).sort((a, b) => {
-    const aTime = a.startTime?.split(':').map(Number) || [0, 0];
-    const bTime = b.startTime?.split(':').map(Number) || [0, 0];
-    return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
-  });
   
   // ✅ מיזוג: משימות רגילות + אירועי גוגל, ממוינים לפי זמן התחלה
   const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleEventsWithOriginalTimes].sort((a, b) => {
@@ -981,104 +931,16 @@ function DailyView() {
       >
         {/* כותרת */}
         <div className="flex items-center justify-between mb-4">
-          {/* ✅ כפתור יומן גוגל */}
-          <div className="relative">
-            <button
-              onClick={() => setShowGoogleMenu(!showGoogleMenu)}
-              disabled={isGoogleLoading}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm
-                ${isGoogleConnected
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }
-              `}
-            >
-              {isGoogleLoading || isGoogleSyncing ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
-              ) : (
-                <GoogleIcon />
+          {/* ✅ אינדיקטור סטטוס יומן גוגל (בלי כפתור התחברות - זה בדשבורד) */}
+          {isGoogleConnected && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <span>יומן מסונכרן</span>
+              {isGoogleSyncing && (
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-600" />
               )}
-              <span>{isGoogleConnected ? 'יומן גוגל' : 'חבר יומן'}</span>
-              <span className="text-xs">▼</span>
-            </button>
-            
-            {/* תפריט יומן גוגל */}
-            <AnimatePresence>
-              {showGoogleMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50"
-                >
-                  {isGoogleConnected ? (
-                    <>
-                      {/* בחירת יומן */}
-                      {calendars.length > 0 && (
-                        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">יומן:</label>
-                          <select
-                            value={selectedCalendarId}
-                            onChange={(e) => setSelectedCalendarId(e.target.value)}
-                            className="w-full text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
-                          >
-                            {calendars.map(cal => (
-                              <option key={cal.id} value={cal.id}>
-                                {cal.summary} {cal.primary && '(ראשי)'}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      
-                      <button
-                        onClick={handleExportToGoogle}
-                        disabled={isGoogleSyncing}
-                        className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                      >
-                        <span>📤</span>
-                        <span>ייצא משימות ליומן</span>
-                      </button>
-                      
-                      <button
-                        onClick={handleImportFromGoogle}
-                        disabled={isGoogleSyncing}
-                        className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                      >
-                        <span>📥</span>
-                        <span>ייבא מיומן גוגל</span>
-                      </button>
-                      
-                      <div className="border-t border-gray-200 dark:border-gray-700">
-                        <button
-                          onClick={() => {
-                            disconnectGoogle();
-                            setShowGoogleMenu(false);
-                          }}
-                          className="w-full px-4 py-3 text-right hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors flex items-center gap-2"
-                        >
-                          <span>🔌</span>
-                          <span>נתק יומן גוגל</span>
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        connectGoogle();
-                        setShowGoogleMenu(false);
-                      }}
-                      className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                    >
-                      <GoogleIcon />
-                      <span>התחבר עם Google</span>
-                    </button>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+            </div>
+          )}
           
           {!isToday(selectedDate) && (
             <button
@@ -1141,20 +1003,29 @@ function DailyView() {
           </h4>
           
           <div className="space-y-1">
-            {googleEvents.filter(e => !e.isZmanitTask).map(event => (
+            {googleEvents.filter(e => !e.isZmanitTask && (e.start_time || e.startTime)).map(event => {
+              const start = event.startTime || event.start_time;
+              const end = event.endTime || event.end_time;
+              const startDate = start instanceof Date ? start : new Date(start);
+              const endDate = end instanceof Date ? end : new Date(end);
+              
+              // בדיקת תקינות
+              if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
+              
+              return (
               <div
-                key={event.id}
+                key={event.id || event.google_event_id}
                 className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 bg-white dark:bg-gray-800 rounded-lg px-3 py-2"
               >
                 <span>📌</span>
                 <span className="font-medium flex-1">{event.title}</span>
                 <span className="text-orange-500 dark:text-orange-400">
-                  {event.startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                  {startDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
                   {' - '}
-                  {event.endTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                  {endDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
-            ))}
+            );})}
           </div>
         </motion.div>
       )}
@@ -1341,7 +1212,7 @@ function DailyView() {
 
         {/* רשימת משימות */}
         <div className="flex-1 space-y-3">
-        {allBlocks.length === 0 && outsideHoursWithOriginalTimes.length === 0 ? (
+        {allBlocks.length === 0 ? (
           <div className="card p-8 text-center">
             <span className="text-4xl mb-4 block">📝</span>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
@@ -1353,18 +1224,6 @@ function DailyView() {
           </div>
         ) : (
           <>
-            {/* ✅ חדש: משימות בוקר מוקדם (לפני 08:00) */}
-            {earlyMorningBlocks.length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-sm font-medium text-purple-600 dark:text-purple-400 mb-2 flex items-center gap-2">
-                  🌅 בוקר מוקדם ({earlyMorningBlocks.length})
-                </h3>
-                <div className="space-y-2 border-r-4 border-purple-400 pr-2">
-                  {earlyMorningBlocks.map((block, index) => renderDraggableCard(block, index, earlyMorningBlocks))}
-                </div>
-              </div>
-            )}
-            
             {/* משימות שנדחו */}
             {overdueBlocks.length > 0 && (
               <div className="mb-4">
@@ -1395,18 +1254,6 @@ function DailyView() {
                     💡 גררי משימה כדי לשנות את הסדר
                   </p>
                 )}
-              </div>
-            )}
-            
-            {/* ✅ חדש: משימות ערב (אחרי 16:00) */}
-            {eveningBlocks.length > 0 && (
-              <div className="mb-4">
-                <h3 className="text-sm font-medium text-indigo-600 dark:text-indigo-400 mb-2 flex items-center gap-2">
-                  🌙 אחרי שעות העבודה ({eveningBlocks.length})
-                </h3>
-                <div className="space-y-2 border-r-4 border-indigo-400 pr-2">
-                  {eveningBlocks.map((block, index) => renderDraggableCard(block, index, eveningBlocks))}
-                </div>
               </div>
             )}
             
