@@ -931,104 +931,16 @@ function DailyView() {
       >
         {/* כותרת */}
         <div className="flex items-center justify-between mb-4">
-          {/* ✅ כפתור יומן גוגל */}
-          <div className="relative">
-            <button
-              onClick={() => setShowGoogleMenu(!showGoogleMenu)}
-              disabled={isGoogleLoading}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg transition-all text-sm
-                ${isGoogleConnected
-                  ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50'
-                  : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
-                }
-              `}
-            >
-              {isGoogleLoading || isGoogleSyncing ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-current" />
-              ) : (
-                <GoogleIcon />
+          {/* ✅ אינדיקטור סטטוס יומן גוגל (בלי כפתור התחברות - זה בדשבורד) */}
+          {isGoogleConnected && (
+            <div className="flex items-center gap-2 px-3 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm">
+              <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+              <span>יומן מסונכרן</span>
+              {isGoogleSyncing && (
+                <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-green-600" />
               )}
-              <span>{isGoogleConnected ? 'יומן גוגל' : 'חבר יומן'}</span>
-              <span className="text-xs">▼</span>
-            </button>
-            
-            {/* תפריט יומן גוגל */}
-            <AnimatePresence>
-              {showGoogleMenu && (
-                <motion.div
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="absolute top-full right-0 mt-2 w-56 bg-white dark:bg-gray-800 rounded-xl shadow-xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50"
-                >
-                  {isGoogleConnected ? (
-                    <>
-                      {/* בחירת יומן */}
-                      {calendars.length > 0 && (
-                        <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                          <label className="block text-xs text-gray-500 dark:text-gray-400 mb-1">יומן:</label>
-                          <select
-                            value={selectedCalendarId}
-                            onChange={(e) => setSelectedCalendarId(e.target.value)}
-                            className="w-full text-sm px-2 py-1 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700"
-                          >
-                            {calendars.map(cal => (
-                              <option key={cal.id} value={cal.id}>
-                                {cal.summary} {cal.primary && '(ראשי)'}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      )}
-                      
-                      <button
-                        onClick={handleExportToGoogle}
-                        disabled={isGoogleSyncing}
-                        className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                      >
-                        <span>📤</span>
-                        <span>ייצא משימות ליומן</span>
-                      </button>
-                      
-                      <button
-                        onClick={handleImportFromGoogle}
-                        disabled={isGoogleSyncing}
-                        className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                      >
-                        <span>📥</span>
-                        <span>ייבא מיומן גוגל</span>
-                      </button>
-                      
-                      <div className="border-t border-gray-200 dark:border-gray-700">
-                        <button
-                          onClick={() => {
-                            disconnectGoogle();
-                            setShowGoogleMenu(false);
-                          }}
-                          className="w-full px-4 py-3 text-right hover:bg-red-50 dark:hover:bg-red-900/20 text-red-600 dark:text-red-400 transition-colors flex items-center gap-2"
-                        >
-                          <span>🔌</span>
-                          <span>נתק יומן גוגל</span>
-                        </button>
-                      </div>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => {
-                        connectGoogle();
-                        setShowGoogleMenu(false);
-                      }}
-                      className="w-full px-4 py-3 text-right hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors flex items-center gap-2"
-                    >
-                      <GoogleIcon />
-                      <span>התחבר עם Google</span>
-                    </button>
-                  )}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+            </div>
+          )}
           
           {!isToday(selectedDate) && (
             <button
