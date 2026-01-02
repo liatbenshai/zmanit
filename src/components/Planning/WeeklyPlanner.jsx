@@ -454,13 +454,9 @@ function DayColumn({ day, isToday, onAddTask, onEditTask, onComplete, onStartTim
 
       {/* תוכן */}
       <div className="flex-1 p-2 space-y-1 overflow-y-auto max-h-[250px]">
-        {!day.isWorkDay ? (
+        {blocks.length === 0 ? (
           <div className="text-center text-gray-400 text-xs py-4">
-            🌴 יום חופש
-          </div>
-        ) : blocks.length === 0 ? (
-          <div className="text-center text-gray-400 text-xs py-4">
-            אין משימות
+            {!day.isWorkDay ? '🌴 סוף שבוע' : 'אין משימות'}
           </div>
         ) : (
           blocks.map((block, idx) => (
@@ -476,17 +472,15 @@ function DayColumn({ day, isToday, onAddTask, onEditTask, onComplete, onStartTim
         )}
       </div>
 
-      {/* כפתור הוספה */}
-      {day.isWorkDay && (
-        <button
-          onClick={onAddTask}
-          className="p-2 text-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-gray-200 dark:border-gray-700 transition-colors text-sm"
-        >
-          + הוסף
-        </button>
-      )}
+      {/* כפתור הוספה - גם בסופי שבוע! */}
+      <button
+        onClick={onAddTask}
+        className="p-2 text-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-gray-200 dark:border-gray-700 transition-colors text-sm"
+      >
+        + הוסף
+      </button>
 
-      {/* סרגל ניצולת */}
+      {/* סרגל ניצולת - רק לימי עבודה */}
       {day.isWorkDay && (
         <div className="px-2 pb-2">
           <div className="h-1.5 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
@@ -583,9 +577,44 @@ function DayDetailView({ day, allDays, onBack, onAddTask, onEditTask, onComplete
       </div>
 
       {/* ציר זמן */}
-      {!day.isWorkDay ? (
+      {blocks.length === 0 && !day.isWorkDay ? (
         <div className="p-8 text-center text-gray-400">
-          🌴 יום חופש
+          <div className="text-4xl mb-2">🌴</div>
+          <div>סוף שבוע - אין משימות מתוזמנות</div>
+          <button
+            onClick={() => onAddTask(day.date)}
+            className="mt-4 px-4 py-2 bg-blue-100 text-blue-600 rounded-lg hover:bg-blue-200"
+          >
+            + הוסף משימה לסוף השבוע
+          </button>
+        </div>
+      ) : !day.isWorkDay && blocks.length > 0 ? (
+        // ✅ תצוגת משימות בסוף שבוע
+        <div className="p-4">
+          <div className="mb-4 text-sm text-gray-500 text-center">
+            🌴 משימות לסוף השבוע
+          </div>
+          <div className="space-y-2">
+            {blocks.map((block, idx) => (
+              <TaskSlot
+                key={block.id || `weekend-block-${idx}`}
+                slot={block}
+                onEdit={() => block.task && onEditTask(block.task)}
+                onComplete={() => block.task && onComplete(block.task)}
+                onStartTimer={() => block.task && onStartTimer && onStartTimer(block.task)}
+              />
+            ))}
+          </div>
+          <button
+            onClick={() => onAddTask(day.date)}
+            className="mt-4 w-full py-2 text-sm text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
+          >
+            + הוסף משימה נוספת
+          </button>
+        </div>
+      ) : blocks.length === 0 ? (
+        <div className="p-8 text-center text-gray-400">
+          אין משימות ליום זה
         </div>
       ) : (
         <div className="p-4">

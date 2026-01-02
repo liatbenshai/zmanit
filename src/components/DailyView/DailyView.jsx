@@ -365,22 +365,50 @@ function DailyView() {
 
   // קבלת הבלוקים ליום הנבחר מתוך התוכנית השבועית
   const selectedDayData = useMemo(() => {
-    if (!weekPlan) return { blocks: [], tasks: [] };
+    if (!weekPlan) return { blocks: [], tasks: [], isWeekend: false };
     
     const dateISO = getDateISO(selectedDate);
     const dayPlan = weekPlan.days.find(d => d.date === dateISO);
     
+    // ✅ חדש: אם אין תוכנית ליום הזה (סוף שבוע), מחפשים משימות ישירות
     if (!dayPlan) {
-      return { blocks: [], tasks: [] };
+      // חיפוש משימות עם due_date ליום הזה
+      const dayTasks = tasks?.filter(t => t.due_date === dateISO && !t.is_completed) || [];
+      const dayOfWeek = selectedDate.getDay();
+      const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+      
+      return { 
+        blocks: dayTasks.map(task => ({
+          id: `${task.id}-block-1`,
+          taskId: task.id,
+          task: task,
+          type: task.task_type || 'other',
+          taskType: task.task_type || 'other',
+          priority: task.priority || 'normal',
+          title: task.title,
+          startTime: task.due_time || '09:00',
+          endTime: task.due_time ? 
+            `${String(parseInt(task.due_time.split(':')[0]) + 1).padStart(2, '0')}:${task.due_time.split(':')[1] || '00'}` : 
+            '10:00',
+          duration: task.estimated_duration || 30,
+          isCompleted: task.is_completed || false,
+          timeSpent: task.time_spent || 0,
+          isWeekend: true,
+          isOutsideWorkHours: true
+        })),
+        tasks: dayTasks,
+        isWeekend: isWeekend 
+      };
     }
     
     return {
       blocks: dayPlan.blocks || [],
       usagePercent: dayPlan.usagePercent || 0,
       plannedMinutes: dayPlan.plannedMinutes || 0,
-      completedMinutes: dayPlan.completedMinutes || 0
+      completedMinutes: dayPlan.completedMinutes || 0,
+      isWeekend: dayPlan.isWeekend || false
     };
-  }, [weekPlan, selectedDate]);
+  }, [weekPlan, selectedDate, tasks]);
 
   // חישוב זמנים
   const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;

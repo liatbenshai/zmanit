@@ -198,6 +198,7 @@ export function smartScheduleWeek(weekStart, allTasks) {
 
 function initializeDays(weekStart, config) {
   const days = [];
+  const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
@@ -213,17 +214,16 @@ function initializeDays(weekStart, config) {
     
     const day = {
       date: dateISO,
-      dayName: dayConfig?.name || '',
+      dayName: dayConfig?.name || dayNames[dayOfWeek] || '',
       dayOfWeek,
       isWorkDay,
+      isWeekend: dayOfWeek === 5 || dayOfWeek === 6, // ✅ חדש: סימון סוף שבוע
       blocks: [],
       morningMinutesUsed: 0,
       afternoonMinutesUsed: 0,
       totalScheduledMinutes: 0,
       workHours: isWorkDay ? { start: 8, end: 16 } : null
     };
-    
-    // ❌ הוסר: בלוק אדמיניסטרציה קבוע - לפי בקשת המשתמשת
     
     days.push(day);
   }
@@ -383,8 +383,12 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
     }
   }
   
-  // סינון ימים - רק מהיום והלאה וימי עבודה
-  const relevantDays = extendedDays.filter(d => d.date >= todayISO && d.isWorkDay);
+  // סינון ימים - רק מהיום והלאה
+  // ✅ תיקון: כולל גם סופי שבוע! (לא רק ימי עבודה)
+  const relevantDays = extendedDays.filter(d => d.date >= todayISO);
+  
+  // ימי עבודה בלבד - לשיבוץ אוטומטי של משימות ללא due_date
+  const workDaysOnly = relevantDays.filter(d => d.isWorkDay);
   
   
   // ✅ תיקון: עדכון due_date של משימות באיחור להיום
@@ -418,8 +422,17 @@ function scheduleAllTasksFromToday(sortedTasks, days, todayISO, config) {
     });
   }
   
-  // שיבוץ כל משימה
+  // שיבוץ כל משימה - קודם משימות עם due_date ספציפי (כולל סופ"ש)
   for (const task of tasksWithUpdatedDates) {
+    // משימות עם due_date ביום שישי/שבת - משבצים ישירות
+    if (task.due_date) {
+      const targetDay = relevantDays.find(d => d.date === task.due_date);
+      if (targetDay && (targetDay.isWeekend || !targetDay.isWorkDay)) {
+        scheduleTask(task, relevantDays, taskProgress, config);
+        continue;
+      }
+    }
+    // שאר המשימות - משבצים לימי עבודה
     scheduleTask(task, relevantDays, taskProgress, config);
   }
   
@@ -581,6 +594,58 @@ function scheduleTask(task, days, taskProgress, config) {
   
   // משימה רגילה (לא הושלמה)
   if (progress.remaining <= 0) return;
+  
+  // ✅ חדש: משימה עם due_date ביום שישי/שבת - משבצים ישירות!
+  if (task.due_date) {
+    const targetDay = days.find(d => d.date === task.due_date);
+    if (targetDay && targetDay.isWeekend) {
+      const duration = task.estimated_duration || 30;
+      let startMinute = config.dayStart; // ברירת מחדל 08:00
+      
+      // אם יש שעה ספציפית - משתמשים בה
+      if (task.due_time) {
+        const timeMin = timeToMinutes(task.due_time);
+        if (timeMin !== null) {
+          startMinute = timeMin;
+        }
+      }
+      
+      const block = {
+        id: `${task.id}-block-1`,
+        taskId: task.id,
+        task: task,
+        type: task.task_type || 'other',
+        taskType: task.task_type || 'other',
+        priority: task.priority || 'normal',
+        title: task.title,
+        startMinute: startMinute,
+        endMinute: startMinute + duration,
+        startTime: minutesToTime(startMinute),
+        endTime: minutesToTime(startMinute + duration),
+        duration: duration,
+        blockIndex: 1,
+        totalBlocks: 1,
+        dayDate: targetDay.date,
+        isCompleted: false,
+        timeSpent: task.time_spent || 0,
+        isWeekend: true,  // ✅ סימון שזו משימת סוף שבוע
+        isOutsideWorkHours: isOutsideWorkHours(startMinute, config)
+      };
+      
+      targetDay.blocks.push(block);
+      progress.blocks.push(block);
+      progress.scheduled = duration;
+      progress.remaining = 0;
+      
+      console.log('📅 משימה בסוף שבוע:', {
+        title: task.title,
+        date: task.due_date,
+        time: task.due_time || 'לא נקבעה שעה'
+      });
+      
+      return;
+    }
+  }
   
   const isMorningTask = isMorningTaskType(task, config);
   
