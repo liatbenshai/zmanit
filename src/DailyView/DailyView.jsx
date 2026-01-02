@@ -686,20 +686,29 @@ function DailyView() {
   
   // ✅ המרת אירועי גוגל לפורמט של בלוקים
   const googleBlocks = googleEvents
-    .filter(e => !e.isZmanitTask) // רק אירועים חיצוניים
+    .filter(e => !e.isZmanitTask && e.start_time) // רק אירועים חיצוניים עם שעה תקינה
     .map(event => {
-      const startTime = event.startTime instanceof Date 
-        ? event.startTime 
-        : new Date(event.startTime);
-      const endTime = event.endTime instanceof Date 
-        ? event.endTime 
-        : new Date(event.endTime);
+      // תמיכה בשני פורמטים: startTime או start_time
+      const rawStart = event.startTime || event.start_time;
+      const rawEnd = event.endTime || event.end_time;
+      
+      if (!rawStart || !rawEnd) return null;
+      
+      const startTime = rawStart instanceof Date 
+        ? rawStart 
+        : new Date(rawStart);
+      const endTime = rawEnd instanceof Date 
+        ? rawEnd 
+        : new Date(rawEnd);
+      
+      // בדיקה שהתאריכים תקינים
+      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) return null;
       
       const durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
       
       return {
-        id: `google-${event.id}`,
-        taskId: `google-${event.id}`,
+        id: `google-${event.id || event.google_event_id}`,
+        taskId: `google-${event.id || event.google_event_id}`,
         title: event.title,
         startTime: startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
         endTime: endTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
@@ -710,7 +719,8 @@ function DailyView() {
         icon: '📅',
         isLocked: true // אירועי גוגל לא ניתנים לגרירה
       };
-    });
+    })
+    .filter(Boolean); // סינון אירועים לא תקינים
   
   // מיון בלוקים - כולל אירועי גוגל
   const allBlocks = [...(selectedDayData.blocks || []), ...googleBlocks].sort((a, b) => {
@@ -1081,20 +1091,29 @@ function DailyView() {
           </h4>
           
           <div className="space-y-1">
-            {googleEvents.filter(e => !e.isZmanitTask).map(event => (
+            {googleEvents.filter(e => !e.isZmanitTask && (e.start_time || e.startTime)).map(event => {
+              const start = event.startTime || event.start_time;
+              const end = event.endTime || event.end_time;
+              const startDate = start instanceof Date ? start : new Date(start);
+              const endDate = end instanceof Date ? end : new Date(end);
+              
+              // בדיקת תקינות
+              if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
+              
+              return (
               <div
-                key={event.id}
+                key={event.id || event.google_event_id}
                 className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 bg-white dark:bg-gray-800 rounded-lg px-3 py-2"
               >
                 <span>📌</span>
                 <span className="font-medium flex-1">{event.title}</span>
                 <span className="text-orange-500 dark:text-orange-400">
-                  {event.startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                  {startDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
                   {' - '}
-                  {event.endTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
+                  {endDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
-            ))}
+            );})}
           </div>
         </motion.div>
       )}
