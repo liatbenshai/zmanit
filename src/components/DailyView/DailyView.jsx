@@ -219,38 +219,35 @@ function DailyView() {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   
-  // ✅ Google Calendar
+  // ✅ Google Calendar - סנכרון אמיתי
   const { 
     isConnected: isGoogleConnected, 
     isLoading: isGoogleLoading,
     isSyncing: isGoogleSyncing,
-    connect: connectGoogle,
-    disconnect: disconnectGoogle,
+    syncGoogleEvents,
     exportTasks: exportToGoogle,
-    importDayEvents,
-    calendars,
-    selectedCalendarId,
-    setSelectedCalendarId
   } = useGoogleCalendar();
   
-  const [googleEvents, setGoogleEvents] = useState([]);
   const [showGoogleMenu, setShowGoogleMenu] = useState(false);
   
-  // ✅ טעינה אוטומטית של אירועי גוגל כשמשנים תאריך
+  // ✅ סנכרון אוטומטי של אירועי גוגל כשמשנים תאריך - יוצר משימות אמיתיות!
   useEffect(() => {
-    const loadGoogleEventsForDate = async () => {
-      if (!isGoogleConnected || isGoogleLoading) return;
+    const syncGoogleForDate = async () => {
+      if (!isGoogleConnected || isGoogleLoading || !user?.id) return;
       
       try {
-        const events = await importDayEvents(selectedDate);
-        setGoogleEvents(events);
+        const result = await syncGoogleEvents(selectedDate, user.id, null, tasks);
+        // אם יובאו משימות חדשות - רענון הרשימה
+        if (result.imported > 0 || result.updated > 0) {
+          await loadTasks();
+        }
       } catch (err) {
-        // שגיאה שקטה - לא נציג הודעה כי זה קורה ברקע
+        console.error('שגיאה בסנכרון גוגל:', err);
       }
     };
     
-    loadGoogleEventsForDate();
-  }, [selectedDate, isGoogleConnected, isGoogleLoading, importDayEvents]);
+    syncGoogleForDate();
+  }, [selectedDate, isGoogleConnected, isGoogleLoading, user?.id]);
   
   // שעה נוכחית
   const [currentTime, setCurrentTime] = useState(() => {
@@ -468,48 +465,18 @@ function DailyView() {
   // ✅ Google Calendar Functions
   // ===============================
   
-  const handleExportToGoogle = async () => {
-    if (!isGoogleConnected) {
-      connectGoogle();
-      return;
+  // סנכרון ידני עם גוגל
+  const handleSyncWithGoogle = async () => {
+    if (!isGoogleConnected || !user?.id) return;
+    
+    try {
+      const result = await syncGoogleEvents(selectedDate, user.id, null, tasks);
+      if (result.imported > 0 || result.updated > 0) {
+        await loadTasks();
+      }
+    } catch (err) {
+      console.error('שגיאה בסנכרון:', err);
     }
-    
-    // ייצוא כל הבלוקים שלא הושלמו
-    const blocksToExport = (selectedDayData.blocks || [])
-      .filter(b => !b.isCompleted)
-      .map(b => ({
-        ...b,
-        date: getDateISO(selectedDate)
-      }));
-    
-    if (blocksToExport.length === 0) {
-      toast.error('אין משימות לייצוא');
-      return;
-    }
-    
-    await exportToGoogle(blocksToExport);
-    setShowGoogleMenu(false);
-  };
-  
-  const handleImportFromGoogle = async () => {
-    if (!isGoogleConnected) {
-      connectGoogle();
-      return;
-    }
-    
-    const events = await importDayEvents(selectedDate);
-    setGoogleEvents(events);
-    
-    // סינון אירועים שאינם מזמנית
-    const externalEvents = events.filter(e => !e.isZmanitTask);
-    
-    if (externalEvents.length > 0) {
-      toast.success(`📥 יובאו ${externalEvents.length} אירועים מיומן גוגל`);
-    } else {
-      toast.success('אין אירועים חדשים ביומן');
-    }
-    
-    setShowGoogleMenu(false);
   };
 
   // ===============================
@@ -685,46 +652,8 @@ function DailyView() {
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
   
-  // ✅ המרת אירועי גוגל לפורמט של בלוקים
-  const googleBlocks = googleEvents
-    .filter(e => !e.isZmanitTask && e.start_time) // רק אירועים חיצוניים עם שעה תקינה
-    .map(event => {
-      // תמיכה בשני פורמטים: startTime או start_time
-      const rawStart = event.startTime || event.start_time;
-      const rawEnd = event.endTime || event.end_time;
-      
-      if (!rawStart || !rawEnd) return null;
-      
-      const startTime = rawStart instanceof Date 
-        ? rawStart 
-        : new Date(rawStart);
-      const endTime = rawEnd instanceof Date 
-        ? rawEnd 
-        : new Date(rawEnd);
-      
-      // בדיקה שהתאריכים תקינים
-      if (isNaN(startTime.getTime()) || isNaN(endTime.getTime())) return null;
-      
-      const durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
-      
-      return {
-        id: `google-${event.id || event.google_event_id}`,
-        taskId: `google-${event.id || event.google_event_id}`,
-        title: event.title,
-        startTime: startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        endTime: endTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit', hour12: false }),
-        duration: durationMinutes,
-        isGoogleEvent: true,
-        isCompleted: false,
-        taskType: 'google_calendar',
-        icon: '📅',
-        isLocked: true // אירועי גוגל לא ניתנים לגרירה
-      };
-    })
-    .filter(Boolean); // סינון אירועים לא תקינים
-  
-  // מיון בלוקים - כולל אירועי גוגל
-  const allBlocks = [...(selectedDayData.blocks || []), ...googleBlocks].sort((a, b) => {
+  // מיון בלוקים - משימות מגוגל כבר נכללות כי הן משימות אמיתיות עכשיו
+  const allBlocks = [...(selectedDayData.blocks || [])].sort((a, b) => {
     if (a.startTime && b.startTime) {
       const aTime = a.startTime.split(':').map(Number);
       const bTime = b.startTime.split(':').map(Number);
@@ -772,10 +701,12 @@ function DailyView() {
     }
   }
   
-  // ✅ מיון לפי סדר שמור (אם יש) - רק משימות רגילות, לא אירועי גוגל
+  // ✅ מיון לפי סדר שמור - משימות מגוגל הן עכשיו משימות אמיתיות!
   const dateISO = getDateISO(selectedDate);
-  const regularBlocks = activeBlocks.filter(b => !b.isGoogleEvent);
-  const googleCalendarBlocks = activeBlocks.filter(b => b.isGoogleEvent);
+  
+  // משימות מגוגל (is_from_google) שומרות על הזמנים שלהן
+  const googleTasks = activeBlocks.filter(b => b.is_from_google || b.task?.is_from_google);
+  const regularBlocks = activeBlocks.filter(b => !b.is_from_google && !b.task?.is_from_google);
   
   let sortedRegularBlocks = sortTasksByOrder(regularBlocks.map(b => ({
     ...b,
@@ -806,15 +737,16 @@ function DailyView() {
     };
   });
   
-  // ✅ אירועי גוגל שומרים על הזמנים המקוריים שלהם
-  const googleEventsWithOriginalTimes = googleCalendarBlocks.map(block => ({
+  // ✅ משימות מגוגל שומרות על הזמנים המקוריים שלהן
+  const googleTasksWithTimes = googleTasks.map(block => ({
     ...block,
     isPostponed: false,
-    isRescheduled: false
+    isRescheduled: false,
+    isFromGoogle: true // סימון לרנדור
   }));
   
-  // ✅ מיזוג: משימות רגילות + אירועי גוגל, ממוינים לפי זמן התחלה
-  const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleEventsWithOriginalTimes].sort((a, b) => {
+  // ✅ מיזוג: משימות רגילות + משימות מגוגל, ממוינים לפי זמן התחלה
+  const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes].sort((a, b) => {
     const aTime = a.startTime?.split(':').map(Number) || [0, 0];
     const bTime = b.startTime?.split(':').map(Number) || [0, 0];
     return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
@@ -827,33 +759,10 @@ function DailyView() {
   // רנדור כרטיס עם גרירה
   // ===============================
   const renderDraggableCard = (block, index, blocksArray) => {
-    // ✅ רנדור מיוחד לאירועי גוגל - לא ניתן לגרירה
-    if (block.isGoogleEvent) {
-      return (
-        <motion.div
-          key={block.id || `google-${index}`}
-          layout
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="p-3 bg-blue-50 dark:bg-blue-900/30 rounded-xl border-2 border-blue-300 dark:border-blue-700 border-dashed"
-        >
-          <div className="flex items-center gap-3">
-            <span className="text-2xl">📅</span>
-            <div className="flex-1">
-              <h4 className="font-medium text-blue-900 dark:text-blue-100">{block.title}</h4>
-              <p className="text-sm text-blue-600 dark:text-blue-300">
-                {block.startTime} - {block.endTime} • יומן גוגל
-              </p>
-            </div>
-            <div className="text-xs text-blue-500 dark:text-blue-400 bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded-full">
-              {block.duration} דק׳
-            </div>
-          </div>
-        </motion.div>
-      );
-    }
+    // ✅ משימות מגוגל מקבלות אינדיקציה קטנה אבל מתנהגות כמו משימות רגילות
+    const isFromGoogle = block.isFromGoogle || block.is_from_google || block.task?.is_from_google;
     
-    // רנדור רגיל למשימות
+    // רנדור רגיל - גם למשימות מגוגל (עכשיו הן משימות אמיתיות!)
     return (
     <motion.div
       key={block.id || block.taskId || `block-${index}`}
@@ -867,9 +776,10 @@ function DailyView() {
       className={`
         relative
         ${dragOverIndex === index ? 'ring-2 ring-blue-500 ring-dashed rounded-xl' : ''}
+        ${isFromGoogle ? 'ring-1 ring-blue-300' : ''}
       `}
-      draggable
-      onDragStart={(e) => handleReorderDragStart(e, index)}
+      draggable={!isFromGoogle}
+      onDragStart={(e) => !isFromGoogle && handleReorderDragStart(e, index)}
       onDragEnd={handleReorderDragEnd}
       onDragOver={(e) => handleReorderDragOver(e, index)}
       onDrop={(e) => handleReorderDrop(e, index, blocksArray)}
@@ -882,7 +792,17 @@ function DailyView() {
         <div className="absolute -bottom-1 left-0 right-0 h-1 bg-blue-500 rounded-full z-10" />
       )}
 
-      {/* ידית גרירה */}
+      {/* אינדיקטור גוגל */}
+      {isFromGoogle && (
+        <div className="absolute left-2 top-2 z-20">
+          <span className="text-xs bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded-full">
+            📅 גוגל
+          </span>
+        </div>
+      )}
+
+      {/* ידית גרירה - רק למשימות לא מגוגל */}
+      {!isFromGoogle && (
       <div className="absolute right-1 top-1/2 -translate-y-1/2 z-20 opacity-30 hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1">
         <div className="flex flex-col gap-0.5">
           <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
@@ -890,6 +810,7 @@ function DailyView() {
           <div className="w-4 h-0.5 bg-gray-400 rounded"></div>
         </div>
       </div>
+      )}
 
       <DailyTaskCard 
         task={{
@@ -990,46 +911,6 @@ function DailyView() {
           שעות עבודה: 08:30 - 16:15
         </p>
       </motion.div>
-
-      {/* ✅ אירועים מיובאים מגוגל */}
-      {googleEvents.length > 0 && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-xl border border-orange-200 dark:border-orange-800"
-        >
-          <h4 className="font-medium text-orange-800 dark:text-orange-200 mb-2 flex items-center gap-2">
-            <GoogleIcon />
-            <span>אירועים מיומן גוגל ({googleEvents.filter(e => !e.isZmanitTask).length})</span>
-          </h4>
-          
-          <div className="space-y-1">
-            {googleEvents.filter(e => !e.isZmanitTask && (e.start_time || e.startTime)).map(event => {
-              const start = event.startTime || event.start_time;
-              const end = event.endTime || event.end_time;
-              const startDate = start instanceof Date ? start : new Date(start);
-              const endDate = end instanceof Date ? end : new Date(end);
-              
-              // בדיקת תקינות
-              if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) return null;
-              
-              return (
-              <div
-                key={event.id || event.google_event_id}
-                className="flex items-center gap-2 text-sm text-orange-700 dark:text-orange-300 bg-white dark:bg-gray-800 rounded-lg px-3 py-2"
-              >
-                <span>📌</span>
-                <span className="font-medium flex-1">{event.title}</span>
-                <span className="text-orange-500 dark:text-orange-400">
-                  {startDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
-                  {' - '}
-                  {endDate.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-            );})}
-          </div>
-        </motion.div>
-      )}
 
       {/* סרגל זמן */}
       <motion.div

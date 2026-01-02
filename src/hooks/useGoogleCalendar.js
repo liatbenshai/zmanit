@@ -1,7 +1,7 @@
 /**
- * useGoogleCalendar Hook - Redirect Flow Version
- * ===============================================
- * חיבור ליומן גוגל באמצעות redirect (לא popup)
+ * useGoogleCalendar Hook - V2 עם סנכרון אמיתי
+ * =============================================
+ * מייבא אירועים מגוגל כמשימות אמיתיות בדאטהבייס
  */
 
 import { useState, useEffect, useCallback } from 'react';
@@ -12,44 +12,10 @@ import toast from 'react-hot-toast';
 // קונפיגורציה
 // =====================================
 
-const GOOGLE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID || 
-  '817535440248-c3bfvtta658ogdjdk473brbecumhs182.apps.googleusercontent.com';
-
-const SCOPES = [
-  'https://www.googleapis.com/auth/calendar.events',
-  'https://www.googleapis.com/auth/calendar.readonly',
-].join(' ');
-
-// מפתח לשמירת מצב בזמן ה-redirect
-const GOOGLE_AUTH_STATE_KEY = 'zmanit_google_auth_state';
-
-// =====================================
-// Helper - קריאה ל-API
-// =====================================
-
-async function callApi(endpoint, body) {
-  const { data: { session } } = await supabase.auth.getSession();
-  if (!session) {
-    throw new Error('Not authenticated');
-  }
-
-  const response = await fetch(`/api/${endpoint}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${session.access_token}`,
-    },
-    body: JSON.stringify(body),
-  });
-
-  const data = await response.json();
-  
-  if (!response.ok) {
-    throw new Error(data.error || 'API error');
-  }
-  
-  return data;
-}
+const GOOGLE_CLIENT_ID = '817535440248-c3bfvtta658ogdjdk473brbecumhs182.apps.googleusercontent.com';
+const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
+const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
+const TOKEN_KEY = 'zmanit_google_token';
 
 // =====================================
 // Hook
@@ -59,417 +25,423 @@ export function useGoogleCalendar() {
   const [isConnected, setIsConnected] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isSyncing, setIsSyncing] = useState(false);
-  const [googleEmail, setGoogleEmail] = useState(null);
+  const [tokenClient, setTokenClient] = useState(null);
+  const [gapiReady, setGapiReady] = useState(false);
   const [calendars, setCalendars] = useState([]);
   const [selectedCalendarId, setSelectedCalendarId] = useState('primary');
+  const [googleEmail, setGoogleEmail] = useState(null);
   const [lastSyncAt, setLastSyncAt] = useState(null);
 
   // =====================================
-  // טיפול בחזרה מגוגל (redirect)
+  // אתחול Google API
   // =====================================
-  
+
   useEffect(() => {
-    handleGoogleCallback();
+    loadGoogleScripts();
   }, []);
 
-  const handleGoogleCallback = async () => {
-    // בדיקה אם חזרנו מגוגל
-    const urlParams = new URLSearchParams(window.location.search);
-    const code = urlParams.get('code');
-    const state = urlParams.get('state');
-    const error = urlParams.get('error');
-    
-    // אם יש שגיאה מגוגל
-    if (error) {
-      console.error('Google auth error:', error);
-      toast.error('שגיאה באימות מול גוגל');
-      window.history.replaceState({}, '', window.location.pathname);
-      setIsLoading(false);
-      return;
-    }
-
-    // אם יש קוד - זה אומר שחזרנו מגוגל
-    if (code && state) {
-      const savedState = sessionStorage.getItem(GOOGLE_AUTH_STATE_KEY);
-      
-      // בדיקת אבטחה - ה-state חייב להתאים
-      if (state !== savedState) {
-        console.error('State mismatch - possible CSRF attack');
-        toast.error('שגיאת אבטחה - נסי שוב');
-        window.history.replaceState({}, '', window.location.pathname);
-        setIsLoading(false);
-        return;
-      }
-
-      // ניקוי ה-state
-      sessionStorage.removeItem(GOOGLE_AUTH_STATE_KEY);
-
-      try {
-        setIsLoading(true);
-        
-        // תמיד משתמשים ב-dashboard כ-redirect URI
-        const redirectUri = `${window.location.origin}/dashboard`;
-        
-        const data = await callApi('google-auth', {
-          action: 'exchange',
-          code: code,
-          redirect_uri: redirectUri,
-        });
-
-        setIsConnected(true);
-        setGoogleEmail(data.email);
-        toast.success('✅ מחובר ליומן גוגל!');
-        
-        // טעינת יומנים וסנכרון
-        await loadCalendars();
-        await syncEventsInternal();
-        
-      } catch (err) {
-        console.error('Error exchanging code:', err);
-        toast.error('שגיאה בהתחברות לגוגל: ' + err.message);
-      } finally {
-        // ניקוי ה-URL מהפרמטרים
-        window.history.replaceState({}, '', window.location.pathname);
-        setIsLoading(false);
-      }
-      return;
-    }
-
-    // אם אין קוד - בדיקת סטטוס רגילה
-    await checkConnectionStatus();
-  };
-
-  // =====================================
-  // בדיקת מצב התחברות
-  // =====================================
-  
-  const checkConnectionStatus = async () => {
+  const loadGoogleScripts = async () => {
     try {
-      setIsLoading(true);
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        setIsLoading(false);
-        return;
-      }
+      await waitForGapi();
+      await waitForGis();
 
-      const data = await callApi('google-auth', { action: 'status' });
+      await new Promise((resolve, reject) => {
+        window.gapi.load('client', { callback: resolve, onerror: reject });
+      });
 
-      if (data.connected) {
-        setIsConnected(true);
-        setGoogleEmail(data.email);
-        setLastSyncAt(data.last_sync_at);
-        
-        if (data.needs_refresh) {
-          await refreshToken();
+      await window.gapi.client.init({
+        discoveryDocs: [DISCOVERY_DOC],
+      });
+
+      setGapiReady(true);
+
+      const client = window.google.accounts.oauth2.initTokenClient({
+        client_id: GOOGLE_CLIENT_ID,
+        scope: SCOPES,
+        callback: (response) => handleTokenResponse(response),
+      });
+      setTokenClient(client);
+
+      // בדיקה אם יש טוקן שמור
+      const savedToken = localStorage.getItem(TOKEN_KEY);
+      if (savedToken) {
+        try {
+          const token = JSON.parse(savedToken);
+          if (token.expires_at > Date.now()) {
+            window.gapi.client.setToken(token);
+            setIsConnected(true);
+            loadCalendars();
+            loadUserEmail();
+          } else {
+            localStorage.removeItem(TOKEN_KEY);
+          }
+        } catch (e) {
+          localStorage.removeItem(TOKEN_KEY);
         }
-        
-        await loadCalendars();
-      } else {
-        setIsConnected(false);
       }
+
+      setIsLoading(false);
     } catch (err) {
-      console.error('Error checking connection:', err);
-      setIsConnected(false);
-    } finally {
+      console.error('שגיאה בטעינת Google API:', err);
       setIsLoading(false);
     }
   };
 
-  // =====================================
-  // חידוש טוקן
-  // =====================================
-  
-  const refreshToken = async () => {
-    try {
-      const data = await callApi('google-auth', { action: 'refresh' });
-      return data.success;
-    } catch (err) {
-      console.error('Error refreshing token:', err);
-      setIsConnected(false);
-      return false;
-    }
+  // המתנה ל-GAPI
+  const waitForGapi = () => {
+    return new Promise((resolve, reject) => {
+      if (window.gapi) {
+        resolve();
+        return;
+      }
+      
+      const script = document.createElement('script');
+      script.src = 'https://apis.google.com/js/api.js';
+      script.onload = resolve;
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
   };
 
-  // =====================================
-  // התחברות - redirect לגוגל
-  // =====================================
-  
-  const connect = useCallback(async () => {
-    try {
-      // יצירת state לאבטחה
-      const state = crypto.randomUUID();
-      sessionStorage.setItem(GOOGLE_AUTH_STATE_KEY, state);
+  // המתנה ל-GIS
+  const waitForGis = () => {
+    return new Promise((resolve, reject) => {
+      if (window.google?.accounts?.oauth2) {
+        resolve();
+        return;
+      }
       
-      // תמיד חוזרים ל-dashboard
-      const redirectUri = `${window.location.origin}/dashboard`;
-      
-      const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
-      authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
-      authUrl.searchParams.set('redirect_uri', redirectUri);
-      authUrl.searchParams.set('response_type', 'code');
-      authUrl.searchParams.set('scope', SCOPES);
-      authUrl.searchParams.set('access_type', 'offline');
-      authUrl.searchParams.set('prompt', 'consent');
-      authUrl.searchParams.set('state', state);
+      const script = document.createElement('script');
+      script.src = 'https://accounts.google.com/gsi/client';
+      script.onload = () => {
+        const checkGis = setInterval(() => {
+          if (window.google?.accounts?.oauth2) {
+            clearInterval(checkGis);
+            resolve();
+          }
+        }, 100);
+        setTimeout(() => {
+          clearInterval(checkGis);
+          reject(new Error('Timeout waiting for GIS'));
+        }, 5000);
+      };
+      script.onerror = reject;
+      document.body.appendChild(script);
+    });
+  };
 
-      // מעבר לגוגל
-      window.location.href = authUrl.toString();
-
-    } catch (err) {
-      console.error('Error connecting:', err);
-      toast.error('שגיאה בהתחברות');
+  // טיפול בתגובת הטוקן
+  const handleTokenResponse = (response) => {
+    if (response.error) {
+      console.error('Error getting token:', response.error);
+      toast.error('שגיאה בהתחברות ליומן גוגל');
+      return;
     }
-  }, []);
 
-  // =====================================
-  // ניתוק
-  // =====================================
-  
-  const disconnect = useCallback(async () => {
-    try {
-      await callApi('google-auth', { action: 'disconnect' });
+    const token = {
+      access_token: response.access_token,
+      expires_at: Date.now() + (response.expires_in * 1000),
+    };
 
-      setIsConnected(false);
-      setGoogleEmail(null);
-      setCalendars([]);
-      setLastSyncAt(null);
-      toast.success('התנתקת מיומן גוגל');
-    } catch (err) {
-      console.error('Error disconnecting:', err);
-      toast.error('שגיאה בניתוק');
-    }
-  }, []);
+    localStorage.setItem(TOKEN_KEY, JSON.stringify(token));
+    window.gapi.client.setToken(token);
+    setIsConnected(true);
+    loadCalendars();
+    loadUserEmail();
+    toast.success('התחברת ליומן גוגל! 🎉');
+  };
 
-  // =====================================
-  // טעינת רשימת יומנים
-  // =====================================
-  
+  // טעינת יומנים
   const loadCalendars = async () => {
     try {
-      const data = await callApi('sync-google-calendar', { action: 'list_calendars' });
-
-      setCalendars(data.calendars || []);
-      
-      const primary = data.calendars?.find(c => c.primary);
-      if (primary) {
-        setSelectedCalendarId(primary.id);
-      }
+      const response = await window.gapi.client.calendar.calendarList.list();
+      setCalendars(response.result.items || []);
     } catch (err) {
-      console.error('Error loading calendars:', err);
+      console.error('שגיאה בטעינת יומנים:', err);
+    }
+  };
+
+  // טעינת אימייל
+  const loadUserEmail = async () => {
+    try {
+      const response = await window.gapi.client.calendar.calendars.get({
+        calendarId: 'primary'
+      });
+      setGoogleEmail(response.result.id);
+    } catch (err) {
+      // ignore
     }
   };
 
   // =====================================
-  // סנכרון אירועים (פנימי)
+  // התחברות והתנתקות
   // =====================================
-  
-  const syncEventsInternal = async (startDate, endDate) => {
-    try {
-      const start = startDate || new Date();
-      start.setHours(0, 0, 0, 0);
-      
-      const end = endDate || new Date(start);
-      end.setDate(end.getDate() + 7);
 
-      const data = await callApi('sync-google-calendar', {
-        action: 'import',
-        start_date: start.toISOString(),
-        end_date: end.toISOString(),
-        calendar_id: selectedCalendarId,
+  const connect = useCallback(() => {
+    if (!tokenClient) {
+      toast.error('ממתין לטעינת Google API...');
+      return;
+    }
+    tokenClient.requestAccessToken();
+  }, [tokenClient]);
+
+  const disconnect = useCallback(() => {
+    const token = window.gapi?.client?.getToken();
+    if (token) {
+      window.google.accounts.oauth2.revoke(token.access_token);
+      window.gapi.client.setToken(null);
+    }
+    localStorage.removeItem(TOKEN_KEY);
+    setIsConnected(false);
+    setCalendars([]);
+    setGoogleEmail(null);
+    toast.success('התנתקת מיומן גוגל');
+  }, []);
+
+  // =====================================
+  // 🔄 סנכרון אמיתי - ייבוא כמשימות
+  // =====================================
+
+  /**
+   * סנכרון אירועים מגוגל ויצירת משימות אמיתיות בדאטהבייס
+   */
+  const syncGoogleEvents = useCallback(async (date, userId, addTaskFn, existingTasks = []) => {
+    if (!isConnected || !userId) {
+      return { imported: 0, updated: 0 };
+    }
+
+    setIsSyncing(true);
+
+    try {
+      // 1. קבלת אירועים מגוגל
+      const start = new Date(date);
+      start.setHours(0, 0, 0, 0);
+      const end = new Date(start);
+      end.setDate(end.getDate() + 1);
+
+      const response = await window.gapi.client.calendar.events.list({
+        calendarId: selectedCalendarId,
+        timeMin: start.toISOString(),
+        timeMax: end.toISOString(),
+        singleEvents: true,
+        orderBy: 'startTime',
       });
 
-      setLastSyncAt(new Date().toISOString());
-      return data.events || [];
-    } catch (err) {
-      console.error('Error syncing events:', err);
-      return [];
-    }
-  };
+      const events = response.result.items || [];
+      const dateStr = start.toISOString().split('T')[0];
 
-  // =====================================
-  // סנכרון אירועים (חיצוני)
-  // =====================================
-  
-  const syncEvents = useCallback(async (startDate, endDate) => {
-    if (!isConnected) return [];
-    
-    try {
-      setIsSyncing(true);
-      return await syncEventsInternal(startDate, endDate);
-    } catch (err) {
-      console.error('Error syncing events:', err);
-      
-      if (err.message?.includes('expired') || err.message?.includes('reconnect')) {
-        const refreshed = await refreshToken();
-        if (!refreshed) {
-          toast.error('יש להתחבר מחדש ליומן גוגל');
-          setIsConnected(false);
+      let imported = 0;
+      let updated = 0;
+
+      // 2. לכל אירוע - בדיקה אם כבר קיים
+      for (const event of events) {
+        // דילוג על אירועי יום שלם
+        if (!event.start?.dateTime) continue;
+
+        // דילוג על אירועים שיוצאו מזמנית
+        if (event.extendedProperties?.private?.zmanitTaskId) continue;
+
+        const googleEventId = event.id;
+        
+        // בדיקה אם כבר יש משימה עם אותו google_event_id
+        const existingTask = existingTasks.find(t => t.google_event_id === googleEventId);
+
+        const startTime = new Date(event.start.dateTime);
+        const endTime = new Date(event.end.dateTime);
+        const durationMinutes = Math.round((endTime - startTime) / (1000 * 60));
+        const timeStr = startTime.toTimeString().slice(0, 5);
+
+        if (existingTask) {
+          // עדכון אם השתנה משהו
+          const needsUpdate = 
+            existingTask.title !== (event.summary || 'אירוע מיומן גוגל') ||
+            existingTask.due_time !== timeStr ||
+            existingTask.estimated_duration !== durationMinutes;
+
+          if (needsUpdate) {
+            await supabase
+              .from('tasks')
+              .update({
+                title: event.summary || 'אירוע מיומן גוגל',
+                due_time: timeStr,
+                estimated_duration: durationMinutes,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('id', existingTask.id);
+            updated++;
+          }
+        } else {
+          // יצירת משימה חדשה
+          const { error } = await supabase
+            .from('tasks')
+            .insert({
+              user_id: userId,
+              title: event.summary || 'אירוע מיומן גוגל',
+              description: event.description || null,
+              quadrant: 1,
+              start_date: dateStr,
+              due_date: dateStr,
+              due_time: timeStr,
+              estimated_duration: durationMinutes,
+              task_type: 'meeting',
+              priority: 'normal',
+              google_event_id: googleEventId,
+              is_from_google: true,
+              is_completed: false,
+            });
+
+          if (!error) {
+            imported++;
+          }
         }
       }
-      
-      return [];
-    } finally {
+
+      setLastSyncAt(new Date().toISOString());
       setIsSyncing(false);
+
+      if (imported > 0 || updated > 0) {
+        toast.success(`📅 סונכרנו ${imported} אירועים חדשים${updated > 0 ? `, ${updated} עודכנו` : ''}`);
+      }
+
+      return { imported, updated };
+
+    } catch (err) {
+      console.error('שגיאה בסנכרון:', err);
+      setIsSyncing(false);
+      return { imported: 0, updated: 0 };
     }
   }, [isConnected, selectedCalendarId]);
-
-  // =====================================
-  // קבלת אירועים מהדאטהבייס
-  // =====================================
-  
-  const getEvents = useCallback(async (startDate, endDate) => {
-    if (!isConnected) return [];
-    
-    try {
-      const data = await callApi('sync-google-calendar', {
-        action: 'get_events',
-        start_date: startDate.toISOString(),
-        end_date: endDate.toISOString(),
-      });
-      return data.events || [];
-    } catch (err) {
-      console.error('Error getting events:', err);
-      return [];
-    }
-  }, [isConnected]);
-
-  // =====================================
-  // קבלת אירועים ליום
-  // =====================================
-  
-  const getDayEvents = useCallback(async (date) => {
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    
-    return getEvents(start, end);
-  }, [getEvents]);
-
-  // =====================================
-  // ייבוא אירועים ליום (תאימות לאחור)
-  // =====================================
-  
-  const importDayEvents = useCallback(async (date) => {
-    const start = new Date(date);
-    start.setHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 1);
-    
-    await syncEvents(start, end);
-    return getDayEvents(date);
-  }, [syncEvents, getDayEvents]);
 
   // =====================================
   // ייצוא משימה ליומן
   // =====================================
-  
-  const exportTask = useCallback(async (task, scheduledBlock) => {
+
+  const exportTaskToGoogle = useCallback(async (task, scheduledBlock) => {
     if (!isConnected) {
       toast.error('יש להתחבר ליומן גוגל קודם');
       return null;
+    }
+
+    // אם כבר יש google_event_id - לא מייצאים שוב
+    if (task.google_event_id) {
+      return task.google_event_id;
     }
 
     try {
-      setIsSyncing(true);
+      const startDateTime = new Date(`${scheduledBlock.date}T${scheduledBlock.startTime}:00`);
+      const endDateTime = new Date(startDateTime.getTime() + (scheduledBlock.duration || 30) * 60000);
 
-      const data = await callApi('sync-google-calendar', {
-        action: 'export',
-        task,
-        scheduled_block: scheduledBlock,
-        calendar_id: selectedCalendarId,
+      const event = {
+        summary: `${getTaskIcon(task.task_type)} ${task.title}`,
+        description: task.notes || task.description || '',
+        start: {
+          dateTime: startDateTime.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+        end: {
+          dateTime: endDateTime.toISOString(),
+          timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        },
+        extendedProperties: {
+          private: {
+            zmanitTaskId: task.id,
+            zmanitExport: 'true',
+          },
+        },
+      };
+
+      const response = await window.gapi.client.calendar.events.insert({
+        calendarId: selectedCalendarId,
+        resource: event,
       });
 
-      toast.success('✅ המשימה נוספה ליומן גוגל');
-      return data;
+      const eventId = response.result.id;
+
+      // עדכון המשימה עם google_event_id
+      await supabase
+        .from('tasks')
+        .update({ google_event_id: eventId })
+        .eq('id', task.id);
+
+      return eventId;
+
     } catch (err) {
-      console.error('Error exporting task:', err);
-      toast.error('שגיאה בייצוא ליומן');
+      console.error('שגיאה בייצוא ליומן:', err);
+      toast.error('שגיאה בייצוא ליומן גוגל');
       return null;
-    } finally {
-      setIsSyncing(false);
     }
   }, [isConnected, selectedCalendarId]);
 
-  // =====================================
-  // ייצוא מספר משימות
-  // =====================================
-  
-  const exportTasks = useCallback(async (blocks) => {
+  // ייצוא מרובה
+  const exportTasks = useCallback(async (tasks) => {
     if (!isConnected) {
       toast.error('יש להתחבר ליומן גוגל קודם');
-      return [];
+      return;
     }
 
     setIsSyncing(true);
-    const results = [];
+    let exported = 0;
 
-    for (const block of blocks) {
-      const task = {
-        id: block.taskId || block.id,
-        title: block.title,
-        task_type: block.taskType,
-        estimated_duration: block.duration,
-        notes: block.notes
+    for (const task of tasks) {
+      if (task.google_event_id) continue; // כבר יוצא
+
+      const block = {
+        date: task.start_date || task.due_date,
+        startTime: task.due_time || '09:00',
+        duration: task.estimated_duration || 30,
       };
-      
-      const scheduledBlock = {
-        date: block.date || new Date().toISOString().split('T')[0],
-        startTime: block.startTime,
-        duration: block.duration
-      };
-      
-      const result = await exportTask(task, scheduledBlock);
-      if (result) {
-        results.push(result);
-      }
-      
-      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const eventId = await exportTaskToGoogle(task, block);
+      if (eventId) exported++;
     }
 
     setIsSyncing(false);
-    
-    if (results.length > 0) {
-      toast.success(`✅ יוצאו ${results.length} משימות ליומן`);
+
+    if (exported > 0) {
+      toast.success(`📤 יוצאו ${exported} משימות ליומן גוגל`);
     }
-    
-    return results;
-  }, [isConnected, exportTask]);
+  }, [isConnected, exportTaskToGoogle]);
+
+  // =====================================
+  // פונקציות עזר
+  // =====================================
+
+  const getTaskIcon = (type) => {
+    const icons = {
+      transcription: '🎙️',
+      proofreading: '📝',
+      translation: '🌍',
+      admin: '📋',
+      email: '📧',
+      course: '📚',
+      meeting: '👔',
+      client_communication: '💬',
+      management: '💼',
+      family: '👨‍👩‍👧‍👦',
+      kids: '🧒',
+      personal: '🧘',
+      other: '📌',
+    };
+    return icons[type] || '📌';
+  };
 
   // =====================================
   // Return
   // =====================================
 
   return {
-    // מצב
     isConnected,
     isLoading,
     isSyncing,
     googleEmail,
     lastSyncAt,
-    gapiReady: true,
-    
-    // יומנים
     calendars,
     selectedCalendarId,
     setSelectedCalendarId,
-    
-    // פעולות חיבור
     connect,
     disconnect,
-    checkConnectionStatus,
-    
-    // סנכרון
-    syncEvents,
-    getEvents,
-    getDayEvents,
-    importDayEvents,
-    importEvents: syncEvents,
-    
-    // ייצוא
-    exportTask,
+    syncGoogleEvents,
+    exportTaskToGoogle,
     exportTasks,
   };
 }
