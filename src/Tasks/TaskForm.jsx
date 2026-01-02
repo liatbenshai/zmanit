@@ -50,6 +50,7 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
 
   // בדיקת חפיפות בזמן אמת
   const conflictInfo = useMemo(() => {
+    console.log('🔍 בדיקת חפיפות:', {
       dueDate: formData.dueDate,
       dueTime: formData.dueTime,
       estimatedDuration: formData.estimatedDuration,
@@ -216,9 +217,9 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
   const handleSubmit = async (e) => {
     e.preventDefault();
     
-
     // אימות
     const validation = validateTaskForm(formData);
+    console.log('📝 נתוני טופס לבדיקה:', {
       title: formData.title,
       quadrant: formData.quadrant,
       dueDate: formData.dueDate,
@@ -793,4 +794,3 @@ function TaskForm({ task, defaultQuadrant = 1, defaultDate = null, defaultTime =
 }
 
 export default TaskForm;
-
