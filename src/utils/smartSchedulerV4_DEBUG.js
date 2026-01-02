@@ -1,5 +1,5 @@
 /**
- * מנוע שיבוץ חכם - גרסה 4
+ * מנוע שיבוץ חכם - גרסה 4 (עם DEBUG)
  * =====================================
  * 
  * 🆕 חדש בגרסה 4:
@@ -79,6 +79,8 @@ export const BLOCK_TYPES = {
  * @returns {Object} תוכנית שבועית עם המלצות
  */
 export function smartScheduleWeekV4(weekStart, allTasks) {
+  console.log('🚀 smartScheduleWeekV4 CALLED!', { weekStart, taskCount: allTasks?.length });
+  
   const config = SMART_SCHEDULE_CONFIG;
   
   const today = new Date();
@@ -100,8 +102,41 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
   // שלב 3: הפרדת משימות לסוגים
   const { googleEvents, flexibleTasks, completedTasks } = categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO);
   
+  console.log('📊 CATEGORIZED TASKS:', {
+    googleEvents: googleEvents.length,
+    flexibleTasks: flexibleTasks.length,
+    completedTasks: completedTasks.length
+  });
+  
+  // DEBUG: הצגת אירועי גוגל
+  if (googleEvents.length > 0) {
+    console.log('📅 GOOGLE EVENTS:', googleEvents.map(e => ({
+      title: e.title,
+      date: e.due_date,
+      time: e.due_time,
+      duration: e.estimated_duration,
+      google_event_id: e.google_event_id,
+      is_from_google: e.is_from_google,
+      is_fixed: e.is_fixed
+    })));
+  } else {
+    console.warn('⚠️ NO GOOGLE EVENTS FOUND! Check if tasks have google_event_id or is_from_google=true');
+  }
+  
   // שלב 4: שיבוץ אירועי גוגל קודם (הם קבועים!)
   scheduleGoogleEvents(googleEvents, days, config);
+  
+  // DEBUG: הצגת מה שובץ
+  const todayDay = days.find(d => d.date === todayISO);
+  if (todayDay) {
+    console.log('📍 TODAY BLOCKS AFTER GOOGLE:', todayDay.blocks.map(b => ({
+      title: b.title,
+      start: b.startTime,
+      end: b.endTime,
+      isFixed: b.isFixed,
+      isGoogleEvent: b.isGoogleEvent
+    })));
+  }
   
   // שלב 5: הוספת הפסקות מומלצות
   addBreakSuggestions(days, config);
@@ -109,6 +144,17 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
   // שלב 6: שיבוץ משימות גמישות סביב האירועים הקבועים
   const sortedTasks = prioritizeTasks(flexibleTasks, todayISO);
   const schedulingResult = scheduleFlexibleTasks(sortedTasks, days, todayISO, config);
+  
+  // DEBUG: הצגת התוצאה הסופית להיום
+  if (todayDay) {
+    console.log('📍 TODAY FINAL BLOCKS:', todayDay.blocks.map(b => ({
+      title: b.title,
+      start: b.startTime,
+      end: b.endTime,
+      isFixed: b.isFixed,
+      isGoogleEvent: b.isGoogleEvent
+    })));
+  }
   
   // שלב 7: שיבוץ משימות שהושלמו (לתצוגה)
   scheduleCompletedTasks(completedTasks, days, config);
@@ -118,6 +164,11 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
   
   // שלב 9: חישוב סטטיסטיקות
   const stats = calculateStats(days, schedulingResult, config);
+  
+  console.log('✅ smartScheduleWeekV4 DONE!', { 
+    warnings: schedulingResult.warnings.length,
+    unscheduled: schedulingResult.unscheduledTasks.length 
+  });
   
   return {
     weekStart: weekStartISO,
@@ -178,10 +229,16 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
 
 function scheduleGoogleEvents(googleEvents, days, config) {
   for (const event of googleEvents) {
-    if (!event.due_date || !event.due_time) continue;
+    if (!event.due_date || !event.due_time) {
+      console.warn('⚠️ Google event missing date/time:', event.title, { due_date: event.due_date, due_time: event.due_time });
+      continue;
+    }
     
     const targetDay = days.find(d => d.date === event.due_date);
-    if (!targetDay) continue;
+    if (!targetDay) {
+      console.warn('⚠️ No target day for Google event:', event.title, event.due_date);
+      continue;
+    }
     
     const startMinutes = timeToMinutes(event.due_time);
     const duration = event.estimated_duration || 60;
@@ -203,6 +260,7 @@ function scheduleGoogleEvents(googleEvents, days, config) {
       dayDate: targetDay.date,
       isFixed: true,
       isGoogleEvent: true,
+      isFromGoogle: true,  // נוסף לתאימות
       blockType: BLOCK_TYPES.GOOGLE_EVENT,
       canMove: false,  // לא ניתן להזיז!
       canResize: false // לא ניתן לשנות גודל!
@@ -215,6 +273,8 @@ function scheduleGoogleEvents(googleEvents, days, config) {
     if (startMinutes >= config.dayStart && endMinutes <= config.dayEnd) {
       targetDay.totalScheduledMinutes += duration;
     }
+    
+    console.log('✅ Scheduled Google event:', event.title, `${event.due_time}-${minutesToTime(endMinutes)}`);
   }
   
   // מיון בלוקים לפי שעה
@@ -313,6 +373,8 @@ function scheduleFlexibleTask(task, days, taskProgress, todayISO, config) {
     // מציאת חלונות פנויים (לא חוסמים את הקבועים!)
     const freeSlots = findFreeSlotsAroundFixed(day, config);
     
+    console.log(`📊 Free slots for ${day.date}:`, freeSlots.map(s => `${minutesToTime(s.start)}-${minutesToTime(s.end)}`));
+    
     for (const slot of freeSlots) {
       if (progress.remaining <= 0) break;
       
@@ -345,6 +407,9 @@ function scheduleFlexibleTask(task, days, taskProgress, todayISO, config) {
         progress.scheduled += blockDuration;
         progress.remaining -= blockDuration;
         day.totalScheduledMinutes += blockDuration;
+        
+        // עדכון הסלוט - הזזת תחילתו
+        slot.start += blockDuration + config.breakDuration;
       }
     }
     
@@ -360,6 +425,12 @@ function scheduleFlexibleTask(task, days, taskProgress, todayISO, config) {
 function findFreeSlotsAroundFixed(day, config) {
   const slots = [];
   const fixedBlocks = day.blocks.filter(b => b.isFixed || b.isGoogleEvent);
+  
+  console.log(`🔍 Fixed blocks for ${day.date}:`, fixedBlocks.map(b => ({
+    title: b.title,
+    start: b.startTime,
+    end: b.endTime
+  })));
   
   // מיון לפי זמן התחלה
   fixedBlocks.sort((a, b) => a.startMinute - b.startMinute);
