@@ -107,7 +107,8 @@ export function useGoogleCalendar() {
       try {
         setIsLoading(true);
         
-        const redirectUri = `${window.location.origin}${window.location.pathname}`;
+        // תמיד משתמשים ב-dashboard כ-redirect URI
+        const redirectUri = `${window.location.origin}/dashboard`;
         
         const data = await callApi('google-auth', {
           action: 'exchange',
@@ -200,8 +201,8 @@ export function useGoogleCalendar() {
       const state = crypto.randomUUID();
       sessionStorage.setItem(GOOGLE_AUTH_STATE_KEY, state);
       
-      // ה-redirect URI הוא הדף הנוכחי
-      const redirectUri = `${window.location.origin}${window.location.pathname}`;
+      // תמיד חוזרים ל-dashboard
+      const redirectUri = `${window.location.origin}/dashboard`;
       
       const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
       authUrl.searchParams.set('client_id', GOOGLE_CLIENT_ID);
