@@ -59,7 +59,31 @@ function WeeklyPlannerPro() {
   const [timerTask, setTimerTask] = useState(null);
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isBalancing, setIsBalancing] = useState(false);
-  const [dismissedSuggestions, setDismissedSuggestions] = useState([]);
+  
+  // ✅ טעינת הצעות נדחות מ-localStorage (נשמרות גם אחרי רענון!)
+  const [dismissedSuggestions, setDismissedSuggestions] = useState(() => {
+    try {
+      const saved = localStorage.getItem('zmanit_dismissed_suggestions');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        // ניקוי הצעות ישנות (יותר משבוע)
+        const oneWeekAgo = Date.now() - (7 * 24 * 60 * 60 * 1000);
+        const filtered = parsed.filter(item => item.timestamp > oneWeekAgo);
+        return filtered.map(item => item.id);
+      }
+    } catch (e) {}
+    return [];
+  });
+  
+  // ✅ שמירת סיבות דחייה ללמידה
+  const [dismissalReasons, setDismissalReasons] = useState(() => {
+    try {
+      const saved = localStorage.getItem('zmanit_dismissal_reasons');
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
   
   // גרירה
   const [draggedTask, setDraggedTask] = useState(null);
@@ -208,11 +232,33 @@ function WeeklyPlannerPro() {
   };
 
   const dismissSuggestion = (suggestionId, reason = null) => {
-    setDismissedSuggestions(prev => [...prev, suggestionId]);
+    // ✅ שמירה עם timestamp ל-localStorage
+    const newDismissed = [...dismissedSuggestions, suggestionId];
+    setDismissedSuggestions(newDismissed);
+    
+    try {
+      const savedData = JSON.parse(localStorage.getItem('zmanit_dismissed_suggestions') || '[]');
+      savedData.push({ id: suggestionId, timestamp: Date.now() });
+      localStorage.setItem('zmanit_dismissed_suggestions', JSON.stringify(savedData));
+    } catch (e) {}
+    
+    // ✅ שמירת סיבת דחייה ללמידה
     if (reason) {
-      // כאן אפשר לשמור את הסיבה ללמידה עתידית
-      console.log('📝 סיבת דחייה:', reason);
-      toast('תודה על המשוב! 📝', { duration: 2000 });
+      const newReasons = [...dismissalReasons, { 
+        id: suggestionId, 
+        reason, 
+        timestamp: Date.now(),
+        weekStart: plan?.weekStart 
+      }];
+      setDismissalReasons(newReasons);
+      
+      try {
+        localStorage.setItem('zmanit_dismissal_reasons', JSON.stringify(newReasons));
+      } catch (e) {}
+      
+      toast('תודה על המשוב! המערכת תלמד מזה 📝', { duration: 2000 });
+    } else {
+      toast('ההצעה נדחתה ולא תופיע שוב השבוע', { duration: 2000 });
     }
   };
 
@@ -356,6 +402,21 @@ function WeeklyPlannerPro() {
                 </span>
               )}
             </button>
+            
+            {/* כפתור לאיפוס הצעות נדחות */}
+            {dismissedSuggestions.length > 0 && (
+              <button
+                onClick={() => {
+                  setDismissedSuggestions([]);
+                  localStorage.removeItem('zmanit_dismissed_suggestions');
+                  toast.success('ההצעות הנדחות אופסו');
+                }}
+                className="px-2 py-2 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+                title={`${dismissedSuggestions.length} הצעות נדחו`}
+              >
+                🔄 איפוס ({dismissedSuggestions.length})
+              </button>
+            )}
           </div>
         </div>
 
@@ -1052,13 +1113,22 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
   
   if (workDays.length === 0) return suggestions;
   
-  const avgUsage = workDays.reduce((sum, d) => sum + (d.usagePercent || 0), 0) / workDays.length;
+  // ✅ שינוי הלוגיקה: יום נחשב "עמוס" רק אם:
+  // 1. יש פחות מ-30 דקות פנויות, או
+  // 2. יש משימות שלא נכנסות ליום הזה
+  const MIN_FREE_TIME = 30; // דקות - מתחת לזה נחשב עמוס
   
-  // 1. ימים עמוסים - הצעות להעברה
-  const overloadedDays = workDays.filter(d => d.usagePercent > 80);
-  const lightDays = workDays.filter(d => d.usagePercent < 50);
+  const trulyOverloadedDays = workDays.filter(d => {
+    const freeMinutes = d.freeMinutes || (d.availableMinutes - d.scheduledMinutes) || 0;
+    return freeMinutes < MIN_FREE_TIME && d.usagePercent > 70;
+  });
   
-  for (const overloadedDay of overloadedDays) {
+  const lightDays = workDays.filter(d => {
+    const freeMinutes = d.freeMinutes || (d.availableMinutes - d.scheduledMinutes) || 0;
+    return freeMinutes >= 60; // יום "קל" = יש לפחות שעה פנויה
+  });
+  
+  for (const overloadedDay of trulyOverloadedDays) {
     const suggestionId = `overload-${overloadedDay.date}`;
     if (dismissedSuggestions.includes(suggestionId)) continue;
     
@@ -1099,7 +1169,7 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
           taskTitle: block.title,
           toDate: lightDay.date,
           toDayName: lightDay.dayName,
-          recommended: lightDay.usagePercent < 40
+          recommended: (lightDay.freeMinutes || 0) > 120 // מומלץ אם יש 2+ שעות פנויות
         });
       }
     }
@@ -1141,12 +1211,14 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
       });
     }
     
+    const freeMinutes = overloadedDay.freeMinutes || 0;
+    
     if (options.length > 0) {
       suggestions.push({
         id: suggestionId,
         type: 'overloaded_day',
         icon: '⚠️',
-        title: `יום ${overloadedDay.dayName} עמוס (${overloadedDay.usagePercent}%)`,
+        title: `יום ${overloadedDay.dayName} כמעט מלא (${freeMinutes} דק' פנויות)`,
         description: options.some(o => o.type === 'move') 
           ? 'יש משימות שאפשר להעביר (לפני הדדליין שלהן). משימות דחופות נשארות במקום!'
           : 'כל המשימות דחופות או עם דדליין היום - אי אפשר להזיז אותן.',
@@ -1155,7 +1227,7 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
     }
   }
   
-  // 2. משימות לא משובצות
+  // 2. משימות לא משובצות - רק אם באמת יש כאלה!
   if ((plan.summary?.unscheduledCount || 0) > 0 && !dismissedSuggestions.includes('unscheduled')) {
     const unscheduledTasks = plan.unscheduledTasks || [];
     
@@ -1243,16 +1315,21 @@ function calculateAutoBalance(plan, tasks) {
   
   if (workDays.length < 2) return moves;
   
-  const avgUsage = workDays.reduce((sum, d) => sum + (d.usagePercent || 0), 0) / workDays.length;
-  const sortedDays = [...workDays].sort((a, b) => (b.usagePercent || 0) - (a.usagePercent || 0));
+  // ✅ שינוי: רק ימים שבאמת עמוסים (פחות מ-30 דקות פנויות)
+  const trulyOverloaded = workDays.filter(d => {
+    const freeMinutes = d.freeMinutes || (d.availableMinutes - d.scheduledMinutes) || 0;
+    return freeMinutes < 30;
+  });
   
-  for (let i = 0; i < sortedDays.length / 2; i++) {
-    const overloadedDay = sortedDays[i];
-    const lightDay = sortedDays[sortedDays.length - 1 - i];
-    
-    if ((overloadedDay.usagePercent || 0) <= avgUsage * 1.2) break;
-    if ((lightDay.usagePercent || 0) >= avgUsage * 0.8) break;
-    
+  // ימים עם הרבה מקום פנוי (שעה+)
+  const lightDays = workDays.filter(d => {
+    const freeMinutes = d.freeMinutes || (d.availableMinutes - d.scheduledMinutes) || 0;
+    return freeMinutes >= 60;
+  });
+  
+  if (trulyOverloaded.length === 0 || lightDays.length === 0) return moves;
+  
+  for (const overloadedDay of trulyOverloaded) {
     // ✅ רק משימות רגילות - לא דחופות!
     const movableBlocks = (overloadedDay.blocks || []).filter(b => 
       !b.isGoogleEvent && 
@@ -1260,19 +1337,25 @@ function calculateAutoBalance(plan, tasks) {
       !b.isCompleted && 
       b.task &&
       b.task.priority !== 'urgent' &&
-      b.task.priority !== 'high' &&
-      // ✅ בדיקת דדליין - רק אם היום הקל לפני הדדליין
-      (!b.task.due_date || lightDay.date <= b.task.due_date)
+      b.task.priority !== 'high'
     );
     
-    if (movableBlocks.length > 0) {
-      const taskToMove = movableBlocks[movableBlocks.length - 1];
-      moves.push({
-        taskId: taskToMove.taskId,
-        taskTitle: taskToMove.title,
-        fromDate: overloadedDay.date,
-        toDate: lightDay.date
-      });
+    for (const block of movableBlocks) {
+      // מצא יום קל שמתאים (לפני הדדליין)
+      const suitableDay = lightDays.find(d => 
+        d.date !== overloadedDay.date &&
+        (!block.task.due_date || d.date <= block.task.due_date)
+      );
+      
+      if (suitableDay) {
+        moves.push({
+          taskId: block.taskId,
+          taskTitle: block.title,
+          fromDate: overloadedDay.date,
+          toDate: suitableDay.date
+        });
+        break; // רק משימה אחת מכל יום עמוס
+      }
     }
   }
   
