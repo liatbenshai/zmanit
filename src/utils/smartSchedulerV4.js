@@ -3,42 +3,53 @@ console.log('✅ smartSchedulerV4.js LOADED - FIXED VERSION!');
  * מנוע שיבוץ חכם - גרסה 4 מתוקנת
  * =====================================
  * 
- * תיקון: זמנים מחושבים נכון לכל בלוק
+ * תיקון: שעות עבודה נקראות מההגדרות של המשתמש
  */
 
 import { WORK_HOURS } from '../config/workSchedule';
 import { toLocalISODate } from './dateHelpers';
 
 // ============================================
-// הגדרות
+// הגדרות ברירת מחדל (משמשות רק אם אין הגדרות)
 // ============================================
 
 export const SMART_SCHEDULE_CONFIG = {
-  dayStart: 8 * 60,           // 08:00
-  dayEnd: 16 * 60,            // 16:00
-  morningStart: 8 * 60,
-  morningEnd: 12 * 60,
-  afternoonStart: 12 * 60,
-  afternoonEnd: 16 * 60,
+  // ברירות מחדל - יידרסו ע"י WORK_HOURS
+  defaultDayStart: 8 * 60,      // 08:00
+  defaultDayEnd: 16 * 60,       // 16:00
+  
   blockDuration: 45,
   breakDuration: 5,
   
   breakReminders: {
     afterMinutes: 90,
     breakLength: 10,
-    lunchStart: 12 * 60,
-    lunchEnd: 13 * 60,
     lunchLength: 30
   },
   
   morningTaskTypes: ['transcription', 'תמלול'],
   
-  get workMinutesPerDay() {
-    return this.dayEnd - this.dayStart;
+  // ✅ פונקציה לקבלת שעות עבודה ליום ספציפי
+  getDayHours(dayOfWeek) {
+    const dayConfig = WORK_HOURS[dayOfWeek];
+    if (!dayConfig || !dayConfig.enabled) {
+      return null; // יום לא עובד
+    }
+    
+    // קריאה מההגדרות האמיתיות
+    const startHour = dayConfig.start || 8;
+    const endHour = dayConfig.end || 16;
+    
+    return {
+      start: startHour * 60,  // המרה לדקות
+      end: endHour * 60,
+      startHour,
+      endHour
+    };
   },
   
   get maxBlocksPerDay() {
-    return Math.floor(this.workMinutesPerDay / (this.blockDuration + this.breakDuration));
+    return Math.floor(480 / (this.blockDuration + this.breakDuration)); // ~8 שעות
   }
 };
 
@@ -179,7 +190,11 @@ function scheduleGoogleEvents(googleEvents, days, config) {
     targetDay.blocks.push(block);
     targetDay.fixedMinutes = (targetDay.fixedMinutes || 0) + duration;
     
-    if (startMinutes >= config.dayStart && endMinutes <= config.dayEnd) {
+    // ✅ שימוש בשעות היום הספציפי
+    const dayStart = targetDay.dayStart || config.defaultDayStart;
+    const dayEnd = targetDay.dayEnd || config.defaultDayEnd;
+    
+    if (startMinutes >= dayStart && endMinutes <= dayEnd) {
       targetDay.totalScheduledMinutes += duration;
     }
   }
@@ -197,11 +212,12 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
   const warnings = [];
   const unscheduledTasks = [];
   
-  // ✅ מעקב אחרי הזמן הבא הפנוי בכל יום
+  // ✅ מעקב אחרי הזמן הבא הפנוי בכל יום - עם שעות ספציפיות ליום
   const dayNextAvailable = new Map();
   for (const day of days) {
     if (day.isWorkDay && day.date >= todayISO) {
-      dayNextAvailable.set(day.date, config.dayStart);
+      const dayStart = day.dayStart || config.defaultDayStart;
+      dayNextAvailable.set(day.date, dayStart);
     }
   }
   
@@ -305,10 +321,14 @@ function findFreeSlotsForDay(day, startFrom, config) {
   const slots = [];
   const fixedBlocks = day.blocks.filter(b => b.isFixed || b.isGoogleEvent);
   
+  // ✅ שימוש בשעות היום הספציפי
+  const dayStart = day.dayStart || config.defaultDayStart;
+  const dayEnd = day.dayEnd || config.defaultDayEnd;
+  
   // מיון לפי זמן התחלה
   fixedBlocks.sort((a, b) => a.startMinute - b.startMinute);
   
-  let currentStart = Math.max(startFrom, config.dayStart);
+  let currentStart = Math.max(startFrom, dayStart);
   
   for (const block of fixedBlocks) {
     // אם הבלוק הקבוע מתחיל אחרי המיקום הנוכחי
@@ -323,8 +343,8 @@ function findFreeSlotsForDay(day, startFrom, config) {
   }
   
   // רווח אחרי כל הבלוקים הקבועים
-  if (config.dayEnd > currentStart) {
-    slots.push({ start: currentStart, end: config.dayEnd });
+  if (dayEnd > currentStart) {
+    slots.push({ start: currentStart, end: dayEnd });
   }
   
   return slots;
@@ -420,6 +440,12 @@ function initializeDays(weekStart, config) {
     const dayConfig = WORK_HOURS[dayOfWeek];
     const isWorkDay = dayConfig?.enabled || false;
     
+    // ✅ קריאת שעות עבודה אמיתיות מההגדרות
+    const workHours = config.getDayHours(dayOfWeek);
+    const dayStart = workHours?.start || config.defaultDayStart;
+    const dayEnd = workHours?.end || config.defaultDayEnd;
+    const availableMinutes = isWorkDay ? (dayEnd - dayStart) : 0;
+    
     days.push({
       date: dateISO,
       dayName: dayConfig?.name || dayNames[dayOfWeek] || '',
@@ -430,7 +456,14 @@ function initializeDays(weekStart, config) {
       fixedMinutes: 0,
       totalScheduledMinutes: 0,
       suggestedBreaks: [],
-      workHours: isWorkDay ? { start: 8, end: 16 } : null
+      // ✅ שעות עבודה אמיתיות
+      workHours: isWorkDay ? { 
+        start: workHours?.startHour || 8, 
+        end: workHours?.endHour || 16 
+      } : null,
+      dayStart,  // בדקות
+      dayEnd,    // בדקות
+      availableMinutes
     });
   }
   
@@ -474,7 +507,9 @@ function prioritizeTasks(tasks, todayISO) {
 
 function calculateStats(days, schedulingResult, config) {
   const workDays = days.filter(d => d.isWorkDay);
-  const totalAvailable = workDays.length * (config.dayEnd - config.dayStart);
+  
+  // ✅ חישוב זמן זמין לפי שעות העבודה האמיתיות של כל יום
+  const totalAvailable = workDays.reduce((sum, d) => sum + (d.availableMinutes || 0), 0);
   const totalScheduled = workDays.reduce((sum, d) => sum + d.totalScheduledMinutes, 0);
   const totalFixed = workDays.reduce((sum, d) => sum + (d.fixedMinutes || 0), 0);
   
@@ -486,14 +521,15 @@ function calculateStats(days, schedulingResult, config) {
     usagePercent: totalAvailable > 0 ? Math.round((totalScheduled / totalAvailable) * 100) : 0,
     fixedPercent: totalScheduled > 0 ? Math.round((totalFixed / totalScheduled) * 100) : 0,
     workDaysCount: workDays.length,
-    overloadDays: workDays.filter(d => d.totalScheduledMinutes > (config.dayEnd - config.dayStart)).length,
+    overloadDays: workDays.filter(d => d.totalScheduledMinutes > (d.availableMinutes || 0)).length,
     warningsCount: schedulingResult.warnings.length,
     unscheduledCount: schedulingResult.unscheduledTasks.length
   };
 }
 
 function formatDayForOutput(day, config) {
-  const dayCapacity = day.isWorkDay ? (config.dayEnd - config.dayStart) : 0;
+  // ✅ קיבולת יום לפי שעות העבודה האמיתיות
+  const dayCapacity = day.availableMinutes || 0;
   
   const sortedBlocks = [...(day.blocks || [])].sort((a, b) => {
     if (a.startMinute === b.startMinute) {
