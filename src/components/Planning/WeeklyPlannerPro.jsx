@@ -397,11 +397,11 @@ function WeeklyPlannerPro() {
         </span>
       </div>
 
-      {/* ===== תצוגת שבוע ===== */}
+      {/* ===== תצוגת שבוע (ראשון-חמישי בלבד) ===== */}
       {selectedDayForDetail ? (
         <DayDetailPanel
           day={selectedDayForDetail}
-          allDays={plan.days}
+          allDays={plan.days.filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4)}
           onBack={() => setSelectedDayForDetail(null)}
           onAddTask={handleAddTask}
           onEditTask={handleEditTask}
@@ -411,8 +411,10 @@ function WeeklyPlannerPro() {
           onDragStart={handleDragStart}
         />
       ) : (
-        <div className="grid grid-cols-7 gap-3">
-          {plan.days.map((day) => (
+        <div className="grid grid-cols-5 gap-4">
+          {plan.days
+            .filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4) // ✅ רק ראשון עד חמישי
+            .map((day) => (
             <DayColumn
               key={day.date}
               day={day}
@@ -454,7 +456,8 @@ function WeeklyPlannerPro() {
 // ============================================
 
 function WeeklyAnalysis({ plan }) {
-  const workDays = plan.days.filter(d => d.isWorkDay);
+  // ✅ רק ראשון עד חמישי
+  const workDays = plan.days.filter(d => d.isWorkDay && d.dayOfWeek >= 0 && d.dayOfWeek <= 4);
   
   const maxDay = workDays.reduce((max, d) => 
     (d.usagePercent || 0) > (max?.usagePercent || 0) ? d : max, null);
@@ -997,7 +1000,7 @@ function minutesToTimeStr(minutes) {
 
 function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
   const suggestions = [];
-  const workDays = plan.days.filter(d => d.isWorkDay);
+  const workDays = plan.days.filter(d => d.isWorkDay && d.dayOfWeek >= 0 && d.dayOfWeek <= 4);
   
   if (workDays.length === 0) return suggestions;
   
@@ -1011,22 +1014,30 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
     const suggestionId = `overload-${overloadedDay.date}`;
     if (dismissedSuggestions.includes(suggestionId)) continue;
     
-    const flexibleBlocks = (overloadedDay.blocks || []).filter(b => 
-      !b.isGoogleEvent && !b.isFixed && !b.isCompleted && b.task
+    // ✅ רק משימות רגילות - לא דחופות ולא גוגל!
+    const movableBlocks = (overloadedDay.blocks || []).filter(b => 
+      !b.isGoogleEvent && 
+      !b.isFixed && 
+      !b.isCompleted && 
+      b.task &&
+      b.task.priority !== 'urgent' && // ❌ לא דחופות
+      b.task.priority !== 'high'      // ❌ לא גבוהות
     );
     
-    if (flexibleBlocks.length === 0 || lightDays.length === 0) continue;
+    if (movableBlocks.length === 0 || lightDays.length === 0) continue;
     
     const options = [];
     
-    // אפשרויות להעברת משימות
-    for (const block of flexibleBlocks.slice(0, 2)) {
+    // אפשרויות להעברת משימות רגילות בלבד
+    for (const block of movableBlocks.slice(0, 3)) {
       for (const lightDay of lightDays.slice(0, 2)) {
+        if (lightDay.date === overloadedDay.date) continue;
+        
         options.push({
           type: 'move',
           icon: '📦',
           label: `העבר "${block.title}" ליום ${lightDay.dayName}`,
-          impact: `יפנה ${block.duration} דק' מיום ${overloadedDay.dayName}`,
+          impact: `יפנה ${block.duration} דק' מיום ${overloadedDay.dayName}, יום ${lightDay.dayName} יעלה ל-${Math.round(lightDay.usagePercent + (block.duration / 4.8))}%`,
           taskId: block.taskId,
           taskTitle: block.title,
           toDate: lightDay.date,
@@ -1036,23 +1047,29 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
       }
     }
     
-    // אפשרות להארכת יום
-    options.push({
-      type: 'extend_day',
-      icon: '⏰',
-      label: 'הארך את יום העבודה',
-      impact: 'תוכל להוסיף עוד משימות',
-      recommended: false
-    });
-    
-    // אפשרות לדחות
-    options.push({
-      type: 'defer',
-      icon: '📅',
-      label: 'דחה משימות לשבוע הבא',
-      impact: 'יפנה מקום השבוע',
-      recommended: false
-    });
+    // אם אין משימות רגילות להעביר - הצע הארכת יום
+    if (options.length === 0) {
+      const urgentCount = (overloadedDay.blocks || []).filter(b => 
+        b.task?.priority === 'urgent' || b.task?.priority === 'high'
+      ).length;
+      
+      options.push({
+        type: 'extend_day',
+        icon: '⏰',
+        label: 'הארך את יום העבודה',
+        impact: `יש ${urgentCount} משימות דחופות שאי אפשר להזיז`,
+        recommended: true
+      });
+    } else {
+      // אפשרות להארכת יום
+      options.push({
+        type: 'extend_day',
+        icon: '⏰',
+        label: 'הארך את יום העבודה',
+        impact: 'תוכלי להוסיף עוד משימות',
+        recommended: false
+      });
+    }
     
     if (options.length > 0) {
       suggestions.push({
@@ -1060,7 +1077,9 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
         type: 'overloaded_day',
         icon: '⚠️',
         title: `יום ${overloadedDay.dayName} עמוס (${overloadedDay.usagePercent}%)`,
-        description: 'יש יותר מדי משימות ביום הזה. מה את רוצה לעשות?',
+        description: options.some(o => o.type === 'move') 
+          ? 'יש משימות רגילות שאפשר להעביר. משימות דחופות נשארות במקום!'
+          : 'כל המשימות דחופות - אי אפשר להזיז אותן. שקלי להאריך את יום העבודה.',
         options
       });
     }
@@ -1070,35 +1089,49 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
   if ((plan.summary?.unscheduledCount || 0) > 0 && !dismissedSuggestions.includes('unscheduled')) {
     const unscheduledTasks = plan.unscheduledTasks || [];
     
+    // הפרדה בין דחופות לרגילות
+    const urgentUnscheduled = unscheduledTasks.filter(t => t.priority === 'urgent' || t.priority === 'high');
+    const regularUnscheduled = unscheduledTasks.filter(t => t.priority !== 'urgent' && t.priority !== 'high');
+    
+    const options = [];
+    
+    if (urgentUnscheduled.length > 0) {
+      options.push({
+        type: 'extend_week',
+        icon: '⏰',
+        label: `הארכי ימי עבודה (${urgentUnscheduled.length} משימות דחופות!)`,
+        impact: 'משימות דחופות חייבות להיכנס השבוע',
+        recommended: true
+      });
+    }
+    
+    if (regularUnscheduled.length > 0) {
+      options.push({
+        type: 'defer_regular',
+        icon: '📅',
+        label: `דחי ${regularUnscheduled.length} משימות רגילות לשבוע הבא`,
+        impact: 'יפנה מקום למשימות הדחופות',
+        recommended: urgentUnscheduled.length > 0
+      });
+    }
+    
+    options.push({
+      type: 'prioritize',
+      icon: '🎯',
+      label: 'הראי לי מה לבטל',
+      impact: 'נבחר יחד מה פחות חשוב',
+      recommended: false
+    });
+    
     suggestions.push({
       id: 'unscheduled',
       type: 'unscheduled',
       icon: '📭',
       title: `${plan.summary.unscheduledCount} משימות לא נכנסות ללוח`,
-      description: 'אין מספיק זמן בשבוע למשימות האלה',
-      options: [
-        {
-          type: 'extend_week',
-          icon: '⏰',
-          label: 'הארך ימי עבודה',
-          impact: 'יצור מקום לכל המשימות',
-          recommended: false
-        },
-        {
-          type: 'defer_all',
-          icon: '📅',
-          label: 'דחה לשבוע הבא',
-          impact: `${unscheduledTasks.length} משימות יועברו`,
-          recommended: true
-        },
-        {
-          type: 'prioritize',
-          icon: '🎯',
-          label: 'הראה לי מה לבטל',
-          impact: 'נבחר יחד מה פחות חשוב',
-          recommended: false
-        }
-      ]
+      description: urgentUnscheduled.length > 0 
+        ? `⚠️ ${urgentUnscheduled.length} מתוכן דחופות!`
+        : 'אין מספיק זמן בשבוע למשימות האלה',
+      options
     });
   }
   
@@ -1111,7 +1144,7 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
 
 function calculateAutoBalance(plan, tasks) {
   const moves = [];
-  const workDays = plan.days.filter(d => d.isWorkDay);
+  const workDays = plan.days.filter(d => d.isWorkDay && d.dayOfWeek >= 0 && d.dayOfWeek <= 4);
   
   if (workDays.length < 2) return moves;
   
@@ -1125,8 +1158,14 @@ function calculateAutoBalance(plan, tasks) {
     if ((overloadedDay.usagePercent || 0) <= avgUsage * 1.2) break;
     if ((lightDay.usagePercent || 0) >= avgUsage * 0.8) break;
     
+    // ✅ רק משימות רגילות - לא דחופות!
     const movableBlocks = (overloadedDay.blocks || []).filter(b => 
-      !b.isGoogleEvent && !b.isFixed && !b.isCompleted && b.task
+      !b.isGoogleEvent && 
+      !b.isFixed && 
+      !b.isCompleted && 
+      b.task &&
+      b.task.priority !== 'urgent' &&
+      b.task.priority !== 'high'
     );
     
     if (movableBlocks.length > 0) {
