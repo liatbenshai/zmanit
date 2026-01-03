@@ -671,11 +671,39 @@ function DailyView() {
     isRunning: isTimerRunning(b.taskId || b.task?.id || b.id)
   })), dateISO);
   
+  // ✅ יצירת רשימת זמנים חסומים מאירועי גוגל
+  const googleBlockedTimes = googleTasks.map(block => {
+    const startTime = block.startTime?.split(':').map(Number) || [0, 0];
+    const endTime = block.endTime?.split(':').map(Number) || [0, 0];
+    return {
+      start: startTime[0] * 60 + startTime[1],
+      end: endTime[0] * 60 + endTime[1]
+    };
+  }).sort((a, b) => a.start - b.start);
+  
+  // ✅ פונקציה שמוצאת את הזמן הפנוי הבא (דילוג על אירועי גוגל)
+  const findNextFreeSlot = (startFrom, duration) => {
+    let proposedStart = startFrom;
+    
+    for (const blocked of googleBlockedTimes) {
+      const proposedEnd = proposedStart + duration;
+      
+      // בדיקת חפיפה - אם המשימה המוצעת חופפת לאירוע גוגל
+      if (proposedStart < blocked.end && proposedEnd > blocked.start) {
+        // יש חפיפה - נתחיל אחרי האירוע הזה
+        proposedStart = blocked.end + 5; // 5 דקות הפסקה אחרי אירוע גוגל
+      }
+    }
+    
+    return proposedStart;
+  };
+  
   let nextStartMinutes = isViewingToday ? currentTime.minutes : WORK_HOURS.start * 60;
   
   const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
     const duration = block.duration || 30;
-    const startMinutes = nextStartMinutes;
+    // ✅ מציאת סלוט פנוי שלא חופף לאירועי גוגל
+    const startMinutes = findNextFreeSlot(nextStartMinutes, duration);
     const endMinutes = startMinutes + duration;
     const wasPostponed = isBlockPast(block);
     nextStartMinutes = endMinutes + 5;
