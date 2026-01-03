@@ -1,14 +1,9 @@
-console.log('✅ smartSchedulerV4.js LOADED!');
+console.log('✅ smartSchedulerV4.js LOADED - FIXED VERSION!');
 /**
- * מנוע שיבוץ חכם - גרסה 4
+ * מנוע שיבוץ חכם - גרסה 4 מתוקנת
  * =====================================
  * 
- * 🆕 חדש בגרסה 4:
- * 1. אירועי גוגל = בלוקים קבועים (לא ניתנים להזזה!)
- * 2. משימות המערכת = גמישות (מתאימות סביב הקבועים)
- * 3. המלצות חכמות לפיזור ואיזון
- * 4. תזכורות להפסקות
- * 5. מעקב אחר מספור רציף של אינטרוולים
+ * תיקון: זמנים מחושבים נכון לכל בלוק
  */
 
 import { WORK_HOURS } from '../config/workSchedule';
@@ -19,66 +14,45 @@ import { toLocalISODate } from './dateHelpers';
 // ============================================
 
 export const SMART_SCHEDULE_CONFIG = {
-  // שעות עבודה
   dayStart: 8 * 60,           // 08:00
   dayEnd: 16 * 60,            // 16:00
+  morningStart: 8 * 60,
+  morningEnd: 12 * 60,
+  afternoonStart: 12 * 60,
+  afternoonEnd: 16 * 60,
+  blockDuration: 45,
+  breakDuration: 5,
   
-  // חלון בוקר (תמלול)
-  morningStart: 8 * 60,       // 08:00
-  morningEnd: 12 * 60,        // 12:00
-  
-  // חלון אחה"צ (הגהה, תרגום, אחר)
-  afternoonStart: 12 * 60,    // 12:00
-  afternoonEnd: 16 * 60,      // 16:00
-  
-  // בלוקים
-  blockDuration: 45,          // 45 דקות
-  breakDuration: 5,           // 5 דקות הפסקה
-  
-  // הפסקות מומלצות
   breakReminders: {
-    afterMinutes: 90,         // תזכורת להפסקה כל 90 דקות
-    breakLength: 10,          // אורך הפסקה מומלץ
-    lunchStart: 12 * 60,      // 12:00
-    lunchEnd: 13 * 60,        // 13:00
-    lunchLength: 30           // הפסקת צהריים מומלצת
+    afterMinutes: 90,
+    breakLength: 10,
+    lunchStart: 12 * 60,
+    lunchEnd: 13 * 60,
+    lunchLength: 30
   },
   
-  // סוגי משימות לבוקר
   morningTaskTypes: ['transcription', 'תמלול'],
   
-  // זמן עבודה נטו ביום (בדקות)
   get workMinutesPerDay() {
     return this.dayEnd - this.dayStart;
   },
   
-  // כמה בלוקים מקסימום ביום
   get maxBlocksPerDay() {
     return Math.floor(this.workMinutesPerDay / (this.blockDuration + this.breakDuration));
   }
 };
 
-// ============================================
-// סוגי בלוקים
-// ============================================
-
 export const BLOCK_TYPES = {
-  GOOGLE_EVENT: 'google_event',     // אירוע מגוגל - קבוע!
-  FLEXIBLE_TASK: 'flexible_task',   // משימה גמישה
-  BREAK: 'break',                   // הפסקה
-  LUNCH: 'lunch'                    // הפסקת צהריים
+  GOOGLE_EVENT: 'google_event',
+  FLEXIBLE_TASK: 'flexible_task',
+  BREAK: 'break',
+  LUNCH: 'lunch'
 };
 
 // ============================================
-// פונקציה ראשית - שיבוץ שבועי משופר
+// פונקציה ראשית
 // ============================================
 
-/**
- * שיבוץ חכם לשבוע עם תמיכה באירועים קבועים
- * @param {Date} weekStart - תחילת השבוע (יום ראשון)
- * @param {Array} allTasks - כל המשימות
- * @returns {Object} תוכנית שבועית עם המלצות
- */
 export function smartScheduleWeekV4(weekStart, allTasks) {
   const config = SMART_SCHEDULE_CONFIG;
   
@@ -104,20 +78,17 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
   // שלב 4: שיבוץ אירועי גוגל קודם (הם קבועים!)
   scheduleGoogleEvents(googleEvents, days, config);
   
-  // שלב 5: הוספת הפסקות מומלצות
-  addBreakSuggestions(days, config);
-  
-  // שלב 6: שיבוץ משימות גמישות סביב האירועים הקבועים
+  // שלב 5: שיבוץ משימות גמישות סביב האירועים הקבועים
   const sortedTasks = prioritizeTasks(flexibleTasks, todayISO);
   const schedulingResult = scheduleFlexibleTasks(sortedTasks, days, todayISO, config);
   
-  // שלב 7: שיבוץ משימות שהושלמו (לתצוגה)
+  // שלב 6: שיבוץ משימות שהושלמו (לתצוגה)
   scheduleCompletedTasks(completedTasks, days, config);
   
-  // שלב 8: יצירת המלצות לשיפור
+  // שלב 7: יצירת המלצות
   const recommendations = generateRecommendations(days, schedulingResult, config);
   
-  // שלב 9: חישוב סטטיסטיקות
+  // שלב 8: חישוב סטטיסטיקות
   const stats = calculateStats(days, schedulingResult, config);
   
   return {
@@ -141,10 +112,8 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
   const completedTasks = [];
   
   for (const task of allTasks) {
-    // לא מציגים משימות-הורה
     if (task.is_project) continue;
     
-    // משימות שהושלמו
     if (task.is_completed) {
       if (task.due_date && task.due_date >= weekStartISO && task.due_date <= weekEndISO) {
         completedTasks.push(task);
@@ -152,7 +121,6 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
       continue;
     }
     
-    // אירועי גוגל = קבועים!
     if (task.is_from_google || task.google_event_id) {
       googleEvents.push({
         ...task,
@@ -162,7 +130,6 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
       continue;
     }
     
-    // כל השאר = משימות גמישות
     flexibleTasks.push({
       ...task,
       isFixed: false,
@@ -198,131 +165,86 @@ function scheduleGoogleEvents(googleEvents, days, config) {
       title: `📅 ${event.title}`,
       startMinute: startMinutes,
       endMinute: endMinutes,
-      startTime: event.due_time,
+      startTime: minutesToTime(startMinutes),
       endTime: minutesToTime(endMinutes),
       duration: duration,
       dayDate: targetDay.date,
       isFixed: true,
       isGoogleEvent: true,
       blockType: BLOCK_TYPES.GOOGLE_EVENT,
-      canMove: false,  // לא ניתן להזיז!
-      canResize: false // לא ניתן לשנות גודל!
+      canMove: false,
+      canResize: false
     };
     
     targetDay.blocks.push(block);
     targetDay.fixedMinutes = (targetDay.fixedMinutes || 0) + duration;
     
-    // אם בתוך שעות העבודה - מעדכנים את הזמן המשובץ
     if (startMinutes >= config.dayStart && endMinutes <= config.dayEnd) {
       targetDay.totalScheduledMinutes += duration;
     }
   }
   
-  // מיון בלוקים לפי שעה
   for (const day of days) {
     day.blocks.sort((a, b) => a.startMinute - b.startMinute);
   }
 }
 
 // ============================================
-// הוספת הפסקות מומלצות
-// ============================================
-
-function addBreakSuggestions(days, config) {
-  for (const day of days) {
-    if (!day.isWorkDay) continue;
-    
-    // הפסקת צהריים
-    const hasLunchBlock = day.blocks.some(b => 
-      b.startMinute < config.breakReminders.lunchEnd && 
-      b.endMinute > config.breakReminders.lunchStart
-    );
-    
-    if (!hasLunchBlock) {
-      day.suggestedBreaks = day.suggestedBreaks || [];
-      day.suggestedBreaks.push({
-        type: BLOCK_TYPES.LUNCH,
-        title: '🍽️ הפסקת צהריים מומלצת',
-        startMinute: config.breakReminders.lunchStart,
-        endMinute: config.breakReminders.lunchStart + config.breakReminders.lunchLength,
-        startTime: minutesToTime(config.breakReminders.lunchStart),
-        endTime: minutesToTime(config.breakReminders.lunchStart + config.breakReminders.lunchLength),
-        isSuggestion: true
-      });
-    }
-  }
-}
-
-// ============================================
-// שיבוץ משימות גמישות
+// שיבוץ משימות גמישות - מתוקן!
 // ============================================
 
 function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
-  const taskProgress = new Map();
   const warnings = [];
   const unscheduledTasks = [];
   
-  // אתחול התקדמות
-  for (const task of sortedTasks) {
-    taskProgress.set(task.id, {
-      task,
-      total: task.estimated_duration || 30,
-      scheduled: 0,
-      remaining: task.estimated_duration || 30,
-      blocks: []
-    });
+  // ✅ מעקב אחרי הזמן הבא הפנוי בכל יום
+  const dayNextAvailable = new Map();
+  for (const day of days) {
+    if (day.isWorkDay && day.date >= todayISO) {
+      dayNextAvailable.set(day.date, config.dayStart);
+    }
   }
   
   // שיבוץ כל משימה
   for (const task of sortedTasks) {
-    scheduleFlexibleTask(task, days, taskProgress, todayISO, config);
-  }
-  
-  // איסוף משימות שלא שובצו
-  for (const [taskId, progress] of taskProgress) {
-    if (progress.remaining > 0) {
-      unscheduledTasks.push(progress.task);
-      warnings.push({
-        type: 'not_scheduled',
-        severity: 'high',
-        message: `לא נמצא מקום ל"${progress.task.title}" (${progress.remaining} דק' נותרו)`,
-        taskId,
-        suggestedAction: 'move_to_next_week'
-      });
-    }
-  }
-  
-  return { taskProgress, warnings, unscheduledTasks };
-}
-
-function scheduleFlexibleTask(task, days, taskProgress, todayISO, config) {
-  const progress = taskProgress.get(task.id);
-  if (!progress) return;
-  
-  // מציאת ימים רלוונטיים
-  const relevantDays = days.filter(d => {
-    if (!d.isWorkDay) return false;
-    if (d.date < todayISO) return false;
-    if (task.start_date && d.date < task.start_date) return false;
-    return true;
-  });
-  
-  // שיבוץ
-  for (const day of relevantDays) {
-    if (progress.remaining <= 0) break;
+    const totalDuration = task.estimated_duration || 30;
+    let remainingDuration = totalDuration;
+    let blocksCreated = 0;
     
-    // מציאת חלונות פנויים (לא חוסמים את הקבועים!)
-    const freeSlots = findFreeSlotsAroundFixed(day, config);
+    // מציאת ימים רלוונטיים
+    const relevantDays = days.filter(d => {
+      if (!d.isWorkDay) return false;
+      if (d.date < todayISO) return false;
+      if (task.start_date && d.date < task.start_date) return false;
+      return true;
+    });
     
-    for (const slot of freeSlots) {
-      if (progress.remaining <= 0) break;
+    // עדיפות ליום ה-due_date אם קיים
+    relevantDays.sort((a, b) => {
+      if (task.due_date) {
+        if (a.date === task.due_date) return -1;
+        if (b.date === task.due_date) return 1;
+      }
+      return a.date.localeCompare(b.date);
+    });
+    
+    for (const day of relevantDays) {
+      if (remainingDuration <= 0) break;
       
-      const availableTime = slot.end - slot.start;
-      const blockDuration = Math.min(progress.remaining, availableTime, config.blockDuration);
+      // ✅ מציאת חלונות פנויים עם מעקב אחרי הזמן הנוכחי
+      const currentStart = dayNextAvailable.get(day.date) || config.dayStart;
+      const freeSlots = findFreeSlotsForDay(day, currentStart, config);
       
-      if (blockDuration >= 15) { // מינימום 15 דקות
+      for (const slot of freeSlots) {
+        if (remainingDuration <= 0) break;
+        
+        const availableTime = slot.end - slot.start;
+        if (availableTime < 15) continue; // מינימום 15 דקות
+        
+        const blockDuration = Math.min(remainingDuration, availableTime, config.blockDuration);
+        
         const block = {
-          id: `${task.id}-block-${progress.blocks.length + 1}`,
+          id: `${task.id}-block-${blocksCreated + 1}`,
           taskId: task.id,
           task: task,
           type: task.task_type || 'other',
@@ -338,47 +260,69 @@ function scheduleFlexibleTask(task, days, taskProgress, todayISO, config) {
           isFixed: false,
           blockType: BLOCK_TYPES.FLEXIBLE_TASK,
           canMove: true,
-          canResize: true
+          canResize: true,
+          blockIndex: blocksCreated + 1,
+          totalBlocks: Math.ceil(totalDuration / config.blockDuration)
         };
         
         day.blocks.push(block);
-        progress.blocks.push(block);
-        progress.scheduled += blockDuration;
-        progress.remaining -= blockDuration;
         day.totalScheduledMinutes += blockDuration;
+        remainingDuration -= blockDuration;
+        blocksCreated++;
+        
+        // ✅ עדכון הזמן הבא הפנוי ביום
+        dayNextAvailable.set(day.date, slot.start + blockDuration + config.breakDuration);
+        
+        // עדכון ה-slot לבלוק הבא
+        slot.start = slot.start + blockDuration + config.breakDuration;
       }
+      
+      // מיון בלוקים
+      day.blocks.sort((a, b) => a.startMinute - b.startMinute);
     }
     
-    // מיון בלוקים
-    day.blocks.sort((a, b) => a.startMinute - b.startMinute);
+    // אם נשאר זמן לא משובץ
+    if (remainingDuration > 0) {
+      unscheduledTasks.push(task);
+      warnings.push({
+        type: 'not_scheduled',
+        severity: 'high',
+        taskTitle: task.title,
+        message: `לא נמצא מקום ל"${task.title}" (${remainingDuration} דק' נותרו)`,
+        taskId: task.id
+      });
+    }
   }
+  
+  return { warnings, unscheduledTasks };
 }
 
 // ============================================
-// מציאת חלונות פנויים סביב בלוקים קבועים
+// מציאת חלונות פנויים ביום - מתוקן!
 // ============================================
 
-function findFreeSlotsAroundFixed(day, config) {
+function findFreeSlotsForDay(day, startFrom, config) {
   const slots = [];
   const fixedBlocks = day.blocks.filter(b => b.isFixed || b.isGoogleEvent);
   
   // מיון לפי זמן התחלה
   fixedBlocks.sort((a, b) => a.startMinute - b.startMinute);
   
-  let currentStart = config.dayStart;
+  let currentStart = Math.max(startFrom, config.dayStart);
   
   for (const block of fixedBlocks) {
-    // רווח לפני הבלוק הקבוע
+    // אם הבלוק הקבוע מתחיל אחרי המיקום הנוכחי
     if (block.startMinute > currentStart) {
-      const gapSize = block.startMinute - currentStart;
-      if (gapSize >= 15) {
-        slots.push({ start: currentStart, end: block.startMinute });
+      const gapEnd = block.startMinute;
+      if (gapEnd - currentStart >= 15) {
+        slots.push({ start: currentStart, end: gapEnd });
       }
     }
+    // קפיצה לאחרי הבלוק הקבוע
     currentStart = Math.max(currentStart, block.endMinute + config.breakDuration);
   }
   
-  // רווח אחרי כל הבלוקים
+  // רווח אחרי כל הבלוקים הקבועים
   if (config.dayEnd > currentStart) {
     slots.push({ start: currentStart, end: config.dayEnd });
   }
@@ -387,7 +331,7 @@ function findFreeSlotsAroundFixed(day, config) {
 }
 
 // ============================================
-// שיבוץ משימות שהושלמו (לתצוגה)
+// שיבוץ משימות שהושלמו
 // ============================================
 
 function scheduleCompletedTasks(completedTasks, days, config) {
@@ -418,13 +362,12 @@ function scheduleCompletedTasks(completedTasks, days, config) {
 }
 
 // ============================================
-// יצירת המלצות חכמות
+// יצירת המלצות
 // ============================================
 
 function generateRecommendations(days, schedulingResult, config) {
   const recommendations = [];
   
-  // 1. איזון עומס בין ימים
   const workDays = days.filter(d => d.isWorkDay);
   const avgLoad = workDays.reduce((sum, d) => sum + (d.totalScheduledMinutes || 0), 0) / workDays.length;
   
@@ -436,7 +379,7 @@ function generateRecommendations(days, schedulingResult, config) {
       type: 'rebalance',
       priority: 'high',
       title: '⚖️ איזון עומס',
-      message: `יש ${overloadedDays.length} ימים עמוסים ו-${lightDays.length} ימים קלים יחסית`,
+      message: `יש ${overloadedDays.length} ימים עמוסים ו-${lightDays.length} ימים קלים`,
       action: {
         type: 'auto_rebalance',
         label: 'אזן אוטומטית',
@@ -446,86 +389,17 @@ function generateRecommendations(days, schedulingResult, config) {
     });
   }
   
-  // 2. משימות שניתן להקדים
-  const tasksWithSlack = [];
-  for (const day of workDays) {
-    const flexibleBlocks = day.blocks.filter(b => !b.isFixed && !b.isCompleted);
-    for (const block of flexibleBlocks) {
-      if (block.task?.due_date && block.dayDate < block.task.due_date) {
-        tasksWithSlack.push({
-          task: block.task,
-          currentDay: block.dayDate,
-          dueDate: block.task.due_date
-        });
-      }
-    }
-  }
-  
-  if (tasksWithSlack.length > 0) {
-    recommendations.push({
-      type: 'early_completion',
-      priority: 'medium',
-      title: '🚀 אפשר להקדים',
-      message: `${tasksWithSlack.length} משימות יכולות להיות מושלמות לפני המועד`,
-      tasks: tasksWithSlack
-    });
-  }
-  
-  // 3. תזכורת להפסקות
-  for (const day of workDays) {
-    const continuousWork = calculateContinuousWork(day, config);
-    if (continuousWork > config.breakReminders.afterMinutes) {
-      recommendations.push({
-        type: 'break_reminder',
-        priority: 'medium',
-        title: '☕ מומלץ להוסיף הפסקה',
-        message: `ביום ${day.dayName} יש ${Math.round(continuousWork / 60)} שעות עבודה רצופות`,
-        day: day.date
-      });
-    }
-  }
-  
-  // 4. משימות לא משובצות
   if (schedulingResult.unscheduledTasks.length > 0) {
     recommendations.push({
       type: 'unscheduled',
       priority: 'high',
       title: '⚠️ משימות ללא מקום',
       message: `${schedulingResult.unscheduledTasks.length} משימות לא נכנסות ללוח הזמנים`,
-      suggestions: [
-        'העבירי משימות לשבוע הבא',
-        'הארכי את יום העבודה',
-        'הורידי עדיפות למשימות פחות דחופות'
-      ],
       tasks: schedulingResult.unscheduledTasks
     });
   }
   
   return recommendations;
-}
-
-function calculateContinuousWork(day, config) {
-  const blocks = day.blocks.filter(b => !b.isCompleted && !b.isSuggestion);
-  if (blocks.length === 0) return 0;
-  
-  blocks.sort((a, b) => a.startMinute - b.startMinute);
-  
-  let maxContinuous = 0;
-  let currentContinuous = 0;
-  let lastEnd = config.dayStart;
-  
-  for (const block of blocks) {
-    if (block.startMinute - lastEnd > 15) {
-      // יש הפסקה
-      maxContinuous = Math.max(maxContinuous, currentContinuous);
-      currentContinuous = block.duration;
-    } else {
-      currentContinuous += block.duration;
-    }
-    lastEnd = block.endMinute;
-  }
-  
-  return Math.max(maxContinuous, currentContinuous);
 }
 
 // ============================================
@@ -594,11 +468,6 @@ function prioritizeTasks(tasks, todayISO) {
     if (a.due_date && !b.due_date) return -1;
     if (!a.due_date && b.due_date) return 1;
     
-    // 5. לפי שעה
-    if (a.due_time && b.due_time) {
-      return a.due_time.localeCompare(b.due_time);
-    }
-    
     return 0;
   });
 }
@@ -626,9 +495,7 @@ function calculateStats(days, schedulingResult, config) {
 function formatDayForOutput(day, config) {
   const dayCapacity = day.isWorkDay ? (config.dayEnd - config.dayStart) : 0;
   
-  // מיון בלוקים - קבועים קודם, אחר כך לפי זמן
   const sortedBlocks = [...(day.blocks || [])].sort((a, b) => {
-    // קבועים קודם באותו זמן
     if (a.startMinute === b.startMinute) {
       if (a.isFixed && !b.isFixed) return -1;
       if (!a.isFixed && b.isFixed) return 1;
