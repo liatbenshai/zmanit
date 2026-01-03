@@ -110,6 +110,13 @@ function WeeklyPlannerPro() {
   const handleDragOver = (e, dayDate) => {
     e.preventDefault();
     if (draggedTask) {
+      // ✅ בדיקה אם היום אחרי הדדליין
+      const task = draggedTask.task;
+      if (task?.due_date && dayDate > task.due_date) {
+        e.dataTransfer.dropEffect = 'none'; // לא ניתן לשחרר
+      } else {
+        e.dataTransfer.dropEffect = 'move';
+      }
       setDragOverDay(dayDate);
     }
   };
@@ -125,6 +132,19 @@ function WeeklyPlannerPro() {
     
     if (task.due_date === targetDayDate) {
       toast('המשימה כבר ביום הזה', { icon: 'ℹ️' });
+      setDraggedTask(null);
+      setDragOverDay(null);
+      return;
+    }
+    
+    // ✅ בדיקת דדליין - אזהרה אם גוררים לאחר הדדליין
+    if (task.due_date && targetDayDate > task.due_date) {
+      const targetDay = plan.days.find(d => d.date === targetDayDate);
+      const dueDate = new Date(task.due_date + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
+      
+      toast.error(`⚠️ אי אפשר להעביר ל-${targetDay?.dayName || targetDayDate} - הדדליין הוא ${dueDate}!`, {
+        duration: 4000
+      });
       setDraggedTask(null);
       setDragOverDay(null);
       return;
@@ -420,6 +440,7 @@ function WeeklyPlannerPro() {
               day={day}
               isToday={isToday(day.date)}
               isDragOver={dragOverDay === day.date}
+              draggedTask={draggedTask}
               onAddTask={() => handleAddTask(day.date)}
               onEditTask={handleEditTask}
               onComplete={handleComplete}
@@ -645,6 +666,7 @@ function DayColumn({
   day, 
   isToday, 
   isDragOver,
+  draggedTask,
   onAddTask, 
   onEditTask, 
   onComplete, 
@@ -660,6 +682,11 @@ function DayColumn({
   const regularBlocks = blocks.filter(b => !b.isGoogleEvent && !b.isCompleted);
   const completedBlocks = blocks.filter(b => b.isCompleted);
 
+  // ✅ בדיקה אם הגרירה חוקית (לפני הדדליין)
+  const isValidDropTarget = !draggedTask || 
+    !draggedTask.task?.due_date || 
+    day.date <= draggedTask.task.due_date;
+
   const getLoadColor = () => {
     if (!day.isWorkDay) return 'bg-gray-100 dark:bg-gray-800/50';
     if (day.usagePercent >= 90) return 'bg-red-50 dark:bg-red-900/10';
@@ -672,7 +699,8 @@ function DayColumn({
       className={`
         rounded-xl overflow-hidden shadow-sm border-2 transition-all min-h-[400px] flex flex-col
         ${isToday ? 'ring-2 ring-blue-500 border-blue-300' : 'border-gray-200 dark:border-gray-700'}
-        ${isDragOver ? 'ring-2 ring-green-500 border-green-300 scale-[1.02]' : ''}
+        ${isDragOver && isValidDropTarget ? 'ring-2 ring-green-500 border-green-300 scale-[1.02]' : ''}
+        ${isDragOver && !isValidDropTarget ? 'ring-2 ring-red-500 border-red-300 opacity-60' : ''}
         ${getLoadColor()}
       `}
       onDragOver={onDragOver}
@@ -762,9 +790,15 @@ function DayColumn({
           </>
         )}
         
-        {isDragOver && (
+        {isDragOver && isValidDropTarget && (
           <div className="p-3 border-2 border-dashed border-green-400 rounded-lg text-center text-green-600 text-sm animate-pulse">
-            שחרר כאן
+            שחרר כאן ✓
+          </div>
+        )}
+        
+        {isDragOver && !isValidDropTarget && (
+          <div className="p-3 border-2 border-dashed border-red-400 rounded-lg text-center text-red-600 text-sm">
+            ❌ אחרי הדדליין!
           </div>
         )}
       </div>
@@ -849,6 +883,20 @@ function TaskBlock({
             {task?.priority === 'urgent' && (
               <span className="px-1.5 py-0.5 bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200 text-xs rounded">
                 דחוף
+              </span>
+            )}
+            {task?.priority === 'high' && (
+              <span className="px-1.5 py-0.5 bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-200 text-xs rounded">
+                גבוה
+              </span>
+            )}
+            {task?.due_date && task.due_date !== block.dayDate && (
+              <span className={`px-1.5 py-0.5 text-xs rounded ${
+                task.due_date < block.dayDate 
+                  ? 'bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200'
+                  : 'bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200'
+              }`}>
+                📅 {new Date(task.due_date + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'short' })}
               </span>
             )}
           </div>
@@ -1030,14 +1078,23 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
     
     // אפשרויות להעברת משימות רגילות בלבד
     for (const block of movableBlocks.slice(0, 3)) {
+      const taskDueDate = block.task?.due_date;
+      
       for (const lightDay of lightDays.slice(0, 2)) {
         if (lightDay.date === overloadedDay.date) continue;
+        
+        // ✅ בדיקת דדליין - לא להציע העברה לאחר הדדליין!
+        if (taskDueDate && lightDay.date > taskDueDate) {
+          continue; // דילוג - היום המוצע אחרי הדדליין
+        }
         
         options.push({
           type: 'move',
           icon: '📦',
           label: `העבר "${block.title}" ליום ${lightDay.dayName}`,
-          impact: `יפנה ${block.duration} דק' מיום ${overloadedDay.dayName}, יום ${lightDay.dayName} יעלה ל-${Math.round(lightDay.usagePercent + (block.duration / 4.8))}%`,
+          impact: taskDueDate 
+            ? `יפנה ${block.duration} דק' (דדליין: ${formatDateShort(taskDueDate)})`
+            : `יפנה ${block.duration} דק' מיום ${overloadedDay.dayName}`,
           taskId: block.taskId,
           taskTitle: block.title,
           toDate: lightDay.date,
@@ -1047,17 +1104,30 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
       }
     }
     
-    // אם אין משימות רגילות להעביר - הצע הארכת יום
+    // אם אין משימות שאפשר להעביר (כולן דחופות או עם דדליין קרוב)
     if (options.length === 0) {
       const urgentCount = (overloadedDay.blocks || []).filter(b => 
         b.task?.priority === 'urgent' || b.task?.priority === 'high'
       ).length;
       
+      const deadlineCount = movableBlocks.filter(b => 
+        b.task?.due_date && b.task.due_date <= overloadedDay.date
+      ).length;
+      
+      let reason = '';
+      if (urgentCount > 0 && deadlineCount > 0) {
+        reason = `יש ${urgentCount} משימות דחופות ו-${deadlineCount} משימות עם דדליין היום`;
+      } else if (urgentCount > 0) {
+        reason = `יש ${urgentCount} משימות דחופות שאי אפשר להזיז`;
+      } else if (deadlineCount > 0) {
+        reason = `יש ${deadlineCount} משימות עם דדליין היום`;
+      }
+      
       options.push({
         type: 'extend_day',
         icon: '⏰',
         label: 'הארך את יום העבודה',
-        impact: `יש ${urgentCount} משימות דחופות שאי אפשר להזיז`,
+        impact: reason || 'תוכלי להוסיף עוד משימות',
         recommended: true
       });
     } else {
@@ -1078,8 +1148,8 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
         icon: '⚠️',
         title: `יום ${overloadedDay.dayName} עמוס (${overloadedDay.usagePercent}%)`,
         description: options.some(o => o.type === 'move') 
-          ? 'יש משימות רגילות שאפשר להעביר. משימות דחופות נשארות במקום!'
-          : 'כל המשימות דחופות - אי אפשר להזיז אותן. שקלי להאריך את יום העבודה.',
+          ? 'יש משימות שאפשר להעביר (לפני הדדליין שלהן). משימות דחופות נשארות במקום!'
+          : 'כל המשימות דחופות או עם דדליין היום - אי אפשר להזיז אותן.',
         options
       });
     }
@@ -1093,9 +1163,23 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
     const urgentUnscheduled = unscheduledTasks.filter(t => t.priority === 'urgent' || t.priority === 'high');
     const regularUnscheduled = unscheduledTasks.filter(t => t.priority !== 'urgent' && t.priority !== 'high');
     
+    // ✅ בדיקה אם יש משימות עם דדליין השבוע
+    const weekEnd = workDays[workDays.length - 1]?.date;
+    const withDeadlineThisWeek = unscheduledTasks.filter(t => t.due_date && t.due_date <= weekEnd);
+    
     const options = [];
     
-    if (urgentUnscheduled.length > 0) {
+    if (withDeadlineThisWeek.length > 0) {
+      options.push({
+        type: 'extend_week',
+        icon: '🚨',
+        label: `הארכי ימי עבודה (${withDeadlineThisWeek.length} משימות עם דדליין השבוע!)`,
+        impact: 'משימות עם דדליין חייבות להיכנס לפני התאריך',
+        recommended: true
+      });
+    }
+    
+    if (urgentUnscheduled.length > 0 && withDeadlineThisWeek.length === 0) {
       options.push({
         type: 'extend_week',
         icon: '⏰',
@@ -1105,13 +1189,15 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
       });
     }
     
-    if (regularUnscheduled.length > 0) {
+    // ✅ רק משימות בלי דדליין השבוע אפשר לדחות
+    const canDefer = regularUnscheduled.filter(t => !t.due_date || t.due_date > weekEnd);
+    if (canDefer.length > 0) {
       options.push({
         type: 'defer_regular',
         icon: '📅',
-        label: `דחי ${regularUnscheduled.length} משימות רגילות לשבוע הבא`,
+        label: `דחי ${canDefer.length} משימות (ללא דדליין קרוב) לשבוע הבא`,
         impact: 'יפנה מקום למשימות הדחופות',
-        recommended: urgentUnscheduled.length > 0
+        recommended: urgentUnscheduled.length > 0 || withDeadlineThisWeek.length > 0
       });
     }
     
@@ -1128,14 +1214,23 @@ function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
       type: 'unscheduled',
       icon: '📭',
       title: `${plan.summary.unscheduledCount} משימות לא נכנסות ללוח`,
-      description: urgentUnscheduled.length > 0 
-        ? `⚠️ ${urgentUnscheduled.length} מתוכן דחופות!`
-        : 'אין מספיק זמן בשבוע למשימות האלה',
+      description: withDeadlineThisWeek.length > 0 
+        ? `🚨 ${withDeadlineThisWeek.length} מתוכן עם דדליין השבוע!`
+        : urgentUnscheduled.length > 0 
+          ? `⚠️ ${urgentUnscheduled.length} מתוכן דחופות!`
+          : 'אין מספיק זמן בשבוע למשימות האלה',
       options
     });
   }
   
   return suggestions;
+}
+
+// פונקציית עזר לפורמט תאריך קצר
+function formatDateShort(dateStr) {
+  if (!dateStr) return '';
+  const date = new Date(dateStr + 'T12:00:00');
+  return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'short' });
 }
 
 // ============================================
@@ -1165,7 +1260,9 @@ function calculateAutoBalance(plan, tasks) {
       !b.isCompleted && 
       b.task &&
       b.task.priority !== 'urgent' &&
-      b.task.priority !== 'high'
+      b.task.priority !== 'high' &&
+      // ✅ בדיקת דדליין - רק אם היום הקל לפני הדדליין
+      (!b.task.due_date || lightDay.date <= b.task.due_date)
     );
     
     if (movableBlocks.length > 0) {
