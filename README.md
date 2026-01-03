@@ -1,75 +1,54 @@
-# 📅 Google Calendar Sync - הוראות התקנה
+# עדכון זמנית - גרסה 4.1
 
-## מה זה עושה?
-- אירועים מיומן גוגל **נהפכים למשימות אמיתיות** (עם טיימר ואפשרות סימון)
-- משימות מזמנית יוצאות ליומן גוגל (עם google_event_id)
-- סנכרון אוטומטי כשנכנסים לדף היומי
-- **אין כפילויות** - המערכת מזהה לפי google_event_id
+## מה חדש:
+- ✅ תמיכה מלאה בנייד (החלקה בין ימים)
+- ✅ קטגוריות מותאמות אישית (תמלול ותרגום קבועות, השאר לבחירה)
+- ✅ שעות עבודה מותאמות לכל יום (לפי ההגדרות שלך)
+- ✅ הצעות נדחות נזכרות לשבוע
 
----
+## הוראות התקנה:
 
-## שלב 1: הרצת Migration בדאטהבייס
+### אפשרות 1: גרירה ידנית
+פתחי את ה-ZIP והעתיקי את תיקיית `src` לתוך הפרויקט שלך.
+הקבצים יתווספו/יחליפו אוטומטית במיקומים הנכונים.
 
-1. לכי ל-Supabase → SQL Editor
-2. הריצי את הקוד מ-`migration.sql`:
+### אפשרות 2: GitHub
+1. פתחי את ה-ZIP
+2. גרירי את התיקיות ל-GitHub
+3. עשי Commit
 
-```sql
-ALTER TABLE tasks 
-ADD COLUMN IF NOT EXISTS google_event_id TEXT,
-ADD COLUMN IF NOT EXISTS is_from_google BOOLEAN DEFAULT FALSE;
+## מבנה הקבצים:
 
-CREATE UNIQUE INDEX IF NOT EXISTS idx_tasks_user_google_event 
-ON tasks(user_id, google_event_id) 
-WHERE google_event_id IS NOT NULL;
+```
+src/
+├── config/
+│   └── taskCategories.js      ← חדש! קטגוריות מותאמות
+├── components/
+│   ├── Planning/
+│   │   └── WeeklyPlannerPro.jsx   ← מעודכן! + תמיכה בנייד
+│   └── Settings/
+│       └── CategoryManager.jsx    ← חדש! ניהול קטגוריות
+└── utils/
+    └── smartSchedulerV4.js    ← מעודכן! שעות עבודה מותאמות
 ```
 
----
+## פעולה נוספת נדרשת:
 
-## שלב 2: החלפת קבצים
+כדי להוסיף את ניהול הקטגוריות לדף ההגדרות,
+צריך להוסיף לקובץ `src/pages/Settings.jsx`:
 
-| קובץ בZIP | להעתיק ל: |
-|-----------|-----------|
-| `useGoogleCalendar.js` | `src/hooks/useGoogleCalendar.js` |
-| `AdminSettings.jsx` | `src/Admin/AdminSettings.jsx` **וגם** `src/components/Admin/AdminSettings.jsx` |
-| `src/DailyView/DailyView.jsx` | `src/DailyView/DailyView.jsx` **וגם** `src/components/DailyView/DailyView.jsx` |
+```jsx
+// בתחילת הקובץ, הוסיפי:
+import CategoryManager from '../components/Settings/CategoryManager';
 
----
-
-## שלב 3: Push
-
-```bash
-git add .
-git commit -m "Google Calendar real sync - events become tasks"
-git push
+// ובתוך הקומפוננטה, במקום מתאים:
+<CategoryManager />
 ```
 
----
+אם את רוצה שאכין גם את זה - תגידי ואעדכן!
 
-## איך זה עובד עכשיו?
-
-### 🔄 סנכרון אוטומטי
-- כשנכנסים לדף היומי, המערכת בודקת אם יש אירועים ביומן גוגל
-- אירועים חדשים **נוצרים כמשימות אמיתיות** בדאטהבייס
-- אם אירוע כבר קיים (לפי google_event_id) - הוא מתעדכן
-
-### ✅ משימות מגוגל
-- מופיעות עם תגית "📅 גוגל"
-- אפשר להפעיל עליהן טיימר
-- אפשר לסמן אותן כהושלמו
-- הן שומרות על השעה המקורית מהיומן
-
-### 🔗 חיבור לגוגל
-- עכשיו רק דרך **הדשבורד** (הגדרות → יומן גוגל)
-- אין יותר כפתור התחברות בדף היומי
-
----
-
-## פתרון בעיות
-
-### "יש כפילויות"
-הריצי את ה-migration כדי שהמערכת תזהה אירועים קיימים
-
-### "אירועים לא מופיעים"
-1. ודאי שאת מחוברת לגוגל (בדשבורד)
-2. רענני את הדף
-3. בדקי ב-Console אם יש שגיאות
+## בדיקה לאחר התקנה:
+1. רענני את האפליקציה (Ctrl+Shift+R)
+2. בדקי תצוגה שבועית בדסקטופ
+3. בדקי תצוגה בנייד (או צמצמי חלון)
+4. בדקי שהשעות נכונות לכל יום

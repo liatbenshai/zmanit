@@ -1,17 +1,18 @@
 /**
- * תצוגה שבועית מקצועית - WeeklyPlannerPro v2
+ * תצוגה שבועית מקצועית - WeeklyPlannerPro v3
  * ============================================
  * 
- * תיקונים:
- * - זמנים מוצגים נכון
- * - הצעות אינטראקטיביות עם אפשרויות לבחירה
- * - ללא אזהרות על משימות שכבר שובצו
+ * חדש:
+ * - תמיכה מלאה בנייד (תצוגת יום בודד עם החלקה)
+ * - קטגוריות מותאמות אישית
+ * - שמירת הצעות נדחות
  */
 
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { smartScheduleWeekV4 } from '../../utils/smartSchedulerV4';
+import { getCategory, getCategoriesArray } from '../../config/taskCategories';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import TaskTimerWithInterruptions from '../Tasks/TaskTimerWithInterruptions';
 import Modal from '../UI/Modal';
@@ -19,21 +20,27 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../services/supabase';
 
 // ============================================
-// קונפיגורציה
+// Hook לזיהוי גודל מסך
 // ============================================
 
-const TASK_TYPES = {
-  transcription: { icon: '🎙️', name: 'תמלול' },
-  proofreading: { icon: '📝', name: 'הגהה' },
-  email: { icon: '📧', name: 'מיילים' },
-  course: { icon: '📚', name: 'קורס' },
-  client_communication: { icon: '💬', name: 'לקוחות' },
-  management: { icon: '👔', name: 'ניהול' },
-  family: { icon: '👨‍👩‍👧‍👦', name: 'משפחה' },
-  kids: { icon: '🧒', name: 'ילדים' },
-  personal: { icon: '🧘', name: 'אישי' },
-  meeting: { icon: '📅', name: 'פגישה' },
-  other: { icon: '📋', name: 'אחר' }
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+  
+  return isMobile;
+}
+
+// ============================================
+// פונקציית עזר לקטגוריה
+// ============================================
+
+const getTaskCategory = (taskType) => {
+  return getCategory(taskType) || { icon: '📋', name: 'אחר', color: 'gray' };
 };
 
 const formatDuration = (minutes) => {
@@ -60,6 +67,10 @@ function WeeklyPlannerPro() {
   const [showSuggestions, setShowSuggestions] = useState(true);
   const [isBalancing, setIsBalancing] = useState(false);
   
+  // ✅ תמיכה בנייד
+  const isMobile = useIsMobile();
+  const [mobileDayIndex, setMobileDayIndex] = useState(0); // אינדקס היום המוצג בנייד (0-4)
+  
   // ✅ טעינת הצעות נדחות מ-localStorage (נשמרות גם אחרי רענון!)
   const [dismissedSuggestions, setDismissedSuggestions] = useState(() => {
     try {
@@ -85,9 +96,19 @@ function WeeklyPlannerPro() {
     }
   });
   
-  // גרירה
+  // גרירה (רק בדסקטופ)
   const [draggedTask, setDraggedTask] = useState(null);
   const [dragOverDay, setDragOverDay] = useState(null);
+  
+  // ✅ עדכון אינדקס היום בנייד להיום הנוכחי
+  useEffect(() => {
+    if (isMobile && weekOffset === 0) {
+      const today = new Date().getDay(); // 0=ראשון
+      if (today >= 0 && today <= 4) {
+        setMobileDayIndex(today);
+      }
+    }
+  }, [isMobile, weekOffset]);
 
   // חישוב תחילת השבוע
   const weekStart = useMemo(() => {
@@ -365,37 +386,40 @@ function WeeklyPlannerPro() {
   // ============================================
   
   return (
-    <div className="weekly-planner-pro p-4 max-w-7xl mx-auto">
+    <div className="weekly-planner-pro p-2 md:p-4 max-w-7xl mx-auto">
       
       {/* ===== כותרת וניווט ===== */}
-      <div className="mb-6">
-        <div className="flex items-center justify-between mb-4">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-            📊 תכנון שבועי חכם
+      <div className="mb-4 md:mb-6">
+        <div className="flex items-center justify-between mb-3 md:mb-4">
+          <h1 className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+            📊 {isMobile ? 'תכנון שבועי' : 'תכנון שבועי חכם'}
           </h1>
           
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleAutoBalance}
-              disabled={isBalancing}
-              className="px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg hover:from-purple-600 hover:to-blue-600 flex items-center gap-2 disabled:opacity-50 shadow-md"
-            >
-              {isBalancing ? (
-                <><span className="animate-spin">⏳</span> מאזן...</>
-              ) : (
-                <>⚖️ איזון אוטומטי</>
-              )}
-            </button>
+          <div className="flex items-center gap-1 md:gap-2">
+            {/* כפתור איזון - רק בדסקטופ */}
+            {!isMobile && (
+              <button
+                onClick={handleAutoBalance}
+                disabled={isBalancing}
+                className="px-3 md:px-4 py-2 bg-gradient-to-r from-purple-500 to-blue-500 text-white rounded-lg hover:from-purple-600 hover:to-blue-600 flex items-center gap-2 disabled:opacity-50 shadow-md text-sm md:text-base"
+              >
+                {isBalancing ? (
+                  <><span className="animate-spin">⏳</span> מאזן...</>
+                ) : (
+                  <>⚖️ איזון</>
+                )}
+              </button>
+            )}
             
             <button
               onClick={() => setShowSuggestions(!showSuggestions)}
-              className={`px-3 py-2 rounded-lg flex items-center gap-2 transition-colors ${
+              className={`px-2 md:px-3 py-2 rounded-lg flex items-center gap-1 md:gap-2 transition-colors text-sm ${
                 showSuggestions 
                   ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' 
                   : 'bg-gray-100 dark:bg-gray-700 text-gray-600'
               }`}
             >
-              💡 הצעות
+              💡 {!isMobile && 'הצעות'}
               {smartSuggestions.length > 0 && (
                 <span className="bg-red-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
                   {smartSuggestions.length}
@@ -404,7 +428,7 @@ function WeeklyPlannerPro() {
             </button>
             
             {/* כפתור לאיפוס הצעות נדחות */}
-            {dismissedSuggestions.length > 0 && (
+            {dismissedSuggestions.length > 0 && !isMobile && (
               <button
                 onClick={() => {
                   setDismissedSuggestions([]);
@@ -414,31 +438,51 @@ function WeeklyPlannerPro() {
                 className="px-2 py-2 text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
                 title={`${dismissedSuggestions.length} הצעות נדחו`}
               >
-                🔄 איפוס ({dismissedSuggestions.length})
+                🔄 ({dismissedSuggestions.length})
               </button>
             )}
           </div>
         </div>
 
         {/* ניווט שבועות */}
-        <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-          <button onClick={goToPrevWeek} className="p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-xl">▶</button>
+        <div className="flex items-center justify-between bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 shadow-sm">
+          <button onClick={goToPrevWeek} className="p-2 md:p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-lg md:text-xl">▶</button>
           
-          <div className="flex items-center gap-4">
-            <span className="font-bold text-xl text-gray-900 dark:text-white">{formatWeekTitle()}</span>
+          <div className="flex items-center gap-2 md:gap-4">
+            <span className="font-bold text-base md:text-xl text-gray-900 dark:text-white">{formatWeekTitle()}</span>
             {weekOffset !== 0 && (
-              <button onClick={goToThisWeek} className="px-3 py-1 text-sm bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg">
-                🏠 השבוע
+              <button onClick={goToThisWeek} className="px-2 md:px-3 py-1 text-xs md:text-sm bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 rounded-lg">
+                🏠 {isMobile ? '' : 'השבוע'}
               </button>
             )}
           </div>
           
-          <button onClick={goToNextWeek} className="p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-xl">◀</button>
+          <button onClick={goToNextWeek} className="p-2 md:p-3 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-lg md:text-xl">◀</button>
         </div>
       </div>
 
-      {/* ===== ניתוח שבועי ===== */}
-      <WeeklyAnalysis plan={plan} />
+      {/* ===== ניתוח שבועי - מוקטן בנייד ===== */}
+      {!isMobile && <WeeklyAnalysis plan={plan} />}
+      
+      {/* סיכום מהיר בנייד */}
+      {isMobile && (
+        <div className="grid grid-cols-3 gap-2 mb-4">
+          <div className="bg-blue-500 text-white rounded-lg p-2 text-center">
+            <div className="text-lg font-bold">{plan.summary?.usagePercent || 0}%</div>
+            <div className="text-xs text-blue-100">ניצולת</div>
+          </div>
+          <div className="bg-white dark:bg-gray-800 rounded-lg p-2 text-center border">
+            <div className="text-lg font-bold text-gray-900 dark:text-white">{formatDuration(plan.summary?.totalScheduledMinutes || 0)}</div>
+            <div className="text-xs text-gray-500">מתוכנן</div>
+          </div>
+          <div className={`rounded-lg p-2 text-center border ${(plan.summary?.unscheduledCount || 0) > 0 ? 'bg-red-50 border-red-200' : 'bg-green-50 border-green-200'}`}>
+            <div className={`text-lg font-bold ${(plan.summary?.unscheduledCount || 0) > 0 ? 'text-red-600' : 'text-green-600'}`}>
+              {plan.summary?.unscheduledCount || 0}
+            </div>
+            <div className="text-xs text-gray-500">לא משובצות</div>
+          </div>
+        </div>
+      )}
 
       {/* ===== פאנל הצעות אינטראקטיביות ===== */}
       <AnimatePresence>
@@ -447,38 +491,41 @@ function WeeklyPlannerPro() {
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
             exit={{ opacity: 0, height: 0 }}
-            className="mb-6"
+            className="mb-4 md:mb-6"
           >
             <InteractiveSuggestionsPanel 
               suggestions={smartSuggestions}
               onApplyOption={applyOption}
               onDismiss={dismissSuggestion}
+              isMobile={isMobile}
             />
           </motion.div>
         )}
       </AnimatePresence>
 
-      {/* ===== מקרא ===== */}
-      <div className="flex items-center gap-6 mb-4 text-sm bg-white dark:bg-gray-800 rounded-lg p-3">
-        <span className="flex items-center gap-2">
-          <span className="w-4 h-4 rounded bg-purple-500"></span>
-          📅 גוגל (קבוע)
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="w-4 h-4 rounded bg-blue-500"></span>
-          📝 משימה (ניתן לגרור)
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="w-4 h-4 rounded bg-red-500"></span>
-          🔴 דחוף
-        </span>
-        <span className="flex items-center gap-2">
-          <span className="w-4 h-4 rounded bg-green-500"></span>
-          ✅ הושלם
-        </span>
-      </div>
+      {/* ===== מקרא - רק בדסקטופ ===== */}
+      {!isMobile && (
+        <div className="flex items-center gap-6 mb-4 text-sm bg-white dark:bg-gray-800 rounded-lg p-3">
+          <span className="flex items-center gap-2">
+            <span className="w-4 h-4 rounded bg-purple-500"></span>
+            📅 גוגל (קבוע)
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-4 h-4 rounded bg-blue-500"></span>
+            📝 משימה (ניתן לגרור)
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-4 h-4 rounded bg-red-500"></span>
+            🔴 דחוף
+          </span>
+          <span className="flex items-center gap-2">
+            <span className="w-4 h-4 rounded bg-green-500"></span>
+            ✅ הושלם
+          </span>
+        </div>
+      )}
 
-      {/* ===== תצוגת שבוע (ראשון-חמישי בלבד) ===== */}
+      {/* ===== תצוגת שבוע ===== */}
       {selectedDayForDetail ? (
         <DayDetailPanel
           day={selectedDayForDetail}
@@ -490,11 +537,26 @@ function WeeklyPlannerPro() {
           onStartTimer={handleStartTimer}
           onSelectDay={setSelectedDayForDetail}
           onDragStart={handleDragStart}
+          isMobile={isMobile}
+        />
+      ) : isMobile ? (
+        /* ========== תצוגת נייד - יום בודד עם ניווט ========== */
+        <MobileDayView
+          days={plan.days.filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4)}
+          currentIndex={mobileDayIndex}
+          onChangeDay={setMobileDayIndex}
+          todayStr={todayStr}
+          onAddTask={handleAddTask}
+          onEditTask={handleEditTask}
+          onComplete={handleComplete}
+          onStartTimer={handleStartTimer}
+          onSelectDay={setSelectedDayForDetail}
         />
       ) : (
+        /* ========== תצוגת דסקטופ - 5 עמודות ========== */
         <div className="grid grid-cols-5 gap-4">
           {plan.days
-            .filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4) // ✅ רק ראשון עד חמישי
+            .filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4)
             .map((day) => (
             <DayColumn
               key={day.date}
@@ -603,7 +665,7 @@ function WeeklyAnalysis({ plan }) {
 // פאנל הצעות אינטראקטיביות
 // ============================================
 
-function InteractiveSuggestionsPanel({ suggestions, onApplyOption, onDismiss }) {
+function InteractiveSuggestionsPanel({ suggestions, onApplyOption, onDismiss, isMobile = false }) {
   const [showRejectReason, setShowRejectReason] = useState(null);
   const [rejectReason, setRejectReason] = useState('');
 
@@ -618,51 +680,51 @@ function InteractiveSuggestionsPanel({ suggestions, onApplyOption, onDismiss }) 
   };
 
   return (
-    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-blue-200 dark:border-blue-800">
-      <div className="flex items-center justify-between mb-4">
-        <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2">
-          💡 הצעות לשיפור ({suggestions.length})
+    <div className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl p-3 md:p-4 border border-blue-200 dark:border-blue-800">
+      <div className="flex items-center justify-between mb-3 md:mb-4">
+        <h3 className="font-bold text-gray-900 dark:text-white flex items-center gap-2 text-sm md:text-base">
+          💡 הצעות ({suggestions.length})
         </h3>
-        <span className="text-xs text-gray-500">בחרי אפשרות או דחי</span>
+        <span className="text-xs text-gray-500 hidden md:block">בחרי אפשרות או דחי</span>
       </div>
       
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         {suggestions.map((suggestion) => (
           <motion.div
             key={suggestion.id}
             initial={{ opacity: 0, y: -10 }}
             animate={{ opacity: 1, y: 0 }}
-            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm"
+            className="bg-white dark:bg-gray-800 rounded-xl p-3 md:p-4 shadow-sm"
           >
             {/* כותרת ההצעה */}
-            <div className="flex items-start gap-3 mb-4">
-              <span className="text-3xl">{suggestion.icon}</span>
+            <div className="flex items-start gap-2 md:gap-3 mb-3 md:mb-4">
+              <span className="text-2xl md:text-3xl">{suggestion.icon}</span>
               <div className="flex-1">
-                <div className="font-bold text-gray-900 dark:text-white text-lg">
+                <div className="font-bold text-gray-900 dark:text-white text-sm md:text-lg">
                   {suggestion.title}
                 </div>
-                <div className="text-gray-600 dark:text-gray-400">
+                <div className="text-gray-600 dark:text-gray-400 text-xs md:text-base">
                   {suggestion.description}
                 </div>
               </div>
             </div>
             
             {/* אפשרויות לבחירה */}
-            <div className="space-y-2 mb-4">
-              {suggestion.options.map((option, idx) => (
+            <div className="space-y-2 mb-3 md:mb-4">
+              {suggestion.options.slice(0, isMobile ? 2 : 4).map((option, idx) => (
                 <button
                   key={idx}
                   onClick={() => onApplyOption(suggestion, option)}
-                  className={`w-full text-right p-3 rounded-lg border-2 transition-all hover:shadow-md ${
+                  className={`w-full text-right p-2 md:p-3 rounded-lg border-2 transition-all hover:shadow-md text-sm ${
                     option.recommended 
                       ? 'border-green-400 bg-green-50 dark:bg-green-900/20 hover:border-green-500'
                       : 'border-gray-200 dark:border-gray-600 hover:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
                   }`}
                 >
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">{option.icon}</span>
-                    <div className="flex-1">
-                      <div className="font-medium text-gray-900 dark:text-white">
+                    <span className="text-lg md:text-xl">{option.icon}</span>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-medium text-gray-900 dark:text-white truncate">
                         {option.label}
                         {option.recommended && (
                           <span className="mr-2 px-2 py-0.5 bg-green-500 text-white text-xs rounded-full">
@@ -670,8 +732,8 @@ function InteractiveSuggestionsPanel({ suggestions, onApplyOption, onDismiss }) 
                           </span>
                         )}
                       </div>
-                      {option.impact && (
-                        <div className="text-sm text-gray-500">{option.impact}</div>
+                      {option.impact && !isMobile && (
+                        <div className="text-xs md:text-sm text-gray-500 truncate">{option.impact}</div>
                       )}
                     </div>
                     <span className="text-gray-400">←</span>
@@ -682,34 +744,36 @@ function InteractiveSuggestionsPanel({ suggestions, onApplyOption, onDismiss }) 
             
             {/* כפתור דחייה */}
             {showRejectReason === suggestion.id ? (
-              <div className="flex items-center gap-2 p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
+              <div className="flex flex-col md:flex-row items-stretch md:items-center gap-2 p-2 md:p-3 bg-gray-50 dark:bg-gray-700 rounded-lg">
                 <input
                   type="text"
                   value={rejectReason}
                   onChange={(e) => setRejectReason(e.target.value)}
-                  placeholder="למה לא מתאים? (אופציונלי)"
+                  placeholder="למה לא מתאים?"
                   className="flex-1 px-3 py-2 border rounded-lg text-sm dark:bg-gray-800 dark:border-gray-600"
                   autoFocus
                 />
-                <button
-                  onClick={() => handleReject(suggestion.id)}
-                  className="px-3 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg text-sm"
-                >
-                  דחה
-                </button>
-                <button
-                  onClick={() => { setShowRejectReason(null); setRejectReason(''); }}
-                  className="px-3 py-2 text-gray-500 text-sm"
-                >
-                  ביטול
-                </button>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => handleReject(suggestion.id)}
+                    className="flex-1 md:flex-none px-3 py-2 bg-gray-200 dark:bg-gray-600 rounded-lg text-sm"
+                  >
+                    דחה
+                  </button>
+                  <button
+                    onClick={() => { setShowRejectReason(null); setRejectReason(''); }}
+                    className="flex-1 md:flex-none px-3 py-2 text-gray-500 text-sm"
+                  >
+                    ביטול
+                  </button>
+                </div>
               </div>
             ) : (
               <button
                 onClick={() => setShowRejectReason(suggestion.id)}
                 className="text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
               >
-                ❌ לא עכשיו / לא מתאים
+                ❌ לא עכשיו
               </button>
             )}
           </motion.div>
@@ -889,7 +953,7 @@ function TaskBlock({
   faded = false
 }) {
   const task = block.task || block;
-  const taskType = TASK_TYPES[task?.task_type] || TASK_TYPES.other;
+  const category = getTaskCategory(task?.task_type);
 
   // ✅ תיקון: קריאה נכונה של הזמנים
   const startTime = block.startTime || (block.startMinute ? minutesToTimeStr(block.startMinute) : '??:??');
@@ -922,7 +986,7 @@ function TaskBlock({
       onClick={onEdit}
     >
       <div className="flex items-start gap-2">
-        <span className="text-sm">{block.isGoogleEvent ? '📅' : taskType.icon}</span>
+        <span className="text-sm">{block.isGoogleEvent ? '📅' : category.icon}</span>
         
         <div className="flex-1 min-w-0">
           <div className={`font-medium text-gray-900 dark:text-white truncate ${compact ? 'text-xs' : 'text-sm'}`}>
@@ -989,6 +1053,263 @@ function TaskBlock({
 }
 
 // ============================================
+// תצוגת נייד - יום בודד עם החלקה
+// ============================================
+
+function MobileDayView({
+  days,
+  currentIndex,
+  onChangeDay,
+  todayStr,
+  onAddTask,
+  onEditTask,
+  onComplete,
+  onStartTimer,
+  onSelectDay
+}) {
+  const currentDay = days[currentIndex];
+  if (!currentDay) return null;
+  
+  const isToday = currentDay.date === todayStr;
+  const blocks = currentDay.blocks || [];
+  const googleBlocks = blocks.filter(b => b.isGoogleEvent);
+  const regularBlocks = blocks.filter(b => !b.isGoogleEvent && !b.isCompleted);
+  const completedBlocks = blocks.filter(b => b.isCompleted);
+
+  // החלקה בנייד
+  const handleSwipe = (direction) => {
+    if (direction === 'left' && currentIndex < days.length - 1) {
+      onChangeDay(currentIndex + 1);
+    } else if (direction === 'right' && currentIndex > 0) {
+      onChangeDay(currentIndex - 1);
+    }
+  };
+
+  return (
+    <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
+      {/* כותרת היום עם ניווט */}
+      <div className={`p-4 ${isToday ? 'bg-blue-500 text-white' : 'bg-gray-50 dark:bg-gray-700'}`}>
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => onChangeDay(Math.max(0, currentIndex - 1))}
+            disabled={currentIndex === 0}
+            className={`p-2 rounded-lg ${currentIndex === 0 ? 'opacity-30' : 'hover:bg-white/20'}`}
+          >
+            ▶
+          </button>
+          
+          <div className="text-center">
+            <div className="text-xl font-bold">יום {currentDay.dayName}</div>
+            <div className={`text-sm ${isToday ? 'text-blue-100' : 'text-gray-500'}`}>
+              {new Date(currentDay.date + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })}
+            </div>
+          </div>
+          
+          <button
+            onClick={() => onChangeDay(Math.min(days.length - 1, currentIndex + 1))}
+            disabled={currentIndex === days.length - 1}
+            className={`p-2 rounded-lg ${currentIndex === days.length - 1 ? 'opacity-30' : 'hover:bg-white/20'}`}
+          >
+            ◀
+          </button>
+        </div>
+        
+        {/* מידע על היום */}
+        <div className="flex justify-center gap-4 mt-3 text-sm">
+          <div className={`px-3 py-1 rounded-full ${isToday ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600'}`}>
+            {currentDay.usagePercent}% תפוס
+          </div>
+          <div className={`px-3 py-1 rounded-full ${isToday ? 'bg-white/20' : 'bg-gray-200 dark:bg-gray-600'}`}>
+            {formatDuration(currentDay.freeMinutes || 0)} פנוי
+          </div>
+        </div>
+        
+        {/* נקודות ניווט */}
+        <div className="flex justify-center gap-2 mt-3">
+          {days.map((_, idx) => (
+            <button
+              key={idx}
+              onClick={() => onChangeDay(idx)}
+              className={`w-2 h-2 rounded-full transition-colors ${
+                idx === currentIndex 
+                  ? (isToday ? 'bg-white' : 'bg-blue-500')
+                  : (isToday ? 'bg-white/30' : 'bg-gray-300 dark:bg-gray-600')
+              }`}
+            />
+          ))}
+        </div>
+      </div>
+
+      {/* רשימת משימות */}
+      <div 
+        className="p-4 space-y-3 max-h-[60vh] overflow-y-auto"
+        onTouchStart={(e) => {
+          const touch = e.touches[0];
+          e.currentTarget.dataset.startX = touch.clientX;
+        }}
+        onTouchEnd={(e) => {
+          const startX = parseFloat(e.currentTarget.dataset.startX);
+          const endX = e.changedTouches[0].clientX;
+          const diff = startX - endX;
+          if (Math.abs(diff) > 50) {
+            handleSwipe(diff > 0 ? 'left' : 'right');
+          }
+        }}
+      >
+        {blocks.length === 0 ? (
+          <div className="text-center py-12 text-gray-400">
+            <div className="text-4xl mb-3">📭</div>
+            <div>אין משימות ליום הזה</div>
+          </div>
+        ) : (
+          <>
+            {/* אירועי גוגל */}
+            {googleBlocks.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs text-purple-600 font-medium mb-2">📅 אירועים קבועים</div>
+                {googleBlocks.map((block, idx) => (
+                  <MobileTaskBlock
+                    key={block.id || `google-${idx}`}
+                    block={block}
+                    onEdit={() => block.task && onEditTask(block.task)}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {/* משימות */}
+            {regularBlocks.length > 0 && (
+              <div className="mb-4">
+                <div className="text-xs text-blue-600 font-medium mb-2">📝 משימות ({regularBlocks.length})</div>
+                {regularBlocks.map((block, idx) => (
+                  <MobileTaskBlock
+                    key={block.id || `task-${idx}`}
+                    block={block}
+                    onEdit={() => block.task && onEditTask(block.task)}
+                    onComplete={() => block.task && onComplete(block.task)}
+                    onStartTimer={() => block.task && onStartTimer(block.task)}
+                  />
+                ))}
+              </div>
+            )}
+            
+            {/* הושלמו */}
+            {completedBlocks.length > 0 && (
+              <div>
+                <div className="text-xs text-green-600 font-medium mb-2">✅ הושלמו ({completedBlocks.length})</div>
+                {completedBlocks.slice(0, 3).map((block, idx) => (
+                  <MobileTaskBlock
+                    key={block.id || `completed-${idx}`}
+                    block={block}
+                    faded
+                  />
+                ))}
+                {completedBlocks.length > 3 && (
+                  <div className="text-center text-gray-400 text-sm py-2">
+                    +{completedBlocks.length - 3} משימות נוספות
+                  </div>
+                )}
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {/* כפתור הוספה */}
+      <div className="p-4 border-t border-gray-200 dark:border-gray-700">
+        <button
+          onClick={() => onAddTask(currentDay.date)}
+          className="w-full py-3 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 active:scale-[0.98] transition-transform"
+        >
+          + הוסף משימה ליום {currentDay.dayName}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================
+// בלוק משימה לנייד
+// ============================================
+
+function MobileTaskBlock({ block, onEdit, onComplete, onStartTimer, faded = false }) {
+  const task = block.task || block;
+  const category = getTaskCategory(task?.task_type);
+
+  const startTime = block.startTime || '??:??';
+  const endTime = block.endTime || '??:??';
+
+  return (
+    <motion.div
+      layout
+      className={`
+        bg-white dark:bg-gray-700 rounded-xl p-4 mb-2 shadow-sm border-r-4
+        ${block.isGoogleEvent ? 'border-r-purple-500' : 
+          task?.priority === 'urgent' ? 'border-r-red-500' :
+          task?.priority === 'high' ? 'border-r-orange-500' : 'border-r-blue-500'}
+        ${faded ? 'opacity-50' : ''}
+      `}
+      onClick={onEdit}
+    >
+      <div className="flex items-start gap-3">
+        <span className="text-2xl">{block.isGoogleEvent ? '📅' : category.icon}</span>
+        
+        <div className="flex-1 min-w-0">
+          <div className="font-medium text-gray-900 dark:text-white">
+            {block.title || task?.title}
+          </div>
+          
+          <div className="flex items-center gap-2 mt-1 text-sm text-gray-500">
+            <span>🕐 {startTime} - {endTime}</span>
+            {block.duration && <span>({block.duration} דק')</span>}
+          </div>
+          
+          <div className="flex flex-wrap gap-1 mt-2">
+            {block.isGoogleEvent && (
+              <span className="px-2 py-0.5 bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-200 text-xs rounded-full">
+                קבוע
+              </span>
+            )}
+            {task?.priority === 'urgent' && (
+              <span className="px-2 py-0.5 bg-red-100 dark:bg-red-800 text-red-700 dark:text-red-200 text-xs rounded-full">
+                דחוף
+              </span>
+            )}
+            {task?.priority === 'high' && (
+              <span className="px-2 py-0.5 bg-orange-100 dark:bg-orange-800 text-orange-700 dark:text-orange-200 text-xs rounded-full">
+                גבוה
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* כפתורי פעולה */}
+        {!block.isGoogleEvent && !block.isCompleted && !faded && (
+          <div className="flex gap-2">
+            {onStartTimer && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onStartTimer(); }}
+                className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900 text-blue-600 flex items-center justify-center text-lg"
+              >
+                ▶
+              </button>
+            )}
+            {onComplete && (
+              <button
+                onClick={(e) => { e.stopPropagation(); onComplete(); }}
+                className="w-10 h-10 rounded-full bg-green-100 dark:bg-green-900 text-green-600 flex items-center justify-center text-lg"
+              >
+                ✓
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+    </motion.div>
+  );
+}
+
+// ============================================
 // תצוגת יום מפורטת
 // ============================================
 
@@ -1001,7 +1322,8 @@ function DayDetailPanel({
   onComplete, 
   onStartTimer,
   onSelectDay,
-  onDragStart
+  onDragStart,
+  isMobile = false
 }) {
   const hours = Array.from({ length: 10 }, (_, i) => i + 8);
   const blocks = day.blocks || [];
@@ -1012,13 +1334,13 @@ function DayDetailPanel({
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-xl shadow-md overflow-hidden">
-      <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600">
+      <div className={`p-3 md:p-4 bg-gray-50 dark:bg-gray-700 border-b border-gray-200 dark:border-gray-600`}>
         <div className="flex items-center justify-between mb-3">
-          <button onClick={onBack} className="px-3 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg">
-            ← חזרה לשבוע
+          <button onClick={onBack} className="px-3 py-2 text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-lg text-sm md:text-base">
+            ← חזרה {isMobile ? '' : 'לשבוע'}
           </button>
-          <button onClick={onAddTask} className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700">
-            + משימה חדשה
+          <button onClick={onAddTask} className="px-3 md:px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 text-sm md:text-base">
+            + משימה {isMobile ? '' : 'חדשה'}
           </button>
         </div>
         
@@ -1026,17 +1348,17 @@ function DayDetailPanel({
           <button
             onClick={() => nextDay && onSelectDay(nextDay)}
             disabled={!nextDay}
-            className={`px-3 py-2 rounded-lg ${nextDay ? 'hover:bg-gray-200 dark:hover:bg-gray-600' : 'opacity-30 cursor-not-allowed'}`}
+            className={`px-2 md:px-3 py-2 rounded-lg text-sm ${nextDay ? 'hover:bg-gray-200 dark:hover:bg-gray-600' : 'opacity-30 cursor-not-allowed'}`}
           >
-            {nextDay?.dayName || ''} ▶
+            {isMobile ? '▶' : `${nextDay?.dayName || ''} ▶`}
           </button>
           
           <div className="text-center">
-            <div className="text-2xl font-bold text-gray-900 dark:text-white">יום {day.dayName}</div>
-            <div className="text-gray-500">
+            <div className="text-lg md:text-2xl font-bold text-gray-900 dark:text-white">יום {day.dayName}</div>
+            <div className="text-gray-500 text-sm">
               {new Date(day.date + 'T12:00:00').toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })}
             </div>
-            <div className="text-sm text-gray-400 mt-1">
+            <div className="text-xs md:text-sm text-gray-400 mt-1">
               {day.usagePercent}% תפוס | {formatDuration(day.freeMinutes || 0)} פנוי
             </div>
           </div>
@@ -1044,14 +1366,14 @@ function DayDetailPanel({
           <button
             onClick={() => prevDay && onSelectDay(prevDay)}
             disabled={!prevDay}
-            className={`px-3 py-2 rounded-lg ${prevDay ? 'hover:bg-gray-200 dark:hover:bg-gray-600' : 'opacity-30 cursor-not-allowed'}`}
+            className={`px-2 md:px-3 py-2 rounded-lg text-sm ${prevDay ? 'hover:bg-gray-200 dark:hover:bg-gray-600' : 'opacity-30 cursor-not-allowed'}`}
           >
-            ◀ {prevDay?.dayName || ''}
+            {isMobile ? '◀' : `◀ ${prevDay?.dayName || ''}`}
           </button>
         </div>
       </div>
 
-      <div className="p-4">
+      <div className="p-2 md:p-4">
         {!day.isWorkDay && blocks.length === 0 ? (
           <div className="text-center py-12 text-gray-400">
             <div className="text-4xl mb-3">🌴</div>
@@ -1066,21 +1388,31 @@ function DayDetailPanel({
               });
 
               return (
-                <div key={hour} className="flex border-b border-gray-100 dark:border-gray-700 min-h-[60px]">
-                  <div className="w-20 py-2 text-sm text-gray-500 flex-shrink-0 text-left">
+                <div key={hour} className="flex border-b border-gray-100 dark:border-gray-700 min-h-[50px] md:min-h-[60px]">
+                  <div className="w-14 md:w-20 py-2 text-xs md:text-sm text-gray-500 flex-shrink-0 text-left">
                     {String(hour).padStart(2, '0')}:00
                   </div>
                   <div className="flex-1 py-1 space-y-1">
                     {blocksAtHour.map((block, idx) => (
-                      <TaskBlock
-                        key={block.id || `hour-${hour}-${idx}`}
-                        block={block}
-                        onEdit={() => block.task && onEditTask(block.task)}
-                        onComplete={() => block.task && onComplete(block.task)}
-                        onStartTimer={() => block.task && onStartTimer(block.task)}
-                        onDragStart={() => block.task && onDragStart(block.task, block)}
-                        draggable={!block.isGoogleEvent}
-                      />
+                      isMobile ? (
+                        <MobileTaskBlock
+                          key={block.id || `hour-${hour}-${idx}`}
+                          block={block}
+                          onEdit={() => block.task && onEditTask(block.task)}
+                          onComplete={() => block.task && onComplete(block.task)}
+                          onStartTimer={() => block.task && onStartTimer(block.task)}
+                        />
+                      ) : (
+                        <TaskBlock
+                          key={block.id || `hour-${hour}-${idx}`}
+                          block={block}
+                          onEdit={() => block.task && onEditTask(block.task)}
+                          onComplete={() => block.task && onComplete(block.task)}
+                          onStartTimer={() => block.task && onStartTimer(block.task)}
+                          onDragStart={() => block.task && onDragStart(block.task, block)}
+                          draggable={!block.isGoogleEvent}
+                        />
+                      )
                     ))}
                   </div>
                 </div>
