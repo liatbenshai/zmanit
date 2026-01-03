@@ -212,14 +212,12 @@ function DailyView() {
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [dragOverTime, setDragOverTime] = useState(null);
-  const [taskOrder, setTaskOrder] = useState([]); // ✅ סדר משימות מותאם
+  const [taskOrder, setTaskOrder] = useState([]);
   const timelineRef = useRef(null);
   
-  // ✅ גרירה לשינוי סדר
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   
-  // ✅ Google Calendar - סנכרון אמיתי
   const { 
     isConnected: isGoogleConnected, 
     isLoading: isGoogleLoading,
@@ -230,14 +228,12 @@ function DailyView() {
   
   const [showGoogleMenu, setShowGoogleMenu] = useState(false);
   
-  // ✅ סנכרון אוטומטי של אירועי גוגל כשמשנים תאריך - יוצר משימות אמיתיות!
   useEffect(() => {
     const syncGoogleForDate = async () => {
       if (!isGoogleConnected || isGoogleLoading || !user?.id) return;
       
       try {
         const result = await syncGoogleEvents(selectedDate, user.id, null, tasks);
-        // אם יובאו משימות חדשות - רענון הרשימה
         if (result.imported > 0 || result.updated > 0) {
           await loadTasks();
         }
@@ -249,7 +245,6 @@ function DailyView() {
     syncGoogleForDate();
   }, [selectedDate, isGoogleConnected, isGoogleLoading, user?.id]);
   
-  // שעה נוכחית
   const [currentTime, setCurrentTime] = useState(() => {
     const now = new Date();
     return {
@@ -258,11 +253,9 @@ function DailyView() {
     };
   });
   
-  // ✅ דחייה אוטומטית
   const [rescheduleInfo, setRescheduleInfo] = useState(null);
   const [isAutoRescheduling, setIsAutoRescheduling] = useState(false);
   
-  // עדכון השעה כל דקה
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
@@ -275,14 +268,12 @@ function DailyView() {
     return () => clearInterval(interval);
   }, []);
 
-  // ✅ חישוב דחייה אוטומטית
   useEffect(() => {
     if (!tasks || tasks.length === 0) {
       setRescheduleInfo(null);
       return;
     }
     
-    // רק אם צופים בהיום
     const todayISO = getDateISO(new Date());
     if (getDateISO(selectedDate) !== todayISO) {
       setRescheduleInfo(null);
@@ -301,7 +292,6 @@ function DailyView() {
     });
   }, [tasks, selectedDate, currentTime.minutes]);
 
-  // ✅ ביצוע דחייה אוטומטית
   const handleAutoReschedule = async () => {
     if (!rescheduleInfo) return;
     
@@ -326,7 +316,6 @@ function DailyView() {
     }
   };
 
-  // ניווט בין ימים
   const goToPreviousDay = () => {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() - 1);
@@ -343,12 +332,11 @@ function DailyView() {
     setSelectedDate(new Date());
   };
 
-  // חישוב תוכנית שבועית עם smartSchedulerV4
+  // ✅ כאן השינוי העיקרי - משתמש ב-smartScheduleWeekV4!
   const weekPlan = useMemo(() => {
     if (!tasks || tasks.length === 0) return null;
     const weekStart = getWeekStart(selectedDate);
     
-    // 🔍 DEBUG: הצגת כל האינטרוולים של משימות עם parent
     const intervals = tasks.filter(t => t.parent_task_id && !t.is_completed);
     if (intervals.length > 0) {
       intervals.forEach(t => {
@@ -358,7 +346,6 @@ function DailyView() {
     return smartScheduleWeekV4(weekStart, tasks);
   }, [tasks, selectedDate]);
 
-  // קבלת הבלוקים ליום הנבחר מתוך התוכנית השבועית
   const selectedDayData = useMemo(() => {
     if (!weekPlan) return { blocks: [], tasks: [] };
     
@@ -377,13 +364,11 @@ function DailyView() {
     };
   }, [weekPlan, selectedDate]);
 
-  // חישוב זמנים
   const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;
   
   const timeStats = useMemo(() => {
     const blocks = selectedDayData.blocks || [];
     
-    // ✅ בדיקה אם יש טיימר פעיל
     const checkTimerRunning = (block) => {
       const taskId = block.taskId || block.task?.id || block.id;
       if (!taskId) return false;
@@ -400,7 +385,6 @@ function DailyView() {
     const blockHasPassed = (block) => {
       if (!isViewingToday) return false;
       if (!block.endTime) return false;
-      // ✅ אם טיימר פעיל - לא עבר!
       if (checkTimerRunning(block)) return false;
       const [hour, min] = block.endTime.split(':').map(Number);
       return (hour * 60 + (min || 0)) < currentTime.minutes;
@@ -414,7 +398,6 @@ function DailyView() {
       .filter(b => !b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
-    // ✅ משימות באיחור - לא כולל משימות עם טיימר פעיל!
     const overdueMinutes = blocks
       .filter(b => !b.isCompleted && blockHasPassed(b))
       .reduce((sum, b) => sum + (b.duration || 0), 0);
@@ -443,7 +426,6 @@ function DailyView() {
     };
   }, [selectedDayData, isViewingToday, currentTime.minutes]);
 
-  // handlers
   const handleAddTask = () => {
     setEditingTask(null);
     setShowTaskForm(true);
@@ -461,11 +443,6 @@ function DailyView() {
     loadTasks();
   };
 
-  // ===============================
-  // ✅ Google Calendar Functions
-  // ===============================
-  
-  // סנכרון ידני עם גוגל
   const handleSyncWithGoogle = async () => {
     if (!isGoogleConnected || !user?.id) return;
     
@@ -479,10 +456,6 @@ function DailyView() {
     }
   };
 
-  // ===============================
-  // Drag & Drop to Timeline (קיים)
-  // ===============================
-  
   const handleDragStart = (task, e) => {
     draggedTaskData = task;
     e.dataTransfer.effectAllowed = 'move';
@@ -537,10 +510,6 @@ function DailyView() {
     }
   };
 
-  // ===============================
-  // ✅ Drag & Drop לשינוי סדר (חדש!)
-  // ===============================
-  
   const handleReorderDragStart = (e, index) => {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
@@ -576,13 +545,11 @@ function DailyView() {
       return;
     }
 
-    // יצירת סדר חדש
     const currentOrder = blocksArray.map(b => b.taskId || b.id);
     const newOrder = [...currentOrder];
     const [movedItem] = newOrder.splice(fromIndex, 1);
     newOrder.splice(toIndex, 0, movedItem);
     
-    // שמירה ב-localStorage
     const dateISO = getDateISO(selectedDate);
     saveTaskOrder(dateISO, newOrder);
     setTaskOrder(newOrder);
@@ -593,7 +560,6 @@ function DailyView() {
     setDragOverIndex(null);
   };
 
-  // טעינה
   if (loading) {
     return (
       <div className="flex justify-center items-center h-64">
@@ -602,7 +568,6 @@ function DailyView() {
     );
   }
 
-  // שגיאה
   if (error) {
     return (
       <div className="card p-6 text-center text-red-600">
@@ -614,9 +579,6 @@ function DailyView() {
     );
   }
 
-  // === סינון וחישוב מחדש של זמנים ===
-  
-  // ✅ בדיקה אם יש טיימר פעיל על משימה
   const isTimerRunning = (taskId) => {
     if (!taskId) return false;
     try {
@@ -629,15 +591,12 @@ function DailyView() {
     return false;
   };
   
-  // ✅ תיקון: משימה עם טיימר פעיל לא נחשבת "באיחור"!
   const isBlockPast = (block) => {
     if (!isViewingToday) return false;
     
-    // ✅ אם יש טיימר פעיל - זה לא איחור, זו עבודה!
     const taskId = block.taskId || block.task?.id || block.id;
     if (isTimerRunning(taskId)) return false;
     
-    // רק אם יש למשימה המקורית due_time ספציפי
     const task = block.task;
     if (!task?.due_time) return false;
     
@@ -652,7 +611,6 @@ function DailyView() {
     return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
   };
   
-  // מיון בלוקים - משימות מגוגל כבר נכללות כי הן משימות אמיתיות עכשיו
   const allBlocks = [...(selectedDayData.blocks || [])].sort((a, b) => {
     if (a.startTime && b.startTime) {
       const aTime = a.startTime.split(':').map(Number);
@@ -670,7 +628,6 @@ function DailyView() {
   const completedBlocks = allBlocks.filter(b => b.isCompleted);
   let activeBlocks = allBlocks.filter(b => !b.isCompleted);
   
-  // משימה עם טיימר פעיל נשארת ראשונה
   const getRunningTaskId = () => {
     for (const block of activeBlocks) {
       const taskId = block.taskId || block.task?.id;
@@ -701,12 +658,10 @@ function DailyView() {
     }
   }
   
-  // ✅ מיון לפי סדר שמור - משימות מגוגל הן עכשיו משימות אמיתיות!
   const dateISO = getDateISO(selectedDate);
   
-  // משימות מגוגל (is_from_google) שומרות על הזמנים שלהן
-  const googleTasks = activeBlocks.filter(b => b.is_from_google || b.task?.is_from_google);
-  const regularBlocks = activeBlocks.filter(b => !b.is_from_google && !b.task?.is_from_google);
+  const googleTasks = activeBlocks.filter(b => b.is_from_google || b.task?.is_from_google || b.isGoogleEvent);
+  const regularBlocks = activeBlocks.filter(b => !b.is_from_google && !b.task?.is_from_google && !b.isGoogleEvent);
   
   let sortedRegularBlocks = sortTasksByOrder(regularBlocks.map(b => ({
     ...b,
@@ -716,7 +671,6 @@ function DailyView() {
     isRunning: isTimerRunning(b.taskId || b.task?.id || b.id)
   })), dateISO);
   
-  // חישוב זמנים מחדש - רק למשימות רגילות
   let nextStartMinutes = isViewingToday ? currentTime.minutes : WORK_HOURS.start * 60;
   
   const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
@@ -737,15 +691,13 @@ function DailyView() {
     };
   });
   
-  // ✅ משימות מגוגל שומרות על הזמנים המקוריים שלהן
   const googleTasksWithTimes = googleTasks.map(block => ({
     ...block,
     isPostponed: false,
     isRescheduled: false,
-    isFromGoogle: true // סימון לרנדור
+    isFromGoogle: true
   }));
   
-  // ✅ מיזוג: משימות רגילות + משימות מגוגל, ממוינים לפי זמן התחלה
   const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes].sort((a, b) => {
     const aTime = a.startTime?.split(':').map(Number) || [0, 0];
     const bTime = b.startTime?.split(':').map(Number) || [0, 0];
@@ -755,14 +707,9 @@ function DailyView() {
   const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
   const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
 
-  // ===============================
-  // רנדור כרטיס עם גרירה
-  // ===============================
   const renderDraggableCard = (block, index, blocksArray) => {
-    // ✅ משימות מגוגל מקבלות אינדיקציה קטנה אבל מתנהגות כמו משימות רגילות
-    const isFromGoogle = block.isFromGoogle || block.is_from_google || block.task?.is_from_google;
+    const isFromGoogle = block.isFromGoogle || block.is_from_google || block.task?.is_from_google || block.isGoogleEvent;
     
-    // רנדור רגיל - גם למשימות מגוגל (עכשיו הן משימות אמיתיות!)
     return (
     <motion.div
       key={block.id || block.taskId || `block-${index}`}
@@ -776,7 +723,7 @@ function DailyView() {
       className={`
         relative
         ${dragOverIndex === index ? 'ring-2 ring-blue-500 ring-dashed rounded-xl' : ''}
-        ${isFromGoogle ? 'ring-1 ring-blue-300' : ''}
+        ${isFromGoogle ? 'ring-1 ring-purple-400 bg-purple-50 dark:bg-purple-900/20' : ''}
       `}
       draggable={!isFromGoogle}
       onDragStart={(e) => !isFromGoogle && handleReorderDragStart(e, index)}
@@ -784,7 +731,6 @@ function DailyView() {
       onDragOver={(e) => handleReorderDragOver(e, index)}
       onDrop={(e) => handleReorderDrop(e, index, blocksArray)}
     >
-      {/* אינדיקטור מיקום */}
       {dragOverIndex === index && draggedIndex !== null && draggedIndex < index && (
         <div className="absolute -top-1 left-0 right-0 h-1 bg-blue-500 rounded-full z-10" />
       )}
@@ -792,16 +738,14 @@ function DailyView() {
         <div className="absolute -bottom-1 left-0 right-0 h-1 bg-blue-500 rounded-full z-10" />
       )}
 
-      {/* אינדיקטור גוגל */}
       {isFromGoogle && (
         <div className="absolute left-2 top-2 z-20">
-          <span className="text-xs bg-blue-100 dark:bg-blue-800 text-blue-600 dark:text-blue-300 px-1.5 py-0.5 rounded-full">
-            📅 גוגל
+          <span className="text-xs bg-purple-200 dark:bg-purple-700 text-purple-700 dark:text-purple-200 px-1.5 py-0.5 rounded-full font-medium">
+            📅 גוגל (קבוע)
           </span>
         </div>
       )}
 
-      {/* ידית גרירה - רק למשימות לא מגוגל */}
       {!isFromGoogle && (
       <div className="absolute right-1 top-1/2 -translate-y-1/2 z-20 opacity-30 hover:opacity-100 transition-opacity cursor-grab active:cursor-grabbing p-1">
         <div className="flex flex-col gap-0.5">
@@ -830,7 +774,7 @@ function DailyView() {
           originalEndTime: block.originalEndTime,
           isPostponed: block.isPostponed,
           isRescheduled: block.isRescheduled,
-          isRunning: block.isRunning // ✅ טיימר פעיל
+          isRunning: block.isRunning
         }} 
         onEdit={() => handleEditTask(block)}
         onUpdate={loadTasks}
@@ -845,15 +789,12 @@ function DailyView() {
 
   return (
     <div className="max-w-4xl mx-auto p-4">
-      {/* כותרת עם ניווט */}
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
         className="mb-6"
       >
-        {/* כותרת */}
         <div className="flex items-center justify-between mb-4">
-          {/* ✅ אינדיקטור סטטוס יומן גוגל (בלי כפתור התחברות - זה בדשבורד) */}
           {isGoogleConnected && (
             <div className="flex items-center gap-2 px-3 py-2 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-lg text-sm">
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
@@ -874,7 +815,6 @@ function DailyView() {
           )}
         </div>
 
-        {/* ניווט בין ימים */}
         <div className="flex items-center justify-between">
           <button
             onClick={goToPreviousDay}
@@ -912,7 +852,6 @@ function DailyView() {
         </p>
       </motion.div>
 
-      {/* סרגל זמן */}
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
@@ -931,7 +870,6 @@ function DailyView() {
           </span>
         </div>
         
-        {/* סרגל התקדמות */}
         <div className="w-full h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
           <div className="h-full flex">
             <div 
@@ -947,7 +885,6 @@ function DailyView() {
           </div>
         </div>
         
-        {/* מקרא */}
         <div className="flex items-center gap-4 mt-2 text-xs text-gray-600 dark:text-gray-400 flex-wrap">
           <div className="flex items-center gap-1">
             <div className="w-3 h-3 bg-green-500 rounded"></div>
@@ -968,14 +905,12 @@ function DailyView() {
           </div>
         </div>
 
-        {/* אזהרה אם לא יספיק + דחייה אוטומטית */}
         {rescheduleInfo && rescheduleInfo.tasksToMoveToTomorrow.length > 0 && (
           <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
             <div className="text-red-700 dark:text-red-400 text-sm font-medium mb-2">
               ⚠️ לא יספיק! צריך {formatMinutes(rescheduleInfo.timeNeededToday + rescheduleInfo.tasksToMoveToTomorrow.reduce((sum, t) => sum + (t.estimated_duration || 30), 0))} אבל נשארו רק {formatMinutes(rescheduleInfo.remainingToday)} עד 16:15
             </div>
             
-            {/* רשימת משימות שיידחו */}
             <div className="text-xs text-red-600 dark:text-red-300 mb-2">
               <p className="font-medium mb-1">📋 משימות שיועברו למחר:</p>
               <ul className="list-disc list-inside space-y-1 mr-2">
@@ -988,7 +923,6 @@ function DailyView() {
               </ul>
             </div>
             
-            {/* כפתורי פעולה */}
             <div className="flex gap-2">
               <button
                 onClick={handleAutoReschedule}
@@ -1011,7 +945,6 @@ function DailyView() {
           </div>
         )}
 
-        {/* הודעה על משיכת משימות ממחר */}
         {rescheduleInfo && rescheduleInfo.tasksToMoveToToday.length > 0 && rescheduleInfo.tasksToMoveToTomorrow.length === 0 && (
           <div className="mt-3 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
             <div className="text-green-700 dark:text-green-400 text-sm font-medium mb-2">
@@ -1042,7 +975,6 @@ function DailyView() {
         )}
       </motion.div>
 
-      {/* כפתור הוספת משימה */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
@@ -1054,14 +986,12 @@ function DailyView() {
         </Button>
       </motion.div>
 
-      {/* רשימת משימות */}
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.3 }}
         className="flex gap-4"
       >
-        {/* ציר זמן לגרירה לשעה ספציפית */}
         {allBlocks.length > 0 && (
           <div 
             ref={timelineRef}
@@ -1092,7 +1022,6 @@ function DailyView() {
           </div>
         )}
 
-        {/* רשימת משימות */}
         <div className="flex-1 space-y-3">
         {allBlocks.length === 0 ? (
           <div className="card p-8 text-center">
@@ -1106,7 +1035,6 @@ function DailyView() {
           </div>
         ) : (
           <>
-            {/* משימות שנדחו */}
             {overdueBlocks.length > 0 && (
               <div className="mb-4">
                 <h3 className="text-sm font-medium text-orange-600 dark:text-orange-400 mb-2 flex items-center gap-2">
@@ -1118,7 +1046,6 @@ function DailyView() {
               </div>
             )}
 
-            {/* משימות עתידיות */}
             {upcomingBlocks.length > 0 && (
               <div className="mb-4">
                 {overdueBlocks.length > 0 && (
@@ -1130,7 +1057,6 @@ function DailyView() {
                   {upcomingBlocks.map((block, index) => renderDraggableCard(block, index, upcomingBlocks))}
                 </div>
                 
-                {/* הסבר גרירה */}
                 {upcomingBlocks.length > 1 && (
                   <p className="text-xs text-gray-400 text-center mt-3">
                     💡 גררי משימה כדי לשנות את הסדר
@@ -1139,7 +1065,6 @@ function DailyView() {
               </div>
             )}
             
-            {/* משימות שהושלמו */}
             {completedBlocks.length > 0 && (
               <div className="mt-6">
                 <h3 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">
@@ -1173,7 +1098,6 @@ function DailyView() {
         </div>
       </motion.div>
 
-      {/* מודל טופס */}
       <Modal
         isOpen={showTaskForm}
         onClose={handleCloseForm}
@@ -1188,7 +1112,6 @@ function DailyView() {
         />
       </Modal>
       
-      {/* מודל ארגון מחדש */}
       <RescheduleModal
         isOpen={showRescheduleModal}
         onClose={() => {
@@ -1200,7 +1123,6 @@ function DailyView() {
         selectedDate={selectedDate}
       />
       
-      {/* סגירת תפריט גוגל בלחיצה מחוץ */}
       {showGoogleMenu && (
         <div 
           className="fixed inset-0 z-40" 
