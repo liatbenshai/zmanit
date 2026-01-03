@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useSettings } from '../../context/SettingsContext';
 import TaskTypesSettings from './TaskTypesSettings';
 import CategoriesSettings from './CategoriesSettings';
+import CategoryManager from './CategoryManager';
 import WorkScheduleSettings from './WorkScheduleSettings';
 import NotificationsSettings from './NotificationsSettings';
 import DisplaySettings from './DisplaySettings';
@@ -19,9 +20,10 @@ function SettingsPage({ onClose }) {
   const sections = [
     { id: 'task-types', name: 'סוגי משימות', icon: '🏷️', component: TaskTypesSettings },
     { id: 'categories', name: 'קטגוריות', icon: '📁', component: CategoriesSettings },
+    { id: 'custom-categories', name: 'קטגוריות מותאמות', icon: '🎨', component: CategoryManager },
     { id: 'work-schedule', name: 'לוח זמנים', icon: '📅', component: WorkScheduleSettings },
     { id: 'notifications', name: 'התראות', icon: '🔔', component: NotificationsSettings },
-    { id: 'display', name: 'תצוגה', icon: '🎨', component: DisplaySettings },
+    { id: 'display', name: 'תצוגה', icon: '🖥️', component: DisplaySettings },
     { id: 'timer', name: 'טיימר', icon: '⏱️', component: TimerSettings },
   ];
 
@@ -66,25 +68,25 @@ function SettingsPage({ onClose }) {
       </div>
 
       <div className="max-w-6xl mx-auto px-4 py-6">
-        <div className="flex gap-6">
-          {/* תפריט צד */}
-          <div className="w-48 flex-shrink-0">
-            <nav className="space-y-1 sticky top-24">
+        <div className="flex flex-col md:flex-row gap-6">
+          {/* תפריט צד - מגיב למובייל */}
+          <div className="w-full md:w-48 flex-shrink-0">
+            <nav className="flex md:flex-col gap-1 overflow-x-auto md:overflow-visible pb-2 md:pb-0 sticky top-24">
               {sections.map(section => (
                 <button
                   key={section.id}
                   onClick={() => setActiveSection(section.id)}
                   className={`
-                    w-full flex items-center gap-3 px-4 py-3 rounded-lg text-right
-                    transition-all duration-200
+                    flex items-center gap-2 md:gap-3 px-3 md:px-4 py-2 md:py-3 rounded-lg text-right
+                    transition-all duration-200 whitespace-nowrap
                     ${activeSection === section.id
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
                       : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
                     }
                   `}
                 >
-                  <span className="text-xl">{section.icon}</span>
-                  <span>{section.name}</span>
+                  <span className="text-lg md:text-xl">{section.icon}</span>
+                  <span className="text-sm md:text-base">{section.name}</span>
                 </button>
               ))}
             </nav>
@@ -99,7 +101,7 @@ function SettingsPage({ onClose }) {
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
                 transition={{ duration: 0.2 }}
-                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-6"
+                className="bg-white dark:bg-gray-800 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 p-4 md:p-6"
               >
                 <ActiveComponent />
               </motion.div>
