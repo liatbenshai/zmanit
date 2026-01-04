@@ -49,6 +49,56 @@ function saveState(state) {
 }
 
 /**
+ * ✅ תיקון: בדיקה אם יש טיימר רץ על משימה ספציפית
+ */
+function isTimerRunning(taskId) {
+  try {
+    const key = `timer_v2_${taskId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      return data.isRunning && !data.isInterrupted;
+    }
+  } catch (e) {
+    // התעלם משגיאות
+  }
+  return false;
+}
+
+/**
+ * ✅ תיקון: בדיקה אם יש טיימר רץ על משימה כלשהי
+ * מחזירה את ה-taskId של המשימה הפעילה, או null
+ */
+function getActiveTaskId(tasks) {
+  if (!tasks || tasks.length === 0) return null;
+  
+  // בדיקה ראשונה: חיפוש במשימות שיש לנו
+  for (const task of tasks) {
+    if (isTimerRunning(task.id)) {
+      return task.id;
+    }
+  }
+  
+  // בדיקה נוספת: חיפוש ישיר ב-localStorage
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('timer_v2_')) {
+        const data = JSON.parse(localStorage.getItem(key));
+        if (data.isRunning && !data.isInterrupted) {
+          const taskId = key.replace('timer_v2_', '');
+          return taskId;
+        }
+      }
+    }
+  } catch (e) {
+    console.error('שגיאה בחיפוש טיימר:', e);
+  }
+  
+  return null;
+}
+
+/**
  * מנהל התראות מתקדם
  */
 function AlertsManager({ onTaskClick }) {
@@ -133,6 +183,9 @@ function AlertsManager({ onTaskClick }) {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const alertsList = [];
 
+    // ✅ תיקון: בדיקה אם יש משימה פעילה עכשיו
+    const activeTaskId = getActiveTaskId(tasks);
+
     // --- התראות דדליין מחר ---
     if (tomorrowDeadlines.length > 0) {
       const deadlineKey = `tomorrow_${today}`;
@@ -189,37 +242,49 @@ function AlertsManager({ onTaskClick }) {
       
       const alertKey = `task_${task.id}_${today}`;
 
+      // ✅ תיקון: אם המשימה הזו היא המשימה הפעילה - לא צריך התראות
+      if (activeTaskId === task.id) {
+        return; // עוברים למשימה הבאה - אנחנו עובדים עליה עכשיו!
+      }
+
       // משימה עכשיו!
       if (diff <= 0 && diff >= -2 && !alertsState[alertKey]) {
-        alertsList.push({
-          id: `now-${task.id}`,
-          type: 'now',
-          priority: -1,
-          icon: '🚨',
-          title: '🔔 הגיע הזמן להתחיל!',
-          message: `${taskType.icon} ${task.title}`,
-          task,
-          color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 animate-pulse',
-          dismissKey: alertKey
-        });
+        // ✅ תיקון: לא מתריעים "הגיע הזמן" אם עובדים על משימה אחרת
+        if (!activeTaskId) {
+          alertsList.push({
+            id: `now-${task.id}`,
+            type: 'now',
+            priority: -1,
+            icon: '🚨',
+            title: '🔔 הגיע הזמן להתחיל!',
+            message: `${taskType.icon} ${task.title}`,
+            task,
+            color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 animate-pulse',
+            dismissKey: alertKey
+          });
+        }
       }
       
       // משימה בקרוב (15 דקות)
       else if (diff > 0 && diff <= 15) {
-        alertsList.push({
-          id: `upcoming-${task.id}`,
-          type: 'upcoming',
-          priority: 2,
-          icon: '⏰',
-          title: 'משימה מתחילה בקרוב',
-          message: `${taskType.icon} ${task.title} - בעוד ${diff} דקות`,
-          task,
-          color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-        });
+        // ✅ תיקון: לא מתריעים "בקרוב" אם עובדים על משימה אחרת
+        if (!activeTaskId) {
+          alertsList.push({
+            id: `upcoming-${task.id}`,
+            type: 'upcoming',
+            priority: 2,
+            icon: '⏰',
+            title: 'משימה מתחילה בקרוב',
+            message: `${taskType.icon} ${task.title} - בעוד ${diff} דקות`,
+            task,
+            color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+          });
+        }
       }
 
       // משימה באיחור
-      else if (diff < -2 && diff > -60 && !task.time_spent) {
+      // ✅ תיקון: לא מתריעים על איחור אם עובדים על משימה (כולל המשימה הזו או אחרת)
+      else if (diff < -2 && diff > -60 && !task.time_spent && !activeTaskId && !isTimerRunning(task.id)) {
         alertsList.push({
           id: `overdue-${task.id}`,
           type: 'overdue',
