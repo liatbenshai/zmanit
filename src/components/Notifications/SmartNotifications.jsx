@@ -14,57 +14,58 @@ const WORK_HOURS = {
 };
 
 /**
- * ✅ תיקון: בדיקה אם יש טיימר רץ על משימה ספציפית
+ * ✅ בדיקה אם יש טיימר רץ על משימה ספציפית
  */
 function isTimerRunning(taskId) {
+  if (!taskId) return false;
   try {
     const key = `timer_v2_${taskId}`;
     const saved = localStorage.getItem(key);
     if (saved) {
       const data = JSON.parse(saved);
-      return data.isRunning && !data.isInterrupted;
+      return data.isRunning === true && data.isInterrupted !== true;
     }
-  } catch (e) {
-    // התעלם משגיאות
-  }
+  } catch (e) {}
   return false;
 }
 
 /**
- * ✅ תיקון: בדיקה אם יש טיימר רץ על משימה כלשהי
- * מחזירה את ה-taskId של המשימה הפעילה, או null
+ * ✅ בדיקה אם יש טיימר רץ על משימה כלשהי
  */
-function getActiveTaskId(tasks) {
-  if (!tasks || tasks.length === 0) return null;
-  
-  // בדיקה ראשונה: חיפוש במשימות שיש לנו
-  for (const task of tasks) {
-    if (isTimerRunning(task.id)) {
-      return task.id;
-    }
-  }
-  
-  // בדיקה נוספת: חיפוש ישיר ב-localStorage
+function getActiveTaskId() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('timer_v2_')) {
-        const data = JSON.parse(localStorage.getItem(key));
-        if (data.isRunning && !data.isInterrupted) {
-          const taskId = key.replace('timer_v2_', '');
-          return taskId;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data.isRunning === true && data.isInterrupted !== true) {
+            return key.replace('timer_v2_', '');
+          }
         }
       }
     }
-  } catch (e) {
-    console.error('שגיאה בחיפוש טיימר:', e);
-  }
-  
+  } catch (e) {}
   return null;
 }
 
 /**
- * התראות חכמות - מציג התראות ומעדכן את מערכת ההתראות
+ * ✅ המרת שעה מפורמט "HH:MM" לדקות
+ */
+function timeToMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return null;
+  const hours = parseInt(parts[0], 10);
+  const mins = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(mins)) return null;
+  return hours * 60 + mins;
+}
+
+/**
+ * התראות חכמות - מציג התראות בממשק
+ * גרסה מתוקנת!
  */
 function SmartNotifications({ onTaskClick }) {
   const { tasks } = useTasks();
@@ -80,7 +81,6 @@ function SmartNotifications({ onTaskClick }) {
   useEffect(() => {
     if (tasks && tasks.length > 0) {
       updateTasks(tasks);
-      // בדיקה מיידית כשמשימות משתנות
       if (permission === 'granted') {
         checkTasksAndNotify();
       }
@@ -97,7 +97,7 @@ function SmartNotifications({ onTaskClick }) {
     }
   };
 
-  // חישוב התראות לתצוגה בממשק
+  // ✅ חישוב התראות לתצוגה - גרסה מתוקנת!
   const notifications = useMemo(() => {
     const now = new Date();
     const today = now.toISOString().split('T')[0];
@@ -105,8 +105,8 @@ function SmartNotifications({ onTaskClick }) {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const alerts = [];
 
-    // ✅ תיקון: בדיקה אם יש משימה פעילה עכשיו
-    const activeTaskId = getActiveTaskId(tasks);
+    // ✅ בדיקה אם יש משימה פעילה עכשיו
+    const activeTaskId = getActiveTaskId();
 
     tasks.forEach(task => {
       if (task.is_completed) return;
@@ -114,37 +114,39 @@ function SmartNotifications({ onTaskClick }) {
 
       const taskType = TASK_TYPES?.[task.task_type] || { icon: '📌', name: 'אחר' };
 
-      // ✅ תיקון: אם זו המשימה הפעילה - לא מציגים התראות עליה
-      if (activeTaskId === task.id) {
-        return; // עוברים למשימה הבאה - אנחנו עובדים עליה!
+      // ✅ אם הטיימר רץ על המשימה הזו - לא מציגים התראות עליה
+      if (isTimerRunning(task.id)) {
+        return;
       }
 
-      // משימה שמתחילה בקרוב (תוך 15 דקות)
+      // ✅ אם יש טיימר רץ על משימה אחרת - לא מציגים התראות כלל!
+      if (activeTaskId) {
+        return;
+      }
+
+      // משימה שמתחילה בקרוב (תוך 15 דקות) - לפי due_time המקורי
       if (task.due_date === today && task.due_time) {
-        const [hour, min] = task.due_time.split(':').map(Number);
-        const taskMinutes = hour * 60 + (min || 0);
+        const taskMinutes = timeToMinutes(task.due_time);
+        if (taskMinutes === null) return;
+        
         const diff = taskMinutes - currentMinutes;
 
         if (diff > 0 && diff <= 15) {
-          // ✅ תיקון: לא מתריעים "בקרוב" אם עובדים על משימה אחרת
-          if (!activeTaskId) {
-            alerts.push({
-              id: `upcoming-${task.id}`,
-              taskId: task.id,
-              type: 'upcoming',
-              priority: 1,
-              icon: '⏰',
-              title: 'משימה מתחילה בקרוב',
-              message: `${taskType.icon} ${task.title} - בעוד ${diff} דקות`,
-              task,
-              color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-            });
-          }
+          alerts.push({
+            id: `upcoming-${task.id}`,
+            taskId: task.id,
+            type: 'upcoming',
+            priority: 1,
+            icon: '⏰',
+            title: 'משימה מתחילה בקרוב',
+            message: `${taskType.icon} ${task.title} - בעוד ${diff} דקות`,
+            task,
+            color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+          });
         }
 
-        // משימה באיחור
-        // ✅ תיקון: לא מתריעים על איחור אם עובדים על משימה כלשהי
-        if (diff < 0 && !activeTaskId && !isTimerRunning(task.id)) {
+        // משימה באיחור - רק אם לא עבדו עליה!
+        if (diff < 0 && !task.time_spent) {
           const overdueMinutes = Math.abs(diff);
           let overdueText;
           if (overdueMinutes >= 60) {
@@ -192,7 +194,7 @@ function SmartNotifications({ onTaskClick }) {
     const freeMinutes = totalWorkMinutes - scheduledMinutes;
     const unscheduledCount = tasks.filter(t => !t.is_completed && !t.due_date).length;
 
-    if (freeMinutes > 120 && unscheduledCount > 0 && currentHour >= WORK_HOURS.start && currentHour < WORK_HOURS.end) {
+    if (freeMinutes > 120 && unscheduledCount > 0 && currentHour >= WORK_HOURS.start && currentHour < WORK_HOURS.end && !activeTaskId) {
       alerts.push({
         id: 'free-time',
         type: 'suggestion',
@@ -209,7 +211,7 @@ function SmartNotifications({ onTaskClick }) {
     const minutesToEnd = endOfDayMinutes - currentMinutes;
     const pendingTodayTasks = todayTasks.filter(t => !t.is_completed).length;
 
-    if (minutesToEnd > 0 && minutesToEnd <= 60 && pendingTodayTasks > 0) {
+    if (minutesToEnd > 0 && minutesToEnd <= 60 && pendingTodayTasks > 0 && !activeTaskId) {
       alerts.push({
         id: 'end-of-day',
         type: 'warning',
@@ -221,7 +223,7 @@ function SmartNotifications({ onTaskClick }) {
       });
     }
 
-    // מיון לפי עדיפות (איחורים קודם)
+    // מיון לפי עדיפות
     return alerts.sort((a, b) => a.priority - b.priority);
   }, [tasks, dismissed]);
 
@@ -234,9 +236,8 @@ function SmartNotifications({ onTaskClick }) {
     }
   };
 
-  // רענון התראות (איפוס dismissed)
+  // רענון התראות כל 5 דקות
   useEffect(() => {
-    // כל 5 דקות, איפוס ההתראות שנסגרו
     const interval = setInterval(() => {
       setDismissed(new Set());
     }, 5 * 60 * 1000);

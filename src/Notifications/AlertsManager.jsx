@@ -10,9 +10,9 @@ import toast from 'react-hot-toast';
 const CONFIG = {
   WORK_START_HOUR: 8,
   WORK_END_HOUR: 16,
-  BREAK_INTERVAL_MINUTES: 45,  // תזכורת הפסקה כל 45 דקות
+  BREAK_INTERVAL_MINUTES: 45,
   BREAK_DURATION_MINUTES: 15,
-  DEADLINE_WARNING_DAYS: 1,    // התראה על דדליין מחר
+  DEADLINE_WARNING_DAYS: 1,
 };
 
 const STORAGE_KEY = 'eisenhower_alerts_state';
@@ -25,7 +25,6 @@ function loadState() {
     const data = localStorage.getItem(STORAGE_KEY);
     if (data) {
       const parsed = JSON.parse(data);
-      // נקה מצבים ישנים (מעל יום)
       const now = Date.now();
       const oneDay = 24 * 60 * 60 * 1000;
       Object.keys(parsed).forEach(key => {
@@ -49,65 +48,89 @@ function saveState(state) {
 }
 
 /**
- * ✅ תיקון: בדיקה אם יש טיימר רץ על משימה ספציפית
+ * ✅ בדיקה אם יש טיימר רץ על משימה ספציפית
  */
 function isTimerRunning(taskId) {
+  if (!taskId) return false;
   try {
     const key = `timer_v2_${taskId}`;
     const saved = localStorage.getItem(key);
     if (saved) {
       const data = JSON.parse(saved);
-      return data.isRunning && !data.isInterrupted;
+      return data.isRunning === true && data.isInterrupted !== true;
     }
-  } catch (e) {
-    // התעלם משגיאות
-  }
+  } catch (e) {}
   return false;
 }
 
 /**
- * ✅ תיקון: בדיקה אם יש טיימר רץ על משימה כלשהי
- * מחזירה את ה-taskId של המשימה הפעילה, או null
+ * ✅ בדיקה אם יש טיימר רץ על משימה כלשהי
  */
-function getActiveTaskId(tasks) {
-  if (!tasks || tasks.length === 0) return null;
-  
-  // בדיקה ראשונה: חיפוש במשימות שיש לנו
-  for (const task of tasks) {
-    if (isTimerRunning(task.id)) {
-      return task.id;
-    }
-  }
-  
-  // בדיקה נוספת: חיפוש ישיר ב-localStorage
+function getActiveTaskId() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('timer_v2_')) {
-        const data = JSON.parse(localStorage.getItem(key));
-        if (data.isRunning && !data.isInterrupted) {
-          const taskId = key.replace('timer_v2_', '');
-          return taskId;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data.isRunning === true && data.isInterrupted !== true) {
+            return key.replace('timer_v2_', '');
+          }
         }
       }
     }
-  } catch (e) {
-    console.error('שגיאה בחיפוש טיימר:', e);
-  }
-  
+  } catch (e) {}
   return null;
 }
 
 /**
- * מנהל התראות מתקדם
+ * ✅ חישוב כמה זמן עבד על המשימה (בדקות)
+ */
+function getElapsedMinutes(taskId, baseTimeSpent = 0) {
+  if (!taskId) return baseTimeSpent;
+  try {
+    const key = `timer_v2_${taskId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      if (data.isRunning && data.startTime && !data.isInterrupted) {
+        const startTime = new Date(data.startTime);
+        const now = new Date();
+        const elapsedSeconds = Math.floor((now - startTime) / 1000) - (data.totalInterruptionSeconds || 0);
+        const elapsedMinutes = Math.floor(Math.max(0, elapsedSeconds) / 60);
+        return baseTimeSpent + elapsedMinutes;
+      }
+    }
+  } catch (e) {}
+  return baseTimeSpent;
+}
+
+/**
+ * ✅ המרת שעה מפורמט "HH:MM" לדקות
+ */
+function timeToMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return null;
+  const hours = parseInt(parts[0], 10);
+  const mins = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(mins)) return null;
+  return hours * 60 + mins;
+}
+
+/**
+ * מנהל התראות מתקדם - גרסה מתוקנת!
  */
 function AlertsManager({ onTaskClick }) {
-  const { tasks } = useTasks();
+  const { tasks, editTask } = useTasks();
   const [currentTime, setCurrentTime] = useState(new Date());
   const [alertsState, setAlertsState] = useState(loadState);
   const [showMorningSummary, setShowMorningSummary] = useState(false);
   const [showEveningSummary, setShowEveningSummary] = useState(false);
   const [lastBreakTime, setLastBreakTime] = useState(Date.now());
+  // ✅ חדש: מודל "מה עושים?"
+  const [showTimeUpModal, setShowTimeUpModal] = useState(null);
 
   // רענון כל 30 שניות
   useEffect(() => {
@@ -127,7 +150,6 @@ function AlertsManager({ onTaskClick }) {
     const hour = currentTime.getHours();
     const today = currentTime.toISOString().split('T')[0];
     
-    // סיכום בוקר - בין 8:00 ל-9:00
     if (hour >= CONFIG.WORK_START_HOUR && hour < CONFIG.WORK_START_HOUR + 1) {
       const morningKey = `morning_${today}`;
       if (!alertsState[morningKey]) {
@@ -135,7 +157,6 @@ function AlertsManager({ onTaskClick }) {
       }
     }
     
-    // סיכום ערב - בין 16:00 ל-17:00
     if (hour >= CONFIG.WORK_END_HOUR && hour < CONFIG.WORK_END_HOUR + 1) {
       const eveningKey = `evening_${today}`;
       if (!alertsState[eveningKey]) {
@@ -176,15 +197,15 @@ function AlertsManager({ onTaskClick }) {
     );
   }, [tasks, currentTime]);
 
-  // חישוב התראות
+  // ✅ חישוב התראות - גרסה מתוקנת!
   const alerts = useMemo(() => {
     const now = currentTime;
     const today = now.toISOString().split('T')[0];
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const alertsList = [];
 
-    // ✅ תיקון: בדיקה אם יש משימה פעילה עכשיו
-    const activeTaskId = getActiveTaskId(tasks);
+    // ✅ בדיקה אם יש משימה פעילה עכשיו
+    const activeTaskId = getActiveTaskId();
 
     // --- התראות דדליין מחר ---
     if (tomorrowDeadlines.length > 0) {
@@ -205,7 +226,7 @@ function AlertsManager({ onTaskClick }) {
       }
     }
 
-    // --- תזכורת הפסקה (כל 45 דקות בשעות העבודה) ---
+    // --- תזכורת הפסקה ---
     const currentHour = now.getHours();
     if (currentHour >= CONFIG.WORK_START_HOUR && currentHour < CONFIG.WORK_END_HOUR) {
       const minutesSinceBreak = Math.floor((Date.now() - lastBreakTime) / 60000);
@@ -230,61 +251,106 @@ function AlertsManager({ onTaskClick }) {
       }
     }
 
-    // --- משימות שמתחילות עכשיו ---
+    // --- התראות על משימות ---
     tasks.forEach(task => {
       if (task.is_completed) return;
-      if (task.due_date !== today || !task.due_time) return;
+      if (task.due_date !== today) return;
 
       const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
-      const [hour, min] = task.due_time.split(':').map(Number);
-      const taskMinutes = hour * 60 + (min || 0);
-      const diff = taskMinutes - currentMinutes;
-      
       const alertKey = `task_${task.id}_${today}`;
-
-      // ✅ תיקון: אם המשימה הזו היא המשימה הפעילה - לא צריך התראות
-      if (activeTaskId === task.id) {
-        return; // עוברים למשימה הבאה - אנחנו עובדים עליה עכשיו!
+      
+      // ✅ אם הטיימר רץ על המשימה הזו - בדיקת חריגה מזמן
+      if (isTimerRunning(task.id)) {
+        const estimated = task.estimated_duration || 0;
+        if (estimated > 0) {
+          const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
+          const remaining = estimated - elapsed;
+          
+          // ✅ הזמן נגמר! - התראה מיוחדת עם אפשרויות
+          if (remaining <= 0 && remaining > -5) {
+            const timeUpKey = `timeup_${task.id}_${today}`;
+            if (!alertsState[timeUpKey]) {
+              alertsList.push({
+                id: `timeup-${task.id}`,
+                type: 'timeup',
+                priority: -2, // הכי דחוף!
+                icon: '🔔',
+                title: 'הזמן נגמר!',
+                message: `${taskType.icon} ${task.title}`,
+                task,
+                color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 animate-pulse',
+                dismissKey: timeUpKey,
+                showTimeUpActions: true
+              });
+            }
+          }
+          
+          // חריגה מהזמן
+          if (remaining < -5) {
+            const overtimeKey = `overtime_${task.id}_${today}`;
+            if (!alertsState[overtimeKey]) {
+              alertsList.push({
+                id: `overtime-${task.id}`,
+                type: 'overtime',
+                priority: -1,
+                icon: '⚠️',
+                title: `חריגה של ${Math.abs(Math.round(remaining))} דקות`,
+                message: `${taskType.icon} ${task.title}`,
+                task,
+                color: 'bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600',
+                dismissKey: overtimeKey
+              });
+            }
+          }
+        }
+        
+        return; // אם עובדים על המשימה - לא צריך התראות נוספות עליה
       }
+      
+      // ✅ אם יש טיימר רץ על משימה אחרת - לא מציגים התראות כלל!
+      if (activeTaskId) {
+        return;
+      }
+      
+      // --- בדיקת זמן לפי due_time המקורי ---
+      if (!task.due_time) return;
+      
+      const taskMinutes = timeToMinutes(task.due_time);
+      if (taskMinutes === null) return;
+      
+      const diff = taskMinutes - currentMinutes;
 
       // משימה עכשיו!
       if (diff <= 0 && diff >= -2 && !alertsState[alertKey]) {
-        // ✅ תיקון: לא מתריעים "הגיע הזמן" אם עובדים על משימה אחרת
-        if (!activeTaskId) {
-          alertsList.push({
-            id: `now-${task.id}`,
-            type: 'now',
-            priority: -1,
-            icon: '🚨',
-            title: '🔔 הגיע הזמן להתחיל!',
-            message: `${taskType.icon} ${task.title}`,
-            task,
-            color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 animate-pulse',
-            dismissKey: alertKey
-          });
-        }
+        alertsList.push({
+          id: `now-${task.id}`,
+          type: 'now',
+          priority: -1,
+          icon: '🚨',
+          title: '🔔 הגיע הזמן להתחיל!',
+          message: `${taskType.icon} ${task.title}`,
+          task,
+          color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 animate-pulse',
+          dismissKey: alertKey
+        });
       }
       
       // משימה בקרוב (15 דקות)
       else if (diff > 0 && diff <= 15) {
-        // ✅ תיקון: לא מתריעים "בקרוב" אם עובדים על משימה אחרת
-        if (!activeTaskId) {
-          alertsList.push({
-            id: `upcoming-${task.id}`,
-            type: 'upcoming',
-            priority: 2,
-            icon: '⏰',
-            title: 'משימה מתחילה בקרוב',
-            message: `${taskType.icon} ${task.title} - בעוד ${diff} דקות`,
-            task,
-            color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
-          });
-        }
+        alertsList.push({
+          id: `upcoming-${task.id}`,
+          type: 'upcoming',
+          priority: 2,
+          icon: '⏰',
+          title: 'משימה מתחילה בקרוב',
+          message: `${taskType.icon} ${task.title} - בעוד ${diff} דקות`,
+          task,
+          color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800'
+        });
       }
 
-      // משימה באיחור
-      // ✅ תיקון: לא מתריעים על איחור אם עובדים על משימה (כולל המשימה הזו או אחרת)
-      else if (diff < -2 && diff > -60 && !task.time_spent && !activeTaskId && !isTimerRunning(task.id)) {
+      // משימה באיחור - רק אם לא עבדו עליה!
+      else if (diff < -2 && diff > -60 && !task.time_spent) {
         alertsList.push({
           id: `overdue-${task.id}`,
           type: 'overdue',
@@ -347,6 +413,42 @@ function AlertsManager({ onTaskClick }) {
     setShowEveningSummary(false);
   };
 
+  // ✅ פעולות "מה עושים?" כשהזמן נגמר
+  const handleContinueWorking = (alert) => {
+    dismissAlert(alert.dismissKey);
+    toast.success('ממשיכה לעבוד! 💪');
+  };
+
+  const handleMoveNextTask = async (alert) => {
+    // מוצאים את המשימה הבאה ומעבירים אותה למחר
+    const today = currentTime.toISOString().split('T')[0];
+    const nextTasks = tasks.filter(t => 
+      !t.is_completed && 
+      t.due_date === today && 
+      t.id !== alert.task?.id
+    ).sort((a, b) => {
+      const aTime = timeToMinutes(a.due_time) || 999;
+      const bTime = timeToMinutes(b.due_time) || 999;
+      return aTime - bTime;
+    });
+    
+    if (nextTasks.length > 0 && editTask) {
+      const taskToMove = nextTasks[nextTasks.length - 1]; // המשימה האחרונה
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowISO = tomorrow.toISOString().split('T')[0];
+      
+      try {
+        await editTask(taskToMove.id, { due_date: tomorrowISO, due_time: null });
+        toast.success(`📅 "${taskToMove.title}" הועברה למחר`);
+      } catch (e) {
+        toast.error('שגיאה בהעברת המשימה');
+      }
+    }
+    
+    dismissAlert(alert.dismissKey);
+  };
+
   // צליל התראה
   const playSound = useCallback(() => {
     try {
@@ -366,7 +468,7 @@ function AlertsManager({ onTaskClick }) {
 
   // אפקט להתראות צליל
   useEffect(() => {
-    const nowAlerts = alerts.filter(a => a.type === 'now');
+    const nowAlerts = alerts.filter(a => a.type === 'now' || a.type === 'timeup');
     if (nowAlerts.length > 0) {
       playSound();
     }
@@ -498,52 +600,72 @@ function AlertsManager({ onTaskClick }) {
                 initial={{ opacity: 0, x: -20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: 20 }}
-                className={`p-3 rounded-lg border flex items-start gap-3 ${alert.color}`}
+                className={`p-3 rounded-lg border flex flex-col gap-2 ${alert.color}`}
               >
-                <span className="text-xl flex-shrink-0">{alert.icon}</span>
-                
-                <div className="flex-1 min-w-0">
-                  <div className="font-medium text-gray-900 dark:text-white text-sm">
-                    {alert.title}
-                  </div>
-                  <div className="text-sm text-gray-600 dark:text-gray-400">
-                    {alert.message}
-                  </div>
+                <div className="flex items-start gap-3">
+                  <span className="text-xl flex-shrink-0">{alert.icon}</span>
                   
-                  {/* כפתור פעולה */}
-                  {alert.action && (
-                    <button
-                      onClick={() => {
-                        alert.action.onClick();
-                        if (alert.dismissKey) dismissAlert(alert.dismissKey);
-                      }}
-                      className="mt-2 px-3 py-1.5 bg-teal-500 text-white text-sm rounded-lg hover:bg-teal-600 transition-colors"
-                    >
-                      {alert.action.label}
-                    </button>
-                  )}
-                </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium text-gray-900 dark:text-white text-sm">
+                      {alert.title}
+                    </div>
+                    <div className="text-sm text-gray-600 dark:text-gray-400">
+                      {alert.message}
+                    </div>
+                  </div>
 
-                <div className="flex items-center gap-1 flex-shrink-0">
-                  {alert.task && onTaskClick && (
-                    <button
-                      onClick={() => onTaskClick(alert.task)}
-                      className="p-1.5 rounded hover:bg-white/50 dark:hover:bg-black/20 text-gray-500"
-                      title="פתח משימה"
-                    >
-                      ✏️
-                    </button>
-                  )}
-                  {alert.dismissKey && (
-                    <button
-                      onClick={() => dismissAlert(alert.dismissKey)}
-                      className="p-1.5 rounded hover:bg-white/50 dark:hover:bg-black/20 text-gray-400"
-                      title="סגור"
-                    >
-                      ✕
-                    </button>
-                  )}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {alert.task && onTaskClick && (
+                      <button
+                        onClick={() => onTaskClick(alert.task)}
+                        className="p-1.5 rounded hover:bg-white/50 dark:hover:bg-black/20 text-gray-500"
+                        title="פתח משימה"
+                      >
+                        ✏️
+                      </button>
+                    )}
+                    {alert.dismissKey && !alert.showTimeUpActions && (
+                      <button
+                        onClick={() => dismissAlert(alert.dismissKey)}
+                        className="p-1.5 rounded hover:bg-white/50 dark:hover:bg-black/20 text-gray-400"
+                        title="סגור"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
                 </div>
+                
+                {/* ✅ כפתורי פעולה מיוחדים ל"הזמן נגמר" */}
+                {alert.showTimeUpActions && (
+                  <div className="flex gap-2 mt-1">
+                    <button
+                      onClick={() => handleContinueWorking(alert)}
+                      className="flex-1 px-3 py-2 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 transition-colors"
+                    >
+                      ממשיכה לעבוד 💪
+                    </button>
+                    <button
+                      onClick={() => handleMoveNextTask(alert)}
+                      className="flex-1 px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white text-sm rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                    >
+                      העבר משימה למחר 📅
+                    </button>
+                  </div>
+                )}
+                
+                {/* כפתור פעולה רגיל */}
+                {alert.action && !alert.showTimeUpActions && (
+                  <button
+                    onClick={() => {
+                      alert.action.onClick();
+                      if (alert.dismissKey) dismissAlert(alert.dismissKey);
+                    }}
+                    className="mt-1 px-3 py-1.5 bg-teal-500 text-white text-sm rounded-lg hover:bg-teal-600 transition-colors"
+                  >
+                    {alert.action.label}
+                  </button>
+                )}
               </motion.div>
             ))}
           </AnimatePresence>

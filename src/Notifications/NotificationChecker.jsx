@@ -1,9 +1,9 @@
-import { useEffect, useRef, useCallback, useMemo } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { useTasks } from '../../hooks/useTasks';
 import { useNotifications } from '../../hooks/useNotifications';
 
 /**
- * ✅ פונקציית עזר: תאריך מקומי בפורמט ISO
+ * ✅ תאריך מקומי בפורמט ISO
  */
 function toLocalISODate(date) {
   const d = date instanceof Date ? date : new Date(date);
@@ -14,62 +14,51 @@ function toLocalISODate(date) {
 }
 
 /**
- * ✅ פונקציית עזר: בדיקה אם יש טיימר רץ על משימה (ב-localStorage)
+ * ✅ בדיקה אם יש טיימר רץ על משימה ספציפית
  */
 function isTimerRunning(taskId) {
+  if (!taskId) return false;
   try {
-    // הפורמט מ-DailyTaskCard: timer_v2_${taskId}
     const key = `timer_v2_${taskId}`;
     const saved = localStorage.getItem(key);
     if (saved) {
       const data = JSON.parse(saved);
-      const running = data.isRunning && !data.isInterrupted;
-      if (running) {
-      }
-      return running;
+      return data.isRunning === true && data.isInterrupted !== true;
     }
   } catch (e) {
-    // התעלם משגיאות
+    console.error('שגיאה בבדיקת טיימר:', e);
   }
   return false;
 }
 
 /**
- * ✅ פונקציית עזר חדשה: בדיקה אם יש טיימר רץ על משימה כלשהי
- * מחזירה את ה-taskId של המשימה הפעילה, או null
+ * ✅ בדיקה אם יש טיימר רץ על משימה כלשהי
  */
-function getActiveTaskId(tasks) {
-  if (!tasks || tasks.length === 0) return null;
-  
-  for (const task of tasks) {
-    if (isTimerRunning(task.id)) {
-      return task.id;
-    }
-  }
-  
-  // בדיקה נוספת: חיפוש ישיר ב-localStorage
+function getActiveTaskId() {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('timer_v2_')) {
-        const data = JSON.parse(localStorage.getItem(key));
-        if (data.isRunning && !data.isInterrupted) {
-          const taskId = key.replace('timer_v2_', '');
-          return taskId;
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const data = JSON.parse(saved);
+          if (data.isRunning === true && data.isInterrupted !== true) {
+            return key.replace('timer_v2_', '');
+          }
         }
       }
     }
   } catch (e) {
-    console.error('שגיאה בחיפוש טיימר:', e);
+    console.error('שגיאה בחיפוש טיימר פעיל:', e);
   }
-  
   return null;
 }
 
 /**
- * ✅ פונקציית עזר: חישוב כמה זמן עבד על המשימה (בדקות)
+ * ✅ חישוב כמה זמן עבד על המשימה (בדקות)
  */
 function getElapsedMinutes(taskId, baseTimeSpent = 0) {
+  if (!taskId) return baseTimeSpent;
   try {
     const key = `timer_v2_${taskId}`;
     const saved = localStorage.getItem(key);
@@ -84,104 +73,44 @@ function getElapsedMinutes(taskId, baseTimeSpent = 0) {
       }
     }
   } catch (e) {
-    // התעלם משגיאות
+    console.error('שגיאה בחישוב זמן:', e);
   }
   return baseTimeSpent;
 }
 
 /**
- * ✅ חדש: בדיקה אם משימה היא "הורה" שיש לה אינטרוולים
+ * ✅ המרת שעה מפורמט "HH:MM" לדקות
  */
-function isParentWithIntervals(task, allTasks) {
-  return allTasks.some(t => t.parent_task_id === task.id);
+function timeToMinutes(timeStr) {
+  if (!timeStr || typeof timeStr !== 'string') return null;
+  const parts = timeStr.split(':');
+  if (parts.length < 2) return null;
+  const hours = parseInt(parts[0], 10);
+  const mins = parseInt(parts[1], 10);
+  if (isNaN(hours) || isNaN(mins)) return null;
+  return hours * 60 + mins;
 }
 
 /**
- * ✅ חדש: חישוב לו"ז דינמי - כמו DailyView
- * מחזיר מפה של taskId -> { startTime, endTime } בדקות
- */
-function calculateDynamicSchedule(tasks, currentMinutes) {
-  const schedule = new Map();
-  
-  // סנן רק משימות של היום שלא הושלמו
-  // ✅ לא סופרים הורים שיש להם אינטרוולים - כדי לא לספור כפול!
-  const today = toLocalISODate(new Date());
-  const todayTasks = tasks.filter(t => 
-    !t.is_completed && 
-    !isParentWithIntervals(t, tasks) && // ✅ חדש!
-    (t.due_date === today || t.start_date === today)
-  );
-  
-  // מיין לפי עדיפות ואז לפי שעה
-  const sortedTasks = [...todayTasks].sort((a, b) => {
-    // משימה עם טיימר רץ קודם
-    if (isTimerRunning(a.id) && !isTimerRunning(b.id)) return -1;
-    if (isTimerRunning(b.id) && !isTimerRunning(a.id)) return 1;
-    
-    // דחופים קודם
-    const priorityOrder = { urgent: 0, high: 1, normal: 2 };
-    const aPriority = priorityOrder[a.priority] ?? 2;
-    const bPriority = priorityOrder[b.priority] ?? 2;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    
-    // לפי שעה מקורית
-    if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
-    if (a.due_time) return -1;
-    if (b.due_time) return 1;
-    
-    return 0;
-  });
-  
-  // חישוב זמני התחלה דינמיים
-  let nextStartMinutes = currentMinutes;
-  
-  sortedTasks.forEach(task => {
-    const duration = task.estimated_duration || 30;
-    
-    // דלג על פרויקטים גדולים (מעל 3 שעות)
-    if (duration > 180) return;
-    
-    const startMinutes = nextStartMinutes;
-    const endMinutes = startMinutes + duration;
-    
-    schedule.set(task.id, {
-      startMinutes,
-      endMinutes,
-      duration,
-      task
-    });
-    
-    nextStartMinutes = endMinutes + 5; // 5 דקות הפסקה בין משימות
-  });
-  
-  return schedule;
-}
-
-/**
- * ✅ המרה דקות לשעה (לתצוגה)
- */
-function minutesToTimeString(minutes) {
-  const hours = Math.floor(minutes / 60);
-  const mins = minutes % 60;
-  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
-}
-
-/**
- * רכיב שבודק התראות - חייב להיות ב-App.jsx!
- * בודק כל 30 שניות אם יש משימות שצריך להתריע עליהן
+ * ✅ רכיב בדיקת התראות - גרסה מתוקנת!
  * 
- * ✅ תיקון: שימוש בלו"ז דינמי במקום due_time המקורי
- * ✅ תיקון: התראות על סיום משימה (לא רק התחלה)
+ * עקרונות התיקון:
+ * 1. משתמש ב-due_time המקורי של המשימה - לא מחשב לו"ז דינמי
+ * 2. לא שולח התראות אם יש טיימר רץ (על כל משימה)
+ * 3. לא שולח התראות על משימות שהושלמו
+ * 4. שולח התראה "הזמן נגמר" כשטיימר עובר את הזמן המוקצב
  */
 function NotificationChecker() {
-  const { tasks, loadTasks } = useTasks();
+  const { tasks } = useTasks();
   const { permission, settings, sendNotification } = useNotifications();
   
   // מעקב אחרי התראות שנשלחו
   const lastNotifiedRef = useRef({});
   const checkIntervalRef = useRef(null);
-  // ✅ מעקב אחרי משימות שהושלמו (לא לשלוח עליהן התראות יותר)
+  // מעקב אחרי משימות שהושלמו
   const completedTasksRef = useRef(new Set());
+  // מעקב אחרי התראות "הזמן נגמר" שנשלחו
+  const timeUpNotifiedRef = useRef(new Set());
 
   // בדיקה אם עבר מספיק זמן מההתראה האחרונה
   const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
@@ -201,19 +130,9 @@ function NotificationChecker() {
     lastNotifiedRef.current[key] = Date.now();
   }, []);
 
-  // ✅ סימון משימה כהושלמה - לא לשלוח עליה התראות יותר
-  const markCompleted = useCallback((taskId) => {
-    completedTasksRef.current.add(taskId);
-    // נקה את כל ההתראות הקודמות של המשימה
-    Object.keys(lastNotifiedRef.current).forEach(key => {
-      if (key.startsWith(taskId)) {
-        delete lastNotifiedRef.current[key];
-      }
-    });
-  }, []);
-
   // בדיקת משימות ושליחת התראות
   const checkAndNotify = useCallback(() => {
+    // אם אין הרשאה - לא עושים כלום
     if (permission !== 'granted') {
       return;
     }
@@ -223,14 +142,12 @@ function NotificationChecker() {
     }
 
     const now = new Date();
-    // ✅ תיקון: שימוש בתאריך מקומי במקום UTC
     const today = toLocalISODate(now);
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
 
     const reminderMinutes = settings?.reminderMinutes || 5;
     const repeatEveryMinutes = settings?.repeatEveryMinutes || 10;
     const notifyOnTime = settings?.notifyOnTime !== false;
-
 
     // ✅ עדכון רשימת המשימות שהושלמו
     tasks.forEach(task => {
@@ -239,164 +156,130 @@ function NotificationChecker() {
       }
     });
 
-    // ✅ תיקון חדש: בדיקה אם יש משימה פעילה עכשיו
-    const activeTaskId = getActiveTaskId(tasks);
-    if (activeTaskId) {
-    }
-
-    // ✅ חישוב לו"ז דינמי פעם אחת (מחוץ ל-loop)
-    const dynamicSchedule = calculateDynamicSchedule(tasks, currentMinutes);
-
-    let notificationsSent = 0;
+    // ✅ בדיקה אם יש משימה פעילה עכשיו (טיימר רץ)
+    const activeTaskId = getActiveTaskId();
 
     tasks.forEach(task => {
-      // ✅ תיקון משופר: דלג על משימות שהושלמו (גם מה-ref וגם מה-task)
+      // ✅ דלג על משימות שהושלמו
       if (task.is_completed || completedTasksRef.current.has(task.id)) {
         return;
       }
       
-      // === התראה על סיום זמן המשימה ===
-      // זה צריך לעבוד על כל משימה עם טיימר רץ, גם בלי due_date/due_time
-      if (task.estimated_duration && isTimerRunning(task.id)) {
-        const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
-        const remaining = task.estimated_duration - elapsed;
+      // ✅ דלג על משימות שאינן להיום
+      if (task.due_date && task.due_date !== today) {
+        return;
+      }
+
+      // =============================================
+      // סוג 1: התראות על טיימר רץ - זמן עומד להיגמר
+      // =============================================
+      if (isTimerRunning(task.id)) {
+        const estimated = task.estimated_duration || 0;
+        if (estimated <= 0) return; // אין הערכת זמן
         
-        // התראה 5 דקות לפני סיום
-        if (remaining > 0 && remaining <= 5) {
+        const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
+        const remaining = estimated - elapsed;
+        
+        // התראה 5 דקות לפני סיום הזמן
+        if (remaining > 0 && remaining <= 5 && remaining > 2) {
           if (canNotify(task.id, 'endingSoon', 5)) {
             sendNotification(`⏳ ${task.title}`, {
               body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
               tag: `task-ending-${task.id}`
             });
             markNotified(task.id, 'endingSoon');
-            notificationsSent++;
           }
         }
         
-        // התראה כשהזמן נגמר (אבל עדיין עובדים)
+        // ✅ התראה כשהזמן נגמר - פעם אחת בלבד!
         if (remaining <= 0 && remaining > -2) {
-          if (canNotify(task.id, 'timeUp', 5)) {
+          if (!timeUpNotifiedRef.current.has(task.id)) {
             sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
-              body: 'הזמן המוקצב הסתיים. לסיים או להמשיך?',
-              tag: `task-timeup-${task.id}`
+              body: 'הזמן המוקצב הסתיים. מה עושים? 🤔',
+              tag: `task-timeup-${task.id}`,
+              requireInteraction: true // נשאר עד שלוחצים
             });
-            markNotified(task.id, 'timeUp');
-            notificationsSent++;
+            timeUpNotifiedRef.current.add(task.id);
           }
         }
         
-        // התראה על חריגה מהזמן (כל 10 דקות)
-        if (remaining < -2) {
-          if (canNotify(task.id, 'overtime', repeatEveryMinutes)) {
-            const overtimeMinutes = Math.abs(remaining);
+        // התראה על חריגה - כל 15 דקות (לא כל 10)
+        if (remaining < -5) {
+          if (canNotify(task.id, 'overtime', 15)) {
+            const overtimeMinutes = Math.abs(Math.round(remaining));
             sendNotification(`⚠️ חריגה: ${task.title}`, {
-              body: `חרגת ב-${overtimeMinutes} דקות מהזמן המוקצב`,
+              body: `חרגת ב-${overtimeMinutes} דקות מהזמן המוקצב. אולי להעביר משימות?`,
               tag: `task-overtime-${task.id}`
             });
             markNotified(task.id, 'overtime');
-            notificationsSent++;
           }
         }
+        
+        return; // אם הטיימר רץ על המשימה הזו, לא צריך התראות נוספות
       }
+
+      // =============================================
+      // סוג 2: התראות על זמן התחלה (רק אם אין טיימר רץ!)
+      // =============================================
       
-      // === התראות על זמן התחלה - לפי לו"ז דינמי! ===
-      // ✅ תיקון: אם המשימה הזו היא המשימה הפעילה - לא צריך התראות "הגיע הזמן"
-      if (activeTaskId === task.id) {
-        return; // עוברים למשימה הבאה
-      }
-      
-      // ✅ שימוש בלו"ז הדינמי שחושב מראש
-      const taskSchedule = dynamicSchedule.get(task.id);
-      
-      // אם המשימה לא בלו"ז הדינמי (פרויקט גדול / לא להיום) - דלג
-      if (!taskSchedule) {
+      // ✅ אם יש טיימר רץ על משימה אחרת - לא שולחים התראות כלל!
+      if (activeTaskId) {
         return;
       }
       
-      // חישוב הפרש זמנים לפי הלו"ז הדינמי
-      const diff = taskSchedule.startMinutes - currentMinutes; // חיובי = עתידי
-      const endDiff = taskSchedule.endMinutes - currentMinutes; // מתי המשימה אמורה להסתיים
+      // ✅ משתמש ב-due_time המקורי - לא מחשב דינמית!
+      const taskTime = task.due_time;
+      if (!taskTime) {
+        return; // אין שעה מוגדרת
+      }
       
+      const taskMinutes = timeToMinutes(taskTime);
+      if (taskMinutes === null) {
+        return;
+      }
+      
+      const diff = taskMinutes - currentMinutes; // חיובי = עתידי
 
-      // === התראה לפני המשימה ===
+      // התראה לפני המשימה (5 דקות לפני)
       if (diff > 0 && diff <= reminderMinutes) {
-        // אם יש משימה פעילה אחרת - לא מתריעים
-        if (activeTaskId && activeTaskId !== task.id) {
-          return;
-        }
-        
         if (canNotify(task.id, 'before', reminderMinutes)) {
           sendNotification(`⏰ ${task.title}`, {
-            body: `מתחיל בעוד ${diff} דקות (${minutesToTimeString(taskSchedule.startMinutes)})`,
+            body: `מתחיל בעוד ${diff} דקות (${taskTime})`,
             tag: `task-before-${task.id}`
           });
           markNotified(task.id, 'before');
-          notificationsSent++;
         }
       }
 
-      // === התראה בדיוק בזמן ===
+      // התראה בדיוק בזמן
       if (notifyOnTime && diff >= -1 && diff <= 1) {
-        // אם יש משימה פעילה אחרת - לא מתריעים
-        if (activeTaskId && activeTaskId !== task.id) {
-          return;
-        }
-        
         if (canNotify(task.id, 'onTime', 5)) {
+          const duration = task.estimated_duration || 30;
           sendNotification(`🔔 ${task.title}`, {
-            body: `הגיע הזמן להתחיל! (${taskSchedule.duration} דק')`,
+            body: `הגיע הזמן להתחיל! (${duration} דק')`,
             tag: `task-ontime-${task.id}`
           });
           markNotified(task.id, 'onTime');
-          notificationsSent++;
         }
       }
 
-      // === התראה על סיום משימה (לא רק התחלה!) ===
-      // אם המשימה אמורה להסתיים בעוד 5 דקות (לפי הלו"ז)
-      if (!isTimerRunning(task.id) && endDiff > 0 && endDiff <= 5) {
-        if (canNotify(task.id, 'shouldEnd', 5)) {
-          sendNotification(`⏳ ${task.title}`, {
-            body: `לפי הלו"ז, המשימה אמורה להסתיים ב-${minutesToTimeString(taskSchedule.endMinutes)}`,
-            tag: `task-shouldend-${task.id}`
-          });
-          markNotified(task.id, 'shouldEnd');
-          notificationsSent++;
-        }
-      }
-
-      // === התראה על איחור ===
-      // אם הזמן המתוכנן עבר ולא התחילו לעבוד
-      if (diff < -1 && diff > -30) { // בין 1 דקה ל-30 דקות באיחור
-        // אם יש משימה פעילה - לא מתריעים על איחור
-        if (activeTaskId) {
-          return;
-        }
-        
+      // התראה על איחור - רק אם לא התחילו לעבוד!
+      if (diff < -2 && diff > -30) {
         // אם כבר עבדו על המשימה - לא מתריעים
         if (task.time_spent && task.time_spent > 0) {
-          return;
-        }
-        
-        // בדיקה אם הטיימר רץ (ב-localStorage)
-        if (isTimerRunning(task.id)) {
           return;
         }
         
         if (canNotify(task.id, 'late', repeatEveryMinutes)) {
           const lateMinutes = Math.abs(Math.round(diff));
           sendNotification(`⏰ ${task.title}`, {
-            body: `היית אמור להתחיל לפני ${lateMinutes} דקות`,
+            body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
             tag: `task-late-${task.id}`
           });
           markNotified(task.id, 'late');
-          notificationsSent++;
         }
       }
     });
-
-    if (notificationsSent > 0) {
-    }
   }, [tasks, permission, settings, canNotify, markNotified, sendNotification]);
 
   // הפעלת בדיקה תקופתית
@@ -404,7 +287,6 @@ function NotificationChecker() {
     if (permission !== 'granted') {
       return;
     }
-
 
     // בדיקה ראשונית מיידית
     checkAndNotify();
@@ -420,6 +302,22 @@ function NotificationChecker() {
       }
     };
   }, [permission, checkAndNotify]);
+
+  // ניקוי יומי של הרשימות
+  useEffect(() => {
+    const clearDaily = () => {
+      const now = new Date();
+      if (now.getHours() === 0 && now.getMinutes() < 5) {
+        // חצות - מנקים הכל
+        lastNotifiedRef.current = {};
+        completedTasksRef.current.clear();
+        timeUpNotifiedRef.current.clear();
+      }
+    };
+    
+    const interval = setInterval(clearDaily, 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   // לא מציג כלום - רק עובד ברקע
   return null;
