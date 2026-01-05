@@ -106,7 +106,7 @@ export const TASK_TYPES = {
  */
 const WORK_HOURS = {
   start: 8.5, // 08:30
-  end: 16.25,  // 16:15
+  end: 16,  // 16:00
   totalMinutes: 7.75 * 60 // 465 דקות
 };
 
@@ -284,7 +284,7 @@ function DailyView() {
     setRescheduleInfo(info);
     
     console.log('📊 Reschedule info:', {
-      remainingToday: info.remainingToday,
+      remainingWorkToday: info.remainingWorkToday,
       timeNeededToday: info.timeNeededToday,
       freeTimeToday: info.freeTimeToday,
       toMoveToTomorrow: info.tasksToMoveToTomorrow.length,
@@ -891,7 +891,7 @@ function DailyView() {
         </div>
         
         <p className="text-center text-gray-500 dark:text-gray-400 mt-2 text-sm">
-          שעות עבודה: 08:30 - 16:15
+          שעות עבודה: 08:30 - 16:00
         </p>
       </motion.div>
 
@@ -951,7 +951,7 @@ function DailyView() {
         {rescheduleInfo && rescheduleInfo.tasksToMoveToTomorrow.length > 0 && (
           <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
             <div className="text-red-700 dark:text-red-400 text-sm font-medium mb-2">
-              ⚠️ לא יספיק! צריך {formatMinutes(rescheduleInfo.timeNeededToday + rescheduleInfo.tasksToMoveToTomorrow.reduce((sum, t) => sum + (t.estimated_duration || 30), 0))} אבל נשארו רק {formatMinutes(rescheduleInfo.remainingToday)} עד 16:15
+              ⚠️ לא יספיק! צריך {formatMinutes(rescheduleInfo.timeNeededToday + rescheduleInfo.tasksToMoveToTomorrow.reduce((sum, t) => sum + (t.estimated_duration || 30), 0))} אבל נשארו רק {formatMinutes(rescheduleInfo.remainingWorkToday)} בשעות העבודה
             </div>
             
             <div className="text-xs text-red-600 dark:text-red-300 mb-2">
@@ -1054,7 +1054,7 @@ function DailyView() {
               <span className="text-center">10:00</span>
               <span className="text-center">12:00</span>
               <span className="text-center">14:00</span>
-              <span className="text-center">16:15</span>
+              <span className="text-center">16:00</span>
             </div>
             
             {dragOverTime && (

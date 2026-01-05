@@ -3,14 +3,26 @@
  * 
  * כשאין מספיק זמן להיום - מעביר משימות אוטומטית למחר
  * כשמתפנה זמן - מושך משימות ממחר להיום
+ * 
+ * ✅ תומך בהפרדה בין משימות עבודה למשימות בית
  */
 
 // שעות עבודה
 const WORK_HOURS = {
   start: 8.5,   // 08:30
-  end: 16.25,   // 16:15
-  totalMinutes: 465 // 7:45 שעות
+  end: 16,      // 16:00
+  totalMinutes: 450 // 7:30 שעות
 };
+
+// שעות בית
+const HOME_HOURS = {
+  start: 16.5,  // 16:30
+  end: 21,      // 21:00
+  totalMinutes: 270 // 4:30 שעות
+};
+
+// קטגוריות שנחשבות "בית"
+const HOME_CATEGORIES = ['home', 'family', 'personal'];
 
 /**
  * חישוב תאריך מקומי בפורמט ISO
@@ -40,14 +52,54 @@ function getNextWorkday(fromDate) {
 }
 
 /**
- * חישוב כמה דקות נשארו להיום
+ * חישוב כמה דקות נשארו להיום - לפי סוג לוח זמנים
+ * @param {string} scheduleType - 'work' או 'home'
  */
-function getRemainingMinutesToday() {
+function getRemainingMinutesToday(scheduleType = 'work') {
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const endMinutes = WORK_HOURS.end * 60; // 16:15 = 976.5
+  const dayOfWeek = now.getDay();
   
-  return Math.max(0, endMinutes - currentMinutes);
+  // שישי-שבת
+  if (dayOfWeek === 5 || dayOfWeek === 6) {
+    if (scheduleType === 'home') {
+      return 8 * 60; // גמיש - 8 שעות
+    }
+    return 0; // אין שעות עבודה בסופ"ש
+  }
+  
+  const hours = scheduleType === 'home' ? HOME_HOURS : WORK_HOURS;
+  const startMinutes = hours.start * 60;
+  const endMinutes = hours.end * 60;
+  
+  // אם לפני תחילת הטווח - מחזירים את כל הטווח
+  if (currentMinutes < startMinutes) {
+    return endMinutes - startMinutes;
+  }
+  
+  // אם אחרי סוף הטווח - מחזירים 0
+  if (currentMinutes >= endMinutes) {
+    return 0;
+  }
+  
+  // באמצע - מחזירים מה שנשאר
+  return endMinutes - currentMinutes;
+}
+
+/**
+ * בדיקה אם משימה היא משימת בית
+ */
+function isHomeTask(task) {
+  const category = task.category || task.task_category;
+  if (category && HOME_CATEGORIES.includes(category)) {
+    return true;
+  }
+  // בדיקה לפי סוג המשימה אם אין קטגוריה
+  const taskType = task.task_type || '';
+  if (['family', 'home', 'personal', 'shopping', 'errands'].includes(taskType)) {
+    return true;
+  }
+  return false;
 }
 
 /**
@@ -100,33 +152,46 @@ function isParentWithIntervals(task, allTasks) {
  * 
  * ⚠️ לא מטפל בפרויקטים גדולים (מעל 3 שעות) - הם מחולקים לבלוקים ע"י smartScheduler
  * ⚠️ לא סופר משימות הורה שיש להן אינטרוולים - כדי לא לספור כפול!
+ * ✅ חדש: מפריד בין משימות עבודה למשימות בית
  */
 export function calculateAutoReschedule(tasks, editTask) {
   const now = new Date();
   const today = toLocalISODate(now);
   const tomorrow = toLocalISODate(getNextWorkday(now));
+  const dayOfWeek = now.getDay();
+  
+  // בשישי-שבת - אין התראות על משימות עבודה
+  const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
   
   // סינון משימות - רק משימות "רגילות", לא פרויקטים גדולים, לא הורים עם אינטרוולים
+  // ✅ חדש: מפרידים בין עבודה לבית
   const todayTasks = tasks.filter(t => 
     !t.is_completed && 
-    !isProjectTask(t) && // ✅ לא פרויקטים
-    !isParentWithIntervals(t, tasks) && // ✅ חדש: לא הורים שיש להם ילדים
+    !isProjectTask(t) && 
+    !isParentWithIntervals(t, tasks) && 
     (t.due_date === today || t.start_date === today)
   );
   
+  // ✅ חדש: מפרידים לפי סוג
+  const todayWorkTasks = todayTasks.filter(t => !isHomeTask(t));
+  const todayHomeTasks = todayTasks.filter(t => isHomeTask(t));
+  
   const tomorrowTasks = tasks.filter(t => 
     !t.is_completed && 
-    !isProjectTask(t) && // ✅ לא פרויקטים
-    !isParentWithIntervals(t, tasks) && // ✅ חדש: לא הורים שיש להם ילדים
+    !isProjectTask(t) && 
+    !isParentWithIntervals(t, tasks) && 
     (t.due_date === tomorrow || t.start_date === tomorrow)
   );
   
-  // חישוב זמן פנוי להיום
-  const remainingToday = getRemainingMinutesToday();
+  const tomorrowWorkTasks = tomorrowTasks.filter(t => !isHomeTask(t));
   
-  // חישוב זמן נדרש להיום (לא כולל משימות עם טיימר פעיל)
+  // ✅ חדש: חישוב זמן פנוי לפי סוג
+  const remainingWorkToday = isWeekend ? 0 : getRemainingMinutesToday('work');
+  const remainingHomeToday = getRemainingMinutesToday('home');
+  
+  // ✅ חדש: משימות עבודה בלבד עוברות למחר (לא משימות בית!)
   let timeNeededToday = 0;
-  const sortedTodayTasks = [...todayTasks].sort((a, b) => {
+  const sortedTodayTasks = [...todayWorkTasks].sort((a, b) => {
     // עדיפות: urgent > high > normal
     const priorityOrder = { urgent: 0, high: 1, normal: 2 };
     const aPriority = priorityOrder[a.priority] ?? 2;
@@ -188,7 +253,7 @@ export function calculateAutoReschedule(tasks, editTask) {
       return;
     }
     
-    if (timeNeededToday + taskTime <= remainingToday) {
+    if (timeNeededToday + taskTime <= remainingWorkToday) {
       tasksToKeepToday.push(task);
       timeNeededToday += taskTime;
     } else {
@@ -214,7 +279,7 @@ export function calculateAutoReschedule(tasks, editTask) {
       
       // ✅ לוגיקה חדשה: שומרים על רצף מההתחלה
       // אם יש מקום - נשאר, אם אין - כל השאר עוברים למחר
-      if (timeNeededToday + taskTime <= remainingToday) {
+      if (timeNeededToday + taskTime <= remainingWorkToday) {
         tasksToKeepToday.push(task);
         timeNeededToday += taskTime;
       } else {
@@ -225,7 +290,7 @@ export function calculateAutoReschedule(tasks, editTask) {
   });
   
   // חישוב זמן פנוי שנשאר אחרי המשימות שנשארו
-  const freeTimeToday = remainingToday - timeNeededToday;
+  const freeTimeToday = remainingWorkToday - timeNeededToday;
   
   // האם אפשר למשוך משימות ממחר?
   const tasksToMoveToToday = [];
@@ -253,7 +318,7 @@ export function calculateAutoReschedule(tasks, editTask) {
   return {
     today,
     tomorrow,
-    remainingToday,
+    remainingWorkToday,
     timeNeededToday,
     freeTimeToday,
     tasksToMoveToTomorrow,

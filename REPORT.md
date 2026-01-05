@@ -17,10 +17,10 @@
 
 ---
 
-## קבצים שעודכנו (6 קבצים)
+## קבצים שעודכנו (7 קבצים)
 
 ### 1. `src/components/DailyView/DailyView.jsx`
-**תיקון באג:** חישוב זמן ממתין - עכשיו מחשב זמן שנותר (מוערך - שהושקע) במקום הזמן המקורי המלא.
+**תיקון באג:** חישוב זמן ממתין + עדכון שעות לפי הגדרות חדשות (16:00).
 
 ### 2. `src/components/DailyView/SimpleTaskForm.jsx`
 **תיקון:** תמיכה בשעות בית - הטופס עכשיו מזהה אם זו משימת עבודה או בית ומחשב את הזמן הפנוי בהתאם.
@@ -36,6 +36,9 @@
 
 ### 6. `src/config/taskCategories.js`
 **חדש:** קטגוריות עם שיוך לסוג לוח זמנים (work/home).
+
+### 7. `src/utils/autoRescheduleDaily.js`
+**תיקון:** מערכת הדחייה האוטומטית - עכשיו מבדילה בין משימות עבודה למשימות בית. ההתראה "לא יספיק" מתייחסת רק למשימות עבודה.
 
 ---
 
@@ -53,6 +56,7 @@
    - `src/context/TaskContext.jsx`
    - `src/config/workSchedule.js`
    - `src/config/taskCategories.js`
+   - `src/utils/autoRescheduleDaily.js`
 
 ### שלב 3: העלאה
 ```bash
