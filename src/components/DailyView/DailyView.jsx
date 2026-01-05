@@ -394,24 +394,39 @@ function DailyView() {
       .filter(b => b.isCompleted)
       .reduce((sum, b) => sum + (b.duration || 0), 0);
     
+    // ✅ תיקון: חישוב הזמן שנותר (duration - time_spent) ולא הזמן המוערך המקורי
     const pendingMinutes = blocks
       .filter(b => !b.isCompleted)
-      .reduce((sum, b) => sum + (b.duration || 0), 0);
+      .reduce((sum, b) => {
+        const estimated = b.duration || 0;
+        const spent = b.task?.time_spent || b.timeSpent || 0;
+        const remaining = Math.max(0, estimated - spent);
+        return sum + remaining;
+      }, 0);
     
+    // ✅ תיקון: חישוב הזמן שנותר גם למשימות באיחור
     const overdueMinutes = blocks
       .filter(b => !b.isCompleted && blockHasPassed(b))
-      .reduce((sum, b) => sum + (b.duration || 0), 0);
+      .reduce((sum, b) => {
+        const estimated = b.duration || 0;
+        const spent = b.task?.time_spent || b.timeSpent || 0;
+        const remaining = Math.max(0, estimated - spent);
+        return sum + remaining;
+      }, 0);
     
+    // ✅ תיקון: גישה נכונה ל-time_spent דרך המשימה
     const inProgressMinutes = blocks
-      .filter(b => !b.isCompleted && b.timeSpent > 0)
-      .reduce((sum, b) => sum + (b.timeSpent || 0), 0);
+      .filter(b => !b.isCompleted && (b.task?.time_spent || b.timeSpent || 0) > 0)
+      .reduce((sum, b) => sum + (b.task?.time_spent || b.timeSpent || 0), 0);
     
     const endOfDayMinutes = WORK_HOURS.end * 60;
     const minutesLeftInDay = isViewingToday 
       ? Math.max(0, endOfDayMinutes - currentTime.minutes)
       : WORK_HOURS.totalMinutes;
     
-    const freeMinutes = Math.max(0, minutesLeftInDay - pendingMinutes + inProgressMinutes);
+    // ✅ תיקון: אחרי שתיקנו את pendingMinutes לחשב זמן שנותר, החישוב פשוט יותר
+    // pendingMinutes כבר מכיל את הזמן שנותר (estimated - spent), לא צריך להוסיף inProgressMinutes
+    const freeMinutes = Math.max(0, minutesLeftInDay - pendingMinutes);
     
     return {
       completed: completedMinutes,
