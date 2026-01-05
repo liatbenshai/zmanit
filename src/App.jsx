@@ -20,6 +20,17 @@ import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import DailySummary from './components/Productivity/DailySummary';
 import NotificationChecker from './components/Notifications/NotificationChecker';
+import OverdueTaskManager from './components/Notifications/OverdueTaskManager';
+import { useTasks } from './hooks/useTasks';
+
+/**
+ * ✅ חדש: Wrapper לפופאפ משימות באיחור
+ * נדרש כדי להשתמש ב-useTasks בתוך TaskProvider
+ */
+function OverdueTaskWrapper() {
+  const { tasks } = useTasks();
+  return <OverdueTaskManager tasks={tasks} />;
+}
 
 function App() {
   const { user, loading } = useAuth();
@@ -62,6 +73,9 @@ function App() {
 
       {/* בודק התראות - חדש! */}
       {user && <NotificationChecker />}
+      
+      {/* ✅ חדש: פופאפ חוסם למשימות באיחור */}
+      {user && <OverdueTaskWrapper />}
 
       {/* כותרת עליונה */}
       {user && <Header />}
