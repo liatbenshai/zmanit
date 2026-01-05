@@ -124,9 +124,16 @@ export async function createTaskWithIntervals(task) {
   // אם תאריך ההתחלה הוא בעתיד - מתחילים ב-9:00
   // אם תאריך ההתחלה הוא היום - מתחילים מהשעה הנוכחית
   let currentTime;
+  
+  // ✅ חדש: בדיקת סוג הקטגוריה
+  const taskCategory = task.category || 'work';
+  const isHomeTask = taskCategory === 'home' || taskCategory === 'family';
+  const dayEndHour = isHomeTask ? 21 : 16;  // שעות בית עד 21:00, עבודה עד 16:00
+  const dayStartHour = isHomeTask ? 16.5 : 9;  // בית מ-16:30, עבודה מ-09:00
+  
   if (currentDate > todayISO) {
-    // תאריך עתידי - מתחילים ב-9:00
-    currentTime = { hours: 9, minutes: 0 };
+    // תאריך עתידי - מתחילים בתחילת הטווח
+    currentTime = { hours: Math.floor(dayStartHour), minutes: (dayStartHour % 1) * 60 };
   } else if (task.due_time) {
     // יש שעה מוגדרת
     currentTime = parseTime(task.due_time);
@@ -141,11 +148,24 @@ export async function createTaskWithIntervals(task) {
       currentTime.hours++;
       currentTime.minutes = 0;
     }
-    // אם כבר אחרי סוף היום, עוברים למחר
-    if (currentTime.hours >= 16) {
-      currentDate = getNextWorkDay(currentDate);
-      currentTime = { hours: 9, minutes: 0 };
+    
+    // ✅ תיקון: בדיקה לפי סוג המשימה
+    if (isHomeTask) {
+      // משימת בית - אם לפני 16:30, מתחילים ב-16:30
+      if (currentTime.hours < 16 || (currentTime.hours === 16 && currentTime.minutes < 30)) {
+        currentTime = { hours: 16, minutes: 30 };
+      }
+      // אם אחרי 21:00, עוברים למחר
+      if (currentTime.hours >= dayEndHour) {
+        currentDate = getNextDay(currentDate);  // גם שישי-שבת זמינים לבית
+        currentTime = { hours: 16, minutes: 30 };
+      }
     } else {
+      // משימת עבודה - אם אחרי סוף יום העבודה, עוברים למחר
+      if (currentTime.hours >= dayEndHour) {
+        currentDate = getNextWorkDay(currentDate);
+        currentTime = { hours: 9, minutes: 0 };
+      }
     }
   }
   
@@ -161,15 +181,25 @@ export async function createTaskWithIntervals(task) {
     const isToday = currentDate === todayISO;
     if (isToday && blocksScheduledToday >= effectiveBlocksForToday) {
       // עברנו את המכסה - עוברים ליום הבא
-      currentDate = getNextWorkDay(currentDate);
-      currentTime = { hours: 9, minutes: 0 };
+      if (isHomeTask) {
+        currentDate = getNextDay(currentDate);
+        currentTime = { hours: 16, minutes: 30 };
+      } else {
+        currentDate = getNextWorkDay(currentDate);
+        currentTime = { hours: 9, minutes: 0 };
+      }
     }
     
-    // בדיקה אם עוברים את סוף יום העבודה (16:00)
-    if (endTime.hours >= 16 && i < numIntervals - 1) {
+    // ✅ תיקון: בדיקה אם עוברים את סוף היום - לפי סוג המשימה
+    if (endTime.hours >= dayEndHour && i < numIntervals - 1) {
       // עוברים ליום הבא
-      currentDate = getNextWorkDay(currentDate);
-      currentTime = { hours: 9, minutes: 0 };
+      if (isHomeTask) {
+        currentDate = getNextDay(currentDate);
+        currentTime = { hours: 16, minutes: 30 };
+      } else {
+        currentDate = getNextWorkDay(currentDate);
+        currentTime = { hours: 9, minutes: 0 };
+      }
     }
     
     const intervalData = {
@@ -408,6 +438,15 @@ function getNextWorkDay(dateStr) {
   else if (day === 6) date.setDate(date.getDate() + 1);
   
   // ✅ תיקון: שימוש ב-toLocalISODate
+  return toLocalISODate(date);
+}
+
+/**
+ * ✅ חדש: קבלת היום הבא (כולל שישי-שבת) - למשימות בית
+ */
+function getNextDay(dateStr) {
+  const date = new Date(dateStr);
+  date.setDate(date.getDate() + 1);
   return toLocalISODate(date);
 }
 

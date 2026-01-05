@@ -27,13 +27,44 @@ function getLocalDateISO(date) {
 }
 
 /**
- * חישוב זמן פנוי היום
+ * שעות עבודה ובית
  */
-function getAvailableMinutesToday() {
+const SCHEDULE_HOURS = {
+  work: { start: 8.5 * 60, end: 16 * 60 },    // 08:30-16:00 בדקות
+  home: { start: 16.5 * 60, end: 21 * 60 }    // 16:30-21:00 בדקות
+};
+
+/**
+ * חישוב זמן פנוי היום - לפי סוג לוח זמנים
+ * @param {string} scheduleType - 'work' או 'home'
+ */
+function getAvailableMinutesToday(scheduleType = 'work') {
   const now = new Date();
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
-  const endOfDay = 16 * 60 + 15; // 16:15
-  return Math.max(0, endOfDay - currentMinutes);
+  const dayOfWeek = now.getDay();
+  
+  // שישי-שבת - רק משימות בית, ללא הגבלה
+  if (dayOfWeek === 5 || dayOfWeek === 6) {
+    if (scheduleType === 'home') {
+      return 8 * 60; // 8 שעות גמישות
+    }
+    return 0; // אין שעות עבודה בסופ"ש
+  }
+  
+  const hours = SCHEDULE_HOURS[scheduleType] || SCHEDULE_HOURS.work;
+  
+  // אם עוד לא התחילו השעות - מחזירים את כל הטווח
+  if (currentMinutes < hours.start) {
+    return hours.end - hours.start;
+  }
+  
+  // אם כבר עברו השעות - מחזירים 0
+  if (currentMinutes >= hours.end) {
+    return 0;
+  }
+  
+  // באמצע הטווח - מחזירים את מה שנשאר
+  return hours.end - currentMinutes;
 }
 
 /**
@@ -46,11 +77,13 @@ function ScheduleDialog({
   totalBlocks, 
   blockDuration = 45,
   taskTitle,
-  priority
+  priority,
+  scheduleType = 'work'  // ✅ חדש: סוג לוח זמנים
 }) {
   const [blocksForToday, setBlocksForToday] = useState(1);
-  const availableMinutes = getAvailableMinutesToday();
+  const availableMinutes = getAvailableMinutesToday(scheduleType);
   const maxBlocksToday = Math.floor(availableMinutes / (blockDuration + 5)); // +5 להפסקות
+  const isHomeTask = scheduleType === 'home';
   
   // חישוב ימים נדרשים
   const blocksPerDay = 8; // מקסימום בלוקים ביום
@@ -485,7 +518,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       description: formData.description || null,
       priority: formData.priority,
       recording_duration: currentTaskType.inputType === 'recording' ? parseFloat(formData.inputValue) : null,
-      page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null
+      page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null,
+      category: selectedCategory  // ✅ חדש: הוספת הקטגוריה
     };
 
     console.log('📋 Task submission:', {
@@ -759,6 +793,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         blockDuration={45}
         taskTitle={formData.title}
         priority={formData.priority}
+        scheduleType={selectedCategory === 'work' ? 'work' : 'home'}
       />
     </form>
   );

@@ -112,7 +112,8 @@ export function TaskProvider({ children }) {
         estimated_duration: taskData.estimatedDuration || taskData.estimated_duration ? parseInt(taskData.estimatedDuration || taskData.estimated_duration) : null,
         task_type: taskData.taskType || taskData.task_type || 'other',
         task_parameter: taskData.taskParameter || taskData.task_parameter ? parseInt(taskData.taskParameter || taskData.task_parameter) : null,
-        priority: taskData.priority || 'normal'
+        priority: taskData.priority || 'normal',
+        category: taskData.category || 'work'  // ✅ חדש: הוספת הקטגוריה
       };
       
       if (!taskToCreate.title || taskToCreate.title.length === 0) {

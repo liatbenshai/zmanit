@@ -1,21 +1,43 @@
 /**
- * הגדרות לוח זמנים ושעות עבודה
- * ================================
- * קובץ זה מכיל את כל ההגדרות הקשורות לזמן עבודה זמין
+ * הגדרות לוח זמנים ושעות עבודה + בית
+ * ======================================
+ * קובץ זה מכיל את כל ההגדרות הקשורות לזמן עבודה וזמן בית/משפחה
  */
+
+/**
+ * סוגי לוחות זמנים
+ */
+export const SCHEDULE_TYPES = {
+  work: { id: 'work', name: 'עבודה', icon: '💼' },
+  home: { id: 'home', name: 'בית/משפחה', icon: '🏠' }
+};
 
 /**
  * שעות עבודה לפי יום
  * ימים: 0 = ראשון, 1 = שני, ... , 6 = שבת
  */
 export const WORK_HOURS = {
-  0: { start: 8.5, end: 16.25, enabled: true, name: 'ראשון' },   // ראשון 08:30-16:15
-  1: { start: 8.5, end: 16.25, enabled: true, name: 'שני' },     // שני
-  2: { start: 8.5, end: 16.25, enabled: true, name: 'שלישי' },   // שלישי
-  3: { start: 8.5, end: 16.25, enabled: true, name: 'רביעי' },   // רביעי
-  4: { start: 8.5, end: 16.25, enabled: true, name: 'חמישי' },   // חמישי
+  0: { start: 8.5, end: 16, enabled: true, name: 'ראשון' },   // ראשון 08:30-16:00
+  1: { start: 8.5, end: 16, enabled: true, name: 'שני' },     // שני
+  2: { start: 8.5, end: 16, enabled: true, name: 'שלישי' },   // שלישי
+  3: { start: 8.5, end: 16, enabled: true, name: 'רביעי' },   // רביעי
+  4: { start: 8.5, end: 16, enabled: true, name: 'חמישי' },   // חמישי
   5: { start: null, end: null, enabled: false, name: 'שישי' },  // שישי - לא עובדים
   6: { start: null, end: null, enabled: false, name: 'שבת' }    // שבת - לא עובדים
+};
+
+/**
+ * שעות בית/משפחה לפי יום
+ * ימים: 0 = ראשון, 1 = שני, ... , 6 = שבת
+ */
+export const HOME_HOURS = {
+  0: { start: 16.5, end: 21, enabled: true, name: 'ראשון' },   // ראשון 16:30-21:00
+  1: { start: 16.5, end: 21, enabled: true, name: 'שני' },     // שני
+  2: { start: 16.5, end: 21, enabled: true, name: 'שלישי' },   // שלישי
+  3: { start: 16.5, end: 21, enabled: true, name: 'רביעי' },   // רביעי
+  4: { start: 16.5, end: 21, enabled: true, name: 'חמישי' },   // חמישי
+  5: { start: null, end: null, enabled: true, flexible: true, name: 'שישי' },  // שישי - גמיש
+  6: { start: null, end: null, enabled: true, flexible: true, name: 'שבת' }    // שבת - גמיש
 };
 
 /**
@@ -46,23 +68,50 @@ export const SCHEDULE_CONFIG = {
 };
 
 /**
- * חישוב דקות עבודה ביום מסוים
+ * קבלת לוח הזמנים המתאים לפי סוג
+ * @param {string} scheduleType - 'work' או 'home'
+ * @returns {object} לוח השעות המתאים
+ */
+export function getScheduleByType(scheduleType = 'work') {
+  return scheduleType === 'home' ? HOME_HOURS : WORK_HOURS;
+}
+
+/**
+ * חישוב דקות זמינות ביום מסוים לפי סוג
+ * @param {number} dayOfWeek - יום בשבוע (0-6)
+ * @param {string} scheduleType - 'work' או 'home'
+ * @returns {number} דקות זמינות
+ */
+export function getMinutesForDay(dayOfWeek, scheduleType = 'work') {
+  const schedule = getScheduleByType(scheduleType);
+  const dayConfig = schedule[dayOfWeek];
+  
+  if (!dayConfig || !dayConfig.enabled) return 0;
+  
+  // אם יום גמיש (שישי/שבת לבית) - מחזירים 0 כי אין הגבלה
+  if (dayConfig.flexible) return 0;
+  
+  return (dayConfig.end - dayConfig.start) * 60;
+}
+
+/**
+ * חישוב דקות עבודה ביום מסוים (לתאימות אחורה)
  * @param {number} dayOfWeek - יום בשבוע (0-6)
  * @returns {number} דקות עבודה
  */
 export function getWorkMinutesForDay(dayOfWeek) {
-  const dayConfig = WORK_HOURS[dayOfWeek];
-  if (!dayConfig || !dayConfig.enabled) return 0;
-  return (dayConfig.end - dayConfig.start) * 60;
+  return getMinutesForDay(dayOfWeek, 'work');
 }
 
 /**
  * חישוב דקות זמינות לתכנון (אחרי מרווח בלת"מים)
  * @param {number} dayOfWeek - יום בשבוע (0-6)
+ * @param {string} scheduleType - 'work' או 'home'
  * @returns {number} דקות זמינות
  */
-export function getAvailableMinutesForDay(dayOfWeek) {
-  const totalMinutes = getWorkMinutesForDay(dayOfWeek);
+export function getAvailableMinutesForDay(dayOfWeek, scheduleType = 'work') {
+  const totalMinutes = getMinutesForDay(dayOfWeek, scheduleType);
+  if (totalMinutes === 0) return 0; // יום גמיש או לא פעיל
   const bufferMinutes = Math.round(totalMinutes * (BUFFER_PERCENTAGE / 100));
   return totalMinutes - bufferMinutes;
 }
@@ -70,72 +119,151 @@ export function getAvailableMinutesForDay(dayOfWeek) {
 /**
  * חישוב דקות מרווח (בלת"מים) ליום
  * @param {number} dayOfWeek - יום בשבוע (0-6)
+ * @param {string} scheduleType - 'work' או 'home'
  * @returns {number} דקות מרווח
  */
-export function getBufferMinutesForDay(dayOfWeek) {
-  const totalMinutes = getWorkMinutesForDay(dayOfWeek);
+export function getBufferMinutesForDay(dayOfWeek, scheduleType = 'work') {
+  const totalMinutes = getMinutesForDay(dayOfWeek, scheduleType);
   return Math.round(totalMinutes * (BUFFER_PERCENTAGE / 100));
 }
 
 /**
- * בדיקה האם יום מסוים הוא יום עבודה
+ * בדיקה האם יום מסוים פעיל לסוג לוח זמנים
+ * @param {Date} date - תאריך
+ * @param {string} scheduleType - 'work' או 'home'
+ * @returns {boolean}
+ */
+export function isDayEnabled(date, scheduleType = 'work') {
+  const dayOfWeek = date.getDay();
+  const schedule = getScheduleByType(scheduleType);
+  return schedule[dayOfWeek]?.enabled || false;
+}
+
+/**
+ * בדיקה האם יום מסוים הוא יום עבודה (לתאימות אחורה)
  * @param {Date} date - תאריך
  * @returns {boolean}
  */
 export function isWorkDay(date) {
-  const dayOfWeek = date.getDay();
-  return WORK_HOURS[dayOfWeek]?.enabled || false;
+  return isDayEnabled(date, 'work');
 }
 
 /**
- * קבלת שעות העבודה לתאריך מסוים
+ * בדיקה האם יום גמיש (ללא הגבלת שעות)
+ * @param {Date} date - תאריך
+ * @param {string} scheduleType - 'work' או 'home'
+ * @returns {boolean}
+ */
+export function isFlexibleDay(date, scheduleType = 'work') {
+  const dayOfWeek = date.getDay();
+  const schedule = getScheduleByType(scheduleType);
+  return schedule[dayOfWeek]?.flexible || false;
+}
+
+/**
+ * קבלת שעות לתאריך מסוים לפי סוג
+ * @param {Date} date - תאריך
+ * @param {string} scheduleType - 'work' או 'home'
+ * @returns {object|null} { start, end, flexible } או null אם לא פעיל
+ */
+export function getHoursForDate(date, scheduleType = 'work') {
+  const dayOfWeek = date.getDay();
+  const schedule = getScheduleByType(scheduleType);
+  const config = schedule[dayOfWeek];
+  
+  if (!config || !config.enabled) return null;
+  
+  return { 
+    start: config.start, 
+    end: config.end,
+    flexible: config.flexible || false
+  };
+}
+
+/**
+ * קבלת שעות העבודה לתאריך מסוים (לתאימות אחורה)
  * @param {Date} date - תאריך
  * @returns {object|null} { start, end } או null אם לא יום עבודה
  */
 export function getWorkHoursForDate(date) {
-  const dayOfWeek = date.getDay();
-  const config = WORK_HOURS[dayOfWeek];
-  if (!config || !config.enabled) return null;
-  return { start: config.start, end: config.end };
+  return getHoursForDate(date, 'work');
+}
+
+/**
+ * בדיקה האם שעה מסוימת בטווח המותר
+ * @param {Date} date - תאריך
+ * @param {number} hour - שעה (0-23)
+ * @param {number} minute - דקה (0-59)
+ * @param {string} scheduleType - 'work' או 'home'
+ * @returns {boolean}
+ */
+export function isTimeInSchedule(date, hour, minute = 0, scheduleType = 'work') {
+  const hours = getHoursForDate(date, scheduleType);
+  if (!hours) return false;
+  
+  // יום גמיש - כל שעה מותרת
+  if (hours.flexible) return true;
+  
+  const timeValue = hour + (minute / 60);
+  return timeValue >= hours.start && timeValue < hours.end;
 }
 
 /**
  * קבלת כל ימי העבודה בשבוע נתון
  * @param {Date} weekStart - תחילת השבוע (יום ראשון)
- * @returns {Date[]} מערך תאריכים של ימי עבודה
+ * @param {string} scheduleType - 'work' או 'home'
+ * @returns {Date[]} מערך תאריכים של ימים פעילים
  */
-export function getWorkDaysInWeek(weekStart) {
-  const workDays = [];
+export function getEnabledDaysInWeek(weekStart, scheduleType = 'work') {
+  const enabledDays = [];
   for (let i = 0; i < 7; i++) {
     const date = new Date(weekStart);
     date.setDate(date.getDate() + i);
-    if (isWorkDay(date)) {
-      workDays.push(date);
+    if (isDayEnabled(date, scheduleType)) {
+      enabledDays.push(date);
     }
   }
-  return workDays;
+  return enabledDays;
+}
+
+/**
+ * קבלת כל ימי העבודה בשבוע נתון (לתאימות אחורה)
+ */
+export function getWorkDaysInWeek(weekStart) {
+  return getEnabledDaysInWeek(weekStart, 'work');
 }
 
 /**
  * חישוב סה"כ דקות זמינות בשבוע
+ * @param {string} scheduleType - 'work' או 'home'
  * @returns {number} סה"כ דקות זמינות
  */
-export function getTotalWeeklyAvailableMinutes() {
+export function getTotalWeeklyMinutes(scheduleType = 'work') {
   let total = 0;
   for (let day = 0; day < 7; day++) {
-    total += getAvailableMinutesForDay(day);
+    total += getAvailableMinutesForDay(day, scheduleType);
   }
   return total;
 }
 
 /**
+ * חישוב סה"כ דקות זמינות בשבוע (לתאימות אחורה)
+ */
+export function getTotalWeeklyAvailableMinutes() {
+  return getTotalWeeklyMinutes('work');
+}
+
+/**
  * פורמט שעה לתצוגה
- * @param {number} hour - שעה (0-23)
- * @param {number} minutes - דקות (0-59)
+ * @param {number} hour - שעה (יכולה להיות עשרונית, למשל 8.5 = 08:30)
+ * @param {number} minutes - דקות נוספות (אופציונלי)
  * @returns {string} פורמט HH:MM
  */
 export function formatTime(hour, minutes = 0) {
-  return `${hour.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+  const totalMinutes = Math.round(hour * 60) + minutes;
+  const h = Math.floor(totalMinutes / 60);
+  const m = totalMinutes % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
 }
 
 /**
@@ -154,38 +282,56 @@ export function formatDuration(minutes) {
 
 /**
  * סיכום הגדרות לתצוגה
+ * @param {string} scheduleType - 'work' או 'home'
  */
-export function getScheduleSummary() {
-  const workDays = Object.entries(WORK_HOURS)
+export function getScheduleSummary(scheduleType = 'work') {
+  const schedule = getScheduleByType(scheduleType);
+  const scheduleInfo = SCHEDULE_TYPES[scheduleType];
+  
+  const days = Object.entries(schedule)
     .filter(([_, config]) => config.enabled)
     .map(([day, config]) => ({
       day: parseInt(day),
       name: config.name,
-      hours: `${formatTime(config.start)}-${formatTime(config.end)}`,
-      totalMinutes: getWorkMinutesForDay(parseInt(day)),
-      availableMinutes: getAvailableMinutesForDay(parseInt(day)),
-      bufferMinutes: getBufferMinutesForDay(parseInt(day))
+      hours: config.flexible ? 'גמיש' : `${formatTime(config.start)}-${formatTime(config.end)}`,
+      totalMinutes: getMinutesForDay(parseInt(day), scheduleType),
+      availableMinutes: getAvailableMinutesForDay(parseInt(day), scheduleType),
+      bufferMinutes: getBufferMinutesForDay(parseInt(day), scheduleType),
+      flexible: config.flexible || false
     }));
 
   return {
-    workDays,
+    type: scheduleType,
+    name: scheduleInfo.name,
+    icon: scheduleInfo.icon,
+    days,
     bufferPercentage: BUFFER_PERCENTAGE,
-    totalWeeklyMinutes: workDays.reduce((sum, d) => sum + d.totalMinutes, 0),
-    availableWeeklyMinutes: workDays.reduce((sum, d) => sum + d.availableMinutes, 0),
-    bufferWeeklyMinutes: workDays.reduce((sum, d) => sum + d.bufferMinutes, 0)
+    totalWeeklyMinutes: days.reduce((sum, d) => sum + d.totalMinutes, 0),
+    availableWeeklyMinutes: days.reduce((sum, d) => sum + d.availableMinutes, 0),
+    bufferWeeklyMinutes: days.reduce((sum, d) => sum + d.bufferMinutes, 0)
   };
 }
 
 export default {
+  SCHEDULE_TYPES,
   WORK_HOURS,
+  HOME_HOURS,
   BUFFER_PERCENTAGE,
   SCHEDULE_CONFIG,
+  getScheduleByType,
+  getMinutesForDay,
   getWorkMinutesForDay,
   getAvailableMinutesForDay,
   getBufferMinutesForDay,
+  isDayEnabled,
   isWorkDay,
+  isFlexibleDay,
+  getHoursForDate,
   getWorkHoursForDate,
+  isTimeInSchedule,
+  getEnabledDaysInWeek,
   getWorkDaysInWeek,
+  getTotalWeeklyMinutes,
   getTotalWeeklyAvailableMinutes,
   formatTime,
   formatDuration,
