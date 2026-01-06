@@ -30,8 +30,8 @@ function getLocalDateISO(date) {
  * שעות עבודה ובית
  */
 const SCHEDULE_HOURS = {
-  work: { start: 8.5 * 60, end: 16 * 60 },    // 08:30-16:00 בדקות
-  home: { start: 16.5 * 60, end: 21 * 60 }    // 16:30-21:00 בדקות
+  work: { start: 8.5 * 60, end: 16.25 * 60 },    // 08:30-16:15 בדקות
+  home: { start: 17 * 60, end: 21 * 60 }          // 17:00-21:00 בדקות
 };
 
 /**

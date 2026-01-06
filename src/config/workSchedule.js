@@ -17,11 +17,11 @@ export const SCHEDULE_TYPES = {
  * ימים: 0 = ראשון, 1 = שני, ... , 6 = שבת
  */
 export const WORK_HOURS = {
-  0: { start: 8.5, end: 16, enabled: true, name: 'ראשון' },   // ראשון 08:30-16:00
-  1: { start: 8.5, end: 16, enabled: true, name: 'שני' },     // שני
-  2: { start: 8.5, end: 16, enabled: true, name: 'שלישי' },   // שלישי
-  3: { start: 8.5, end: 16, enabled: true, name: 'רביעי' },   // רביעי
-  4: { start: 8.5, end: 16, enabled: true, name: 'חמישי' },   // חמישי
+  0: { start: 8.5, end: 16.25, enabled: true, name: 'ראשון' },   // ראשון 08:30-16:15
+  1: { start: 8.5, end: 16.25, enabled: true, name: 'שני' },     // שני
+  2: { start: 8.5, end: 16.25, enabled: true, name: 'שלישי' },   // שלישי
+  3: { start: 8.5, end: 16.25, enabled: true, name: 'רביעי' },   // רביעי
+  4: { start: 8.5, end: 16.25, enabled: true, name: 'חמישי' },   // חמישי
   5: { start: null, end: null, enabled: false, name: 'שישי' },  // שישי - לא עובדים
   6: { start: null, end: null, enabled: false, name: 'שבת' }    // שבת - לא עובדים
 };
@@ -31,13 +31,13 @@ export const WORK_HOURS = {
  * ימים: 0 = ראשון, 1 = שני, ... , 6 = שבת
  */
 export const HOME_HOURS = {
-  0: { start: 16.5, end: 21, enabled: true, name: 'ראשון' },   // ראשון 16:30-21:00
-  1: { start: 16.5, end: 21, enabled: true, name: 'שני' },     // שני
-  2: { start: 16.5, end: 21, enabled: true, name: 'שלישי' },   // שלישי
-  3: { start: 16.5, end: 21, enabled: true, name: 'רביעי' },   // רביעי
-  4: { start: 16.5, end: 21, enabled: true, name: 'חמישי' },   // חמישי
-  5: { start: null, end: null, enabled: true, flexible: true, name: 'שישי' },  // שישי - גמיש
-  6: { start: null, end: null, enabled: true, flexible: true, name: 'שבת' }    // שבת - גמיש
+  0: { start: 17, end: 21, enabled: true, name: 'ראשון' },   // ראשון 17:00-21:00
+  1: { start: 17, end: 21, enabled: true, name: 'שני' },     // שני
+  2: { start: 17, end: 21, enabled: true, name: 'שלישי' },   // שלישי
+  3: { start: 17, end: 21, enabled: true, name: 'רביעי' },   // רביעי
+  4: { start: 17, end: 21, enabled: true, name: 'חמישי' },   // חמישי
+  5: { start: 8, end: 22, enabled: true, flexible: true, name: 'שישי' },  // שישי - כל היום בית
+  6: { start: 8, end: 22, enabled: true, flexible: true, name: 'שבת' }    // שבת - כל היום בית
 };
 
 /**
