@@ -4,6 +4,7 @@ import { useTasks } from '../hooks/useTasks';
 import { useAuth } from '../hooks/useAuth';
 import { TASK_TYPES } from '../config/taskTypes';
 import { getInterruptionStats, getLearningData } from '../services/supabase';
+import LearningInsightsPanel from '../components/Learning/LearningInsightsPanel';
 import Button from '../components/UI/Button';
 import toast from 'react-hot-toast';
 
@@ -257,6 +258,11 @@ function TaskInsights() {
         <p className="text-gray-600 dark:text-gray-400 mt-1">
           המערכת לומדת את דפוסי העבודה שלך ומציעה שיפורים
         </p>
+      </div>
+
+      {/* 🆕 פאנל תובנות מתקדם */}
+      <div className="mb-8">
+        <LearningInsightsPanel tasks={tasks} />
       </div>
 
       {/* הצעות לשיפור */}

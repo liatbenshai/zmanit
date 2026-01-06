@@ -1,6 +1,8 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { updateSubtaskProgress } from '../../services/supabase';
 import { useTasks } from '../../hooks/useTasks';
+import { saveCompletedTask } from '../../utils/learningEngine';
+import { InterruptionButton } from '../Learning/InterruptionLogger';
 import toast from 'react-hot-toast';
 import Button from '../UI/Button';
 
@@ -751,6 +753,12 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                   >
                     ⏹ עצור ושמור
                   </Button>
+                  {/* כפתור הפרעה */}
+                  <InterruptionButton
+                    taskId={currentTask?.id}
+                    taskTitle={currentTask?.title}
+                    small
+                  />
                 </>
               )}
             </div>
@@ -803,6 +811,17 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                       
                       if (result && result.success) {
                         resetTimer();
+                        
+                        // 📊 שמירה במערכת הלמידה
+                        try {
+                          saveCompletedTask({
+                            ...currentTask,
+                            time_spent: result.totalMinutes || currentTask.time_spent,
+                            actual_start_time: originalStartTime?.toTimeString()?.slice(0, 5)
+                          });
+                        } catch (learnErr) {
+                          console.warn('שגיאה בשמירה למערכת למידה:', learnErr);
+                        }
                         
                         if (onComplete) {
                           // סימון המשימה כהושלמה - זה יעדכן הכל

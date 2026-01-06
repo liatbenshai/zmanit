@@ -21,6 +21,7 @@ import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import DailySummary from './components/Productivity/DailySummary';
 import NotificationChecker from './components/Notifications/NotificationChecker';
 import OverdueTaskManager from './components/Notifications/OverdueTaskManager';
+import EndOfDaySummary from './components/Learning/EndOfDaySummary';
 import { useTasks } from './hooks/useTasks';
 
 /**
@@ -30,6 +31,14 @@ import { useTasks } from './hooks/useTasks';
 function OverdueTaskWrapper() {
   const { tasks } = useTasks();
   return <OverdueTaskManager tasks={tasks} />;
+}
+
+/**
+ * ✅ חדש: Wrapper לסיכום יומי
+ */
+function EndOfDaySummaryWrapper() {
+  const { tasks } = useTasks();
+  return <EndOfDaySummary tasks={tasks} workEndHour={16} />;
 }
 
 function App() {
@@ -76,6 +85,9 @@ function App() {
       
       {/* ✅ חדש: פופאפ חוסם למשימות באיחור */}
       {user && <OverdueTaskWrapper />}
+      
+      {/* ✅ חדש: סיכום יומי אוטומטי בסוף היום */}
+      {user && <EndOfDaySummaryWrapper />}
 
       {/* כותרת עליונה */}
       {user && <Header />}
