@@ -189,22 +189,22 @@ export function calculateAutoReschedule(tasks, editTask) {
   const remainingWorkToday = isWeekend ? 0 : getRemainingMinutesToday('work');
   const remainingHomeToday = getRemainingMinutesToday('home');
   
-  // ✅ חדש: משימות עבודה בלבד עוברות למחר (לא משימות בית!)
-  let timeNeededToday = 0;
-  const sortedTodayTasks = [...todayWorkTasks].sort((a, b) => {
-    // עדיפות: urgent > high > normal
-    const priorityOrder = { urgent: 0, high: 1, normal: 2 };
-    const aPriority = priorityOrder[a.priority] ?? 2;
-    const bPriority = priorityOrder[b.priority] ?? 2;
-    if (aPriority !== bPriority) return aPriority - bPriority;
-    
-    // לפי שעה אם יש
-    if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
-    if (a.due_time) return -1;
-    if (b.due_time) return 1;
-    
-    return 0;
+  // ✅ תיקון מלא: לוגיקה חדשה להעברת משימות למחר
+  // 1. חישוב סך כל הזמן הדרוש
+  // 2. חישוב כמה זמן חסר
+  // 3. מיון מהפחות דחוף לדחוף
+  // 4. העברה למחר עד שמכסים את הזמן החסר
+  
+  // חישוב סך הזמן הדרוש לכל משימות העבודה
+  let totalTimeNeeded = 0;
+  todayWorkTasks.forEach(task => {
+    if (!isTimerRunning(task.id)) {
+      totalTimeNeeded += getRemainingTaskTime(task);
+    }
   });
+  
+  // כמה זמן חסר?
+  const timeOverflow = Math.max(0, totalTimeNeeded - remainingWorkToday);
   
   const tasksToMoveToTomorrow = [];
   const tasksToKeepToday = [];
@@ -222,7 +222,7 @@ export function calculateAutoReschedule(tasks, editTask) {
   const regularTasks = [];
   const intervalsByParent = new Map(); // parent_id -> [tasks sorted by index]
   
-  sortedTodayTasks.forEach(task => {
+  todayWorkTasks.forEach(task => {
     if (task.parent_task_id) {
       const parentId = task.parent_task_id;
       if (!intervalsByParent.has(parentId)) {
@@ -243,50 +243,78 @@ export function calculateAutoReschedule(tasks, editTask) {
     });
   });
   
-  // ✅ שלב 1: טיפול במשימות רגילות
-  regularTasks.forEach(task => {
-    const taskTime = getRemainingTaskTime(task);
+  // ✅ תיקון: אם יש זמן חסר - להעביר משימות למחר
+  if (timeOverflow > 0) {
+    // מיון משימות רגילות מהפחות דחוף לדחוף - כדי להעביר את הפחות דחופות קודם
+    const sortedRegularForRemoval = [...regularTasks].sort((a, b) => {
+      const priorityOrder = { urgent: 0, high: 1, normal: 2 };
+      const aPriority = priorityOrder[a.priority] ?? 2;
+      const bPriority = priorityOrder[b.priority] ?? 2;
+      // normal קודם (יועבר למחר), urgent אחרון (יישאר)
+      return bPriority - aPriority;
+    });
     
-    if (isTimerRunning(task.id)) {
-      tasksToKeepToday.push(task);
-      timeNeededToday += taskTime;
-      return;
-    }
+    let timeFreed = 0;
     
-    if (timeNeededToday + taskTime <= remainingWorkToday) {
-      tasksToKeepToday.push(task);
-      timeNeededToday += taskTime;
-    } else {
-      tasksToMoveToTomorrow.push(task);
-    }
-  });
-  
-  // ✅ שלב 2: טיפול באינטרוולים - שומרים על רצף!
-  // עוברים על כל קבוצת אינטרוולים ומחליטים כמה נכנסים
-  intervalsByParent.forEach((intervals, parentId) => {
-    // מוצאים את האינטרוולים שכבר רצים
-    const runningIdx = intervals.findIndex(t => isTimerRunning(t.id));
-    
-    intervals.forEach((task, idx) => {
-      const taskTime = getRemainingTaskTime(task);
-      
-      // אם טיימר רץ - תמיד נשאר
+    // העברת משימות רגילות למחר עד שמכסים את הזמן החסר
+    sortedRegularForRemoval.forEach(task => {
+      // משימות עם טיימר רץ - תמיד נשארות
       if (isTimerRunning(task.id)) {
         tasksToKeepToday.push(task);
-        timeNeededToday += taskTime;
         return;
       }
       
-      // ✅ לוגיקה חדשה: שומרים על רצף מההתחלה
-      // אם יש מקום - נשאר, אם אין - כל השאר עוברים למחר
-      if (timeNeededToday + taskTime <= remainingWorkToday) {
+      // משימות דחופות - תמיד נשארות (גם אם אין מקום!)
+      if (task.priority === 'urgent') {
         tasksToKeepToday.push(task);
-        timeNeededToday += taskTime;
-      } else {
-        // מרגע שאין מקום - כל השאר עוברים למחר
+        return;
+      }
+      
+      const taskTime = getRemainingTaskTime(task);
+      
+      // אם עדיין צריך לפנות זמן - מעבירים למחר
+      if (timeFreed < timeOverflow) {
         tasksToMoveToTomorrow.push(task);
+        timeFreed += taskTime;
+      } else {
+        tasksToKeepToday.push(task);
       }
     });
+    
+    // ✅ טיפול באינטרוולים - להעביר מהסוף אם צריך
+    intervalsByParent.forEach((intervals, parentId) => {
+      // עוברים מהסוף להתחלה (האחרונים יועברו קודם)
+      const reversedIntervals = [...intervals].reverse();
+      
+      reversedIntervals.forEach(task => {
+        if (isTimerRunning(task.id)) {
+          tasksToKeepToday.push(task);
+          return;
+        }
+        
+        const taskTime = getRemainingTaskTime(task);
+        
+        if (timeFreed < timeOverflow) {
+          tasksToMoveToTomorrow.push(task);
+          timeFreed += taskTime;
+        } else {
+          tasksToKeepToday.push(task);
+        }
+      });
+    });
+    
+  } else {
+    // אין זמן חסר - כל המשימות נשארות להיום
+    regularTasks.forEach(task => tasksToKeepToday.push(task));
+    intervalsByParent.forEach(intervals => {
+      intervals.forEach(task => tasksToKeepToday.push(task));
+    });
+  }
+  
+  // חישוב הזמן שצריך היום (רק מה שנשאר)
+  let timeNeededToday = 0;
+  tasksToKeepToday.forEach(task => {
+    timeNeededToday += getRemainingTaskTime(task);
   });
   
   // חישוב זמן פנוי שנשאר אחרי המשימות שנשארו
