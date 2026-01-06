@@ -308,10 +308,75 @@ function EstimateSuggestion({ taskType, currentEstimate, onAcceptSuggestion }) {
 }
 
 /**
+ * ✅ חישוב due_time נכון למשימה חדשה
+ * - משימה בלת"מ (unexpected) → עכשיו
+ * - משימה רגילה → אחרי המשימה האחרונה ברשימה
+ */
+function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration) {
+  const now = new Date();
+  const todayISO = getLocalDateISO(now);
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  
+  // פונקציית עזר - המרת דקות לפורמט HH:MM
+  const minutesToTime = (minutes) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+  
+  // אם זו משימה בלת"מ - מתחילה עכשיו
+  if (taskType === 'unexpected') {
+    // עיגול ל-5 דקות הקרובות
+    const roundedMinutes = Math.ceil(currentMinutes / 5) * 5;
+    return minutesToTime(roundedMinutes);
+  }
+  
+  // אם התאריך הוא לא היום - לא צריך due_time אוטומטי
+  if (dueDate && dueDate !== todayISO) {
+    return null;
+  }
+  
+  // מציאת המשימה האחרונה להיום
+  const todayTasks = (tasks || []).filter(t => 
+    t.due_date === todayISO && 
+    !t.is_completed && 
+    t.due_time
+  );
+  
+  if (todayTasks.length === 0) {
+    // אין משימות להיום - מתחילים עכשיו (או מתחילת שעות העבודה אם עוד מוקדם)
+    const workStart = 8.5 * 60; // 08:30
+    const startMinutes = Math.max(currentMinutes, workStart);
+    const roundedMinutes = Math.ceil(startMinutes / 5) * 5;
+    return minutesToTime(roundedMinutes);
+  }
+  
+  // מציאת זמן הסיום של המשימה האחרונה
+  let latestEndMinutes = currentMinutes;
+  
+  for (const t of todayTasks) {
+    const [h, m] = t.due_time.split(':').map(Number);
+    const taskStart = h * 60 + (m || 0);
+    const taskEnd = taskStart + (t.estimated_duration || 30);
+    if (taskEnd > latestEndMinutes) {
+      latestEndMinutes = taskEnd;
+    }
+  }
+  
+  // הוספת 5 דקות הפסקה
+  const newStartMinutes = latestEndMinutes + 5;
+  
+  // עיגול ל-5 דקות
+  const roundedMinutes = Math.ceil(newStartMinutes / 5) * 5;
+  
+  return minutesToTime(roundedMinutes);
+}
+
+/**
  * טופס משימה חכם - עם חישוב זמן אוטומטי והמלצות למידה
  */
 function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
-  const { addTask, editTask } = useTasks();
+  const { tasks, addTask, editTask } = useTasks();
   const isEditing = !!task;
 
   // סטייט הטופס - עם שימוש ב-defaultDate
@@ -336,6 +401,10 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   
   // ✅ חדש: האם לעדכן את ההערכה מההמלצה
   const [manualDurationOverride, setManualDurationOverride] = useState(null);
+  
+  // ✅ חדש: פופאפ למשימות שחרגו מסוף היום
+  const [showOverflowDialog, setShowOverflowDialog] = useState(false);
+  const [overflowTasks, setOverflowTasks] = useState([]);
 
   // קבלת סוג המשימה הנוכחי
   const currentTaskType = getTaskType(formData.taskType);
@@ -444,6 +513,130 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     toast.success(`הערכה עודכנה ל-${suggestedMinutes} דק'`);
   };
 
+  // ✅ פונקציה לדחיית כל המשימות האחרות כשנכנסת משימה בלת"מ
+  // מחזירה רשימת משימות שחרגו מסוף היום
+  const pushOtherTasksForward = async (unexpectedDuration, unexpectedDueTime) => {
+    const todayISO = getLocalDateISO(new Date());
+    const WORK_END_MINUTES = 16 * 60; // 16:00 - סוף יום העבודה
+    
+    // מציאת כל המשימות של היום שלא הושלמו
+    const todayTasks = (tasks || []).filter(t => 
+      t.due_date === todayISO && 
+      !t.is_completed && 
+      t.due_time
+    );
+    
+    if (todayTasks.length === 0) return [];
+    
+    // המרת זמן הבלת"מ לדקות
+    const [uh, um] = unexpectedDueTime.split(':').map(Number);
+    const unexpectedStart = uh * 60 + (um || 0);
+    const unexpectedEnd = unexpectedStart + unexpectedDuration;
+    
+    const tasksOverflow = []; // משימות שחרגו מסוף היום
+    
+    // עדכון כל משימה שמתחילה אחרי הבלת"מ או חופפת לה
+    for (const t of todayTasks) {
+      const [th, tm] = t.due_time.split(':').map(Number);
+      const taskStart = th * 60 + (tm || 0);
+      
+      // אם המשימה מתחילה לפני או באותו זמן כמו הבלת"מ - צריך לדחות
+      if (taskStart >= unexpectedStart || taskStart + (t.estimated_duration || 30) > unexpectedStart) {
+        // דוחים את המשימה בזמן הבלת"מ + 5 דקות הפסקה
+        const newStartMinutes = Math.max(taskStart, unexpectedEnd) + 5;
+        const newEndMinutes = newStartMinutes + (t.estimated_duration || 30);
+        
+        // בדיקה אם המשימה חורגת מסוף היום
+        if (newEndMinutes > WORK_END_MINUTES) {
+          tasksOverflow.push({
+            ...t,
+            newStartMinutes,
+            newEndMinutes,
+            overflowMinutes: newEndMinutes - WORK_END_MINUTES
+          });
+        }
+        
+        const newHours = Math.floor(newStartMinutes / 60);
+        const newMins = newStartMinutes % 60;
+        const newDueTime = `${String(newHours).padStart(2, '0')}:${String(newMins).padStart(2, '0')}`;
+        
+        try {
+          await editTask(t.id, { due_time: newDueTime });
+        } catch (err) {
+          console.error('שגיאה בדחיית משימה:', err);
+        }
+      }
+    }
+    
+    return tasksOverflow;
+  };
+  
+  // ✅ טיפול במשימות שחרגו - העברה למחר
+  const handleMoveToTomorrow = async (taskId) => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowISO = getLocalDateISO(tomorrow);
+    
+    try {
+      await editTask(taskId, { 
+        due_date: tomorrowISO, 
+        due_time: '08:30' // תחילת יום העבודה
+      });
+      toast.success('📅 המשימה הועברה למחר');
+      
+      // הסרה מהרשימה
+      setOverflowTasks(prev => prev.filter(t => t.id !== taskId));
+    } catch (err) {
+      toast.error('שגיאה בהעברת המשימה');
+    }
+  };
+  
+  // ✅ טיפול במשימות שחרגו - ביטול
+  const handleCancelTask = async (taskId) => {
+    try {
+      await editTask(taskId, { is_completed: true }); // או למחוק לגמרי
+      toast('🗑️ המשימה בוטלה', { icon: '❌' });
+      setOverflowTasks(prev => prev.filter(t => t.id !== taskId));
+    } catch (err) {
+      toast.error('שגיאה בביטול המשימה');
+    }
+  };
+  
+  // ✅ טיפול במשימות שחרגו - להשאיר (לשעות נוספות)
+  const handleKeepOvertime = (taskId) => {
+    toast('⏰ המשימה תישאר לשעות נוספות', { icon: '💪' });
+    setOverflowTasks(prev => prev.filter(t => t.id !== taskId));
+  };
+  
+  // ✅ העברת כל המשימות שחרגו למחר
+  const handleMoveAllToTomorrow = async () => {
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowISO = getLocalDateISO(tomorrow);
+    
+    let startMinutes = 8.5 * 60; // 08:30
+    
+    for (const t of overflowTasks) {
+      const hours = Math.floor(startMinutes / 60);
+      const mins = Math.round(startMinutes % 60);
+      const newTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+      
+      try {
+        await editTask(t.id, { 
+          due_date: tomorrowISO, 
+          due_time: newTime
+        });
+        startMinutes += (t.estimated_duration || 30) + 5;
+      } catch (err) {
+        console.error('שגיאה בהעברת משימה:', err);
+      }
+    }
+    
+    toast.success(`📅 ${overflowTasks.length} משימות הועברו למחר`);
+    setOverflowTasks([]);
+    setShowOverflowDialog(false);
+  };
+
   // ✅ יצירת משימה בפועל (אחרי בחירת שיבוץ)
   const createTask = async (taskData, blocksForToday = null) => {
     setLoading(true);
@@ -455,6 +648,13 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         blocksCount
       });
 
+      // ✅ חדש: אם זו משימה בלת"מ - דוחפים את כל המשימות האחרות קודם
+      let tasksOverflow = [];
+      if (taskData.task_type === 'unexpected' && taskData.due_time) {
+        tasksOverflow = await pushOtherTasksForward(taskData.estimated_duration || 30, taskData.due_time);
+        toast('⚡ משימות אחרות נדחו', { icon: '📅' });
+      }
+
       // העברת blocksForToday ל-addTask
       await addTask({
         ...taskData,
@@ -464,13 +664,21 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       const todayBlocks = blocksForToday !== null ? blocksForToday : blocksCount;
       const otherBlocks = blocksCount - todayBlocks;
       
-      if (otherBlocks > 0) {
+      if (taskData.task_type === 'unexpected') {
+        toast.success('⚡ משימה בלת"מ נוספה - התחילי עכשיו!');
+      } else if (otherBlocks > 0) {
         toast.success(`✓ נוספה משימה: ${todayBlocks} בלוקים להיום, ${otherBlocks} לימים הבאים`);
       } else {
         toast.success(`✓ נוספה משימה: ${blocksCount} בלוקים של 45 דק'`);
       }
 
-      onClose();
+      // ✅ אם יש משימות שחרגו - מציגים פופאפ
+      if (tasksOverflow.length > 0) {
+        setOverflowTasks(tasksOverflow);
+        setShowOverflowDialog(true);
+      } else {
+        onClose();
+      }
     } catch (error) {
       console.error('שגיאה בשמירת משימה:', error);
       toast.error('שגיאה בשמירת המשימה');
@@ -508,13 +716,25 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       return;
     }
 
+    // ✅ תיקון: חישוב due_time אוטומטי למשימה חדשה
+    // אם המשתמשת לא הזינה שעה ספציפית - נחשב אוטומטית
+    let autoDueTime = formData.dueTime || null;
+    if (!isEditing && !formData.dueTime) {
+      autoDueTime = calculateNewTaskDueTime(
+        tasks, 
+        formData.taskType, 
+        formData.dueDate || defaultDate,
+        calculatedDuration
+      );
+    }
+
     const taskData = {
       title: formData.title.trim(),
       task_type: formData.taskType,
       estimated_duration: calculatedDuration,
       start_date: formData.startDate || null,
       due_date: formData.dueDate || null,
-      due_time: formData.dueTime || null,
+      due_time: autoDueTime,  // ✅ שימוש בזמן המחושב
       description: formData.description || null,
       priority: formData.priority,
       recording_duration: currentTaskType.inputType === 'recording' ? parseFloat(formData.inputValue) : null,
@@ -795,6 +1015,93 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         priority={formData.priority}
         scheduleType={selectedCategory === 'work' ? 'work' : 'home'}
       />
+      
+      {/* ✅ פופאפ למשימות שחרגו מסוף היום */}
+      {showOverflowDialog && overflowTasks.length > 0 && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] overflow-y-auto">
+            {/* כותרת */}
+            <div className="bg-orange-500 text-white p-4 rounded-t-2xl">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">⚠️</span>
+                <div>
+                  <h3 className="font-bold text-lg">אין מקום בסוף היום!</h3>
+                  <p className="text-sm opacity-90">
+                    {overflowTasks.length} משימות חרגו משעות העבודה (16:00)
+                  </p>
+                </div>
+              </div>
+            </div>
+            
+            {/* רשימת משימות שחרגו */}
+            <div className="p-4 space-y-3">
+              {overflowTasks.map((task, index) => (
+                <div 
+                  key={task.id} 
+                  className="bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-700 rounded-xl p-3"
+                >
+                  <div className="font-medium text-gray-900 dark:text-white mb-1">
+                    {task.title}
+                  </div>
+                  <div className="text-sm text-gray-500 dark:text-gray-400 mb-3">
+                    {task.estimated_duration || 30} דקות | 
+                    חורגת ב-{task.overflowMinutes} דקות מסוף היום
+                  </div>
+                  
+                  {/* אפשרויות לכל משימה */}
+                  <div className="space-y-2">
+                    <button
+                      onClick={() => handleMoveToTomorrow(task.id)}
+                      className="w-full py-2 px-3 text-sm bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors flex items-center justify-center gap-2"
+                    >
+                      📅 העבר למחר
+                      <span className="text-xs opacity-75">(מומלץ - תתחיל ביום חדש)</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleKeepOvertime(task.id)}
+                      className="w-full py-2 px-3 text-sm bg-purple-500 text-white rounded-lg hover:bg-purple-600 transition-colors flex items-center justify-center gap-2"
+                    >
+                      💪 להשאיר לשעות נוספות
+                      <span className="text-xs opacity-75">(אם יש לך כוח)</span>
+                    </button>
+                    
+                    <button
+                      onClick={() => handleCancelTask(task.id)}
+                      className="w-full py-2 px-3 text-sm bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors flex items-center justify-center gap-2"
+                    >
+                      ❌ לבטל את המשימה
+                      <span className="text-xs opacity-75">(לא חייבת היום)</span>
+                    </button>
+                  </div>
+                </div>
+              ))}
+              
+              {/* כפתור העברת הכל למחר */}
+              {overflowTasks.length > 1 && (
+                <button
+                  onClick={handleMoveAllToTomorrow}
+                  className="w-full py-3 mt-4 bg-blue-600 text-white rounded-xl font-medium hover:bg-blue-700 transition-colors"
+                >
+                  📅 העבר את כולן למחר ({overflowTasks.length})
+                </button>
+              )}
+              
+              {/* סגירה */}
+              <button
+                onClick={() => {
+                  setShowOverflowDialog(false);
+                  setOverflowTasks([]);
+                  onClose();
+                }}
+                className="w-full py-2 mt-2 text-gray-500 dark:text-gray-400 text-sm hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                סגור ואטפל בזה אחר כך
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   );
 }
