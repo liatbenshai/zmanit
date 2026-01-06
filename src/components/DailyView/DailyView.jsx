@@ -548,7 +548,8 @@ function DailyView() {
     }
   };
 
-  const handleReorderDrop = (e, toIndex, blocksArray) => {
+  // ✅ תיקון: עדכון due_time בדאטאבייס אחרי שינוי סדר - כדי שההתראות יעבדו נכון!
+  const handleReorderDrop = async (e, toIndex, blocksArray) => {
     e.preventDefault();
     e.stopPropagation();
     
@@ -560,6 +561,7 @@ function DailyView() {
       return;
     }
 
+    // יצירת סדר חדש
     const currentOrder = blocksArray.map(b => b.taskId || b.id);
     const newOrder = [...currentOrder];
     const [movedItem] = newOrder.splice(fromIndex, 1);
@@ -569,7 +571,63 @@ function DailyView() {
     saveTaskOrder(dateISO, newOrder);
     setTaskOrder(newOrder);
     
-    toast.success('🔄 הסדר עודכן');
+    // ✅ חדש: עדכון due_time בדאטאבייס לכל משימה לפי הסדר החדש
+    try {
+      // חישוב זמנים חסומים מאירועי גוגל (כדי לדלג עליהם)
+      const googleBlocks = blocksArray.filter(b => 
+        b.isFromGoogle || b.is_from_google || b.isGoogleEvent
+      );
+      const blockedTimes = googleBlocks.map(block => {
+        const startTime = (block.startTime || '00:00').split(':').map(Number);
+        const endTime = (block.endTime || '00:00').split(':').map(Number);
+        return {
+          start: startTime[0] * 60 + (startTime[1] || 0),
+          end: endTime[0] * 60 + (endTime[1] || 0)
+        };
+      }).sort((a, b) => a.start - b.start);
+      
+      // פונקציה למציאת סלוט פנוי (דילוג על אירועי גוגל)
+      const findFreeSlot = (startFrom, duration) => {
+        let proposedStart = startFrom;
+        for (const blocked of blockedTimes) {
+          const proposedEnd = proposedStart + duration;
+          if (proposedStart < blocked.end && proposedEnd > blocked.start) {
+            proposedStart = blocked.end + 5; // 5 דקות אחרי אירוע גוגל
+          }
+        }
+        return proposedStart;
+      };
+      
+      // סינון רק משימות רגילות (לא גוגל) בסדר החדש
+      const regularBlocksInNewOrder = newOrder
+        .map(id => blocksArray.find(b => (b.taskId || b.id) === id))
+        .filter(block => block && !block.isFromGoogle && !block.is_from_google && !block.isGoogleEvent);
+      
+      // חישוב זמנים חדשים
+      let nextStartMinutes = isViewingToday 
+        ? currentTime.minutes 
+        : WORK_HOURS.start * 60;
+      
+      // עדכון כל משימה עם הזמן החדש שלה
+      for (const block of regularBlocksInNewOrder) {
+        const duration = block.duration || block.estimated_duration || 30;
+        const startMinutes = findFreeSlot(nextStartMinutes, duration);
+        const hours = Math.floor(startMinutes / 60);
+        const mins = startMinutes % 60;
+        const newDueTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+        
+        const taskId = block.taskId || block.id;
+        await editTask(taskId, { due_time: newDueTime });
+        
+        nextStartMinutes = startMinutes + duration + 5; // 5 דקות הפסקה
+      }
+      
+      toast.success('🔄 הסדר והזמנים עודכנו');
+      await loadTasks(); // רענון הנתונים
+    } catch (err) {
+      console.error('שגיאה בעדכון זמנים:', err);
+      toast.error('שגיאה בעדכון הזמנים');
+    }
     
     setDraggedIndex(null);
     setDragOverIndex(null);
