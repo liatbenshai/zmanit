@@ -16,13 +16,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     if (!task || !task.id) return null;
     const found = tasks.find(t => t.id === task.id);
     if (found) {
-      // אם time_spent השתנה, נדווח
-      if (found.time_spent !== task.time_spent) {
-          id: found.id,
-          time_spent_old: task.time_spent,
-          time_spent_new: found.time_spent
-        });
-      }
       return found;
     }
     return task;
@@ -122,11 +115,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         const elapsed = Math.floor((now - start) / 1000);
 
         if (elapsed > 0) {
-            startTime: start.toISOString(),
-            elapsedSeconds: elapsed,
-            elapsedMinutes: Math.floor(elapsed / 60)
-          });
-
           setStartTime(start);
           setElapsedSeconds(elapsed);
           setIsRunning(true);
@@ -199,11 +187,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
 
         if (elapsed > elapsedSeconds) {
           const diffMinutes = Math.floor((elapsed - elapsedSeconds) / 60);
-            elapsedSeconds,
-            newElapsed: elapsed,
-            diffMinutes
-          });
-
           setElapsedSeconds(elapsed);
 
           if (diffMinutes > 0) {
@@ -399,25 +382,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         const latestTask = tasks.find(t => t.id === currentTask.id) || currentTask;
         const currentTimeSpent = (latestTask.time_spent) ? parseInt(latestTask.time_spent) : 0;
         const newTimeSpent = currentTimeSpent + minutesToAdd;
-        
-          minutesToAdd, 
-          actualElapsedSeconds,
-          elapsedSeconds,
-          currentTimeSpent, 
-          newTimeSpent, 
-          reset, 
-          skipUpdate,
-          taskId: latestTask.id,
-          taskFromContext: latestTask.time_spent,
-          startTime: startTime?.toISOString()
-        });
-        
-        // עדכון המשימה דרך TaskContext - זה יעדכן גם את ה-DB וגם את ה-state
-          taskId: latestTask.id,
-          currentTimeSpent,
-          minutesToAdd,
-          newTimeSpent
-        });
         
         // עדכון פשוט - רק state, לא DB
         await updateTaskTime(latestTask.id, newTimeSpent);

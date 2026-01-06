@@ -132,12 +132,21 @@ function NotificationChecker() {
 
   // בדיקת משימות ושליחת התראות
   const checkAndNotify = useCallback(() => {
+    // דיבוג - הדפס פעם אחת
+    console.log('🔔 NotificationChecker בודק:', {
+      permission,
+      tasksCount: tasks?.length || 0,
+      settings
+    });
+    
     // אם אין הרשאה - לא עושים כלום
     if (permission !== 'granted') {
+      console.log('❌ אין הרשאת התראות:', permission);
       return;
     }
     
     if (!tasks || tasks.length === 0) {
+      console.log('❌ אין משימות');
       return;
     }
 
@@ -148,6 +157,17 @@ function NotificationChecker() {
     const reminderMinutes = settings?.reminderMinutes || 5;
     const repeatEveryMinutes = settings?.repeatEveryMinutes || 10;
     const notifyOnTime = settings?.notifyOnTime !== false;
+    
+    // מצא משימות להיום עם שעה מוגדרת
+    const todayTasksWithTime = tasks.filter(task => 
+      !task.is_completed && 
+      task.due_date === today && 
+      task.due_time
+    );
+    
+    console.log('📋 משימות להיום עם שעה:', todayTasksWithTime.length, 
+      todayTasksWithTime.map(t => ({ title: t.title, due_time: t.due_time }))
+    );
 
     // ✅ עדכון רשימת המשימות שהושלמו
     tasks.forEach(task => {

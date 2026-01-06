@@ -57,7 +57,59 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
   const [handledToday, setHandledToday] = useState(new Set());
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [showRescheduleInput, setShowRescheduleInput] = useState(false);
-  const audioRef = useRef(null);
+  
+  // פונקציה להשמעת צליל התראה
+  const playAlarmSound = useCallback(() => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // צליל ראשון
+      const osc1 = audioContext.createOscillator();
+      const gain1 = audioContext.createGain();
+      osc1.connect(gain1);
+      gain1.connect(audioContext.destination);
+      osc1.frequency.value = 800;
+      osc1.type = 'sine';
+      gain1.gain.setValueAtTime(0.4, audioContext.currentTime);
+      gain1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+      osc1.start(audioContext.currentTime);
+      osc1.stop(audioContext.currentTime + 0.3);
+      
+      // צליל שני
+      setTimeout(() => {
+        try {
+          const osc2 = audioContext.createOscillator();
+          const gain2 = audioContext.createGain();
+          osc2.connect(gain2);
+          gain2.connect(audioContext.destination);
+          osc2.frequency.value = 1000;
+          osc2.type = 'sine';
+          gain2.gain.setValueAtTime(0.4, audioContext.currentTime);
+          gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.3);
+          osc2.start(audioContext.currentTime);
+          osc2.stop(audioContext.currentTime + 0.3);
+        } catch (e) {}
+      }, 200);
+      
+      // צליל שלישי
+      setTimeout(() => {
+        try {
+          const osc3 = audioContext.createOscillator();
+          const gain3 = audioContext.createGain();
+          osc3.connect(gain3);
+          gain3.connect(audioContext.destination);
+          osc3.frequency.value = 1200;
+          osc3.type = 'sine';
+          gain3.gain.setValueAtTime(0.4, audioContext.currentTime);
+          gain3.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.4);
+          osc3.start(audioContext.currentTime);
+          osc3.stop(audioContext.currentTime + 0.4);
+        } catch (e) {}
+      }, 400);
+    } catch (e) {
+      console.warn('לא ניתן להשמיע צליל:', e);
+    }
+  }, []);
   
   // איפוס יומי
   useEffect(() => {
@@ -126,9 +178,7 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
         setCurrentOverdue(sorted[0]);
         
         // צליל התראה
-        if (audioRef.current) {
-          audioRef.current.play().catch(() => {});
-        }
+        playAlarmSound();
         
         // רטט (מובייל)
         if ('vibrate' in navigator) {
@@ -144,7 +194,7 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
     const interval = setInterval(checkOverdue, 30 * 1000);
     
     return () => clearInterval(interval);
-  }, [tasks, handledToday, currentOverdue]);
+  }, [tasks, handledToday, currentOverdue, playAlarmSound]);
   
   // סימון משימה כ"טופלה"
   const markHandled = useCallback((taskId) => {
@@ -426,10 +476,7 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
           </div>
         </motion.div>
         
-        {/* צליל התראה */}
-        <audio ref={audioRef} preload="auto">
-          <source src="data:audio/wav;base64,UklGRl9vT19XQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YU..." type="audio/wav" />
-        </audio>
+        {/* צליל התראה - Web Audio API */}
       </motion.div>
     </AnimatePresence>
   );

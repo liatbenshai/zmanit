@@ -10,6 +10,7 @@ import DailySummary from '../Analytics/DailySummary';
 import WeeklyReview from '../Analytics/WeeklyReview';
 import AdminSettings from '../Admin/AdminSettings';
 import InterruptionsTracker from './InterruptionsTracker'; // ✅ חדש
+import SmartRecommendationsPanel from './SmartRecommendationsPanel'; // ✅ המלצות חכמות
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
@@ -701,6 +702,22 @@ function SmartDashboard() {
           <span>ניתוח הפרעות</span>
         </button>
       </motion.div>
+
+      {/* ✅ פאנל המלצות חכמות */}
+      <SmartRecommendationsPanel 
+        tasks={tasks}
+        onUpdateTask={async (taskId, updates) => {
+          // TODO: implement update task
+          toast.success('המשימה עודכנה');
+          loadTasks();
+        }}
+        onAddTask={async (taskData) => {
+          // TODO: implement add task
+          toast.success('משימה נוספה');
+          loadTasks();
+        }}
+        onRefresh={loadTasks}
+      />
 
       {/* מודל טופס */}
       <Modal
