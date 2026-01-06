@@ -320,6 +320,29 @@ export function calculateAutoReschedule(tasks, editTask) {
   // חישוב זמן פנוי שנשאר אחרי המשימות שנשארו
   const freeTimeToday = remainingWorkToday - timeNeededToday;
   
+  // ✅ חדש: חישוב משימות שחורגות מסוף יום העבודה (16:00)
+  // אלה משימות שנשארות להיום אבל זמן הסיום שלהן עובר את 16:00
+  const WORK_END_MINUTES = 16 * 60; // 16:00
+  const tasksOverflowingEndOfDay = [];
+  
+  tasksToKeepToday.forEach(task => {
+    if (task.due_time) {
+      const [h, m] = task.due_time.split(':').map(Number);
+      const startMinutes = h * 60 + (m || 0);
+      const endMinutes = startMinutes + getRemainingTaskTime(task);
+      
+      // אם המשימה מסתיימת אחרי 16:00 - היא חורגת
+      if (endMinutes > WORK_END_MINUTES) {
+        tasksOverflowingEndOfDay.push({
+          ...task,
+          startMinutes,
+          endMinutes,
+          overflowMinutes: endMinutes - WORK_END_MINUTES
+        });
+      }
+    }
+  });
+  
   // האם אפשר למשוך משימות ממחר?
   const tasksToMoveToToday = [];
   
@@ -351,7 +374,8 @@ export function calculateAutoReschedule(tasks, editTask) {
     freeTimeToday,
     tasksToMoveToTomorrow,
     tasksToMoveToToday,
-    tasksToKeepToday
+    tasksToKeepToday,
+    tasksOverflowingEndOfDay  // ✅ חדש: משימות שחורגות מ-16:00
   };
 }
 
