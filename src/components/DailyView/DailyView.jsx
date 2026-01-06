@@ -288,7 +288,8 @@ function DailyView() {
       timeNeededToday: info.timeNeededToday,
       freeTimeToday: info.freeTimeToday,
       toMoveToTomorrow: info.tasksToMoveToTomorrow.length,
-      toMoveToToday: info.tasksToMoveToToday.length
+      toMoveToToday: info.tasksToMoveToToday.length,
+      overflowingEndOfDay: info.tasksOverflowingEndOfDay?.length || 0  // ✅ חדש
     });
   }, [tasks, selectedDate, currentTime.minutes]);
 
@@ -1042,6 +1043,37 @@ function DailyView() {
               >
                 בחירה ידנית
               </button>
+            </div>
+          </div>
+        )}
+        
+        {/* ✅ חדש: התראה על משימות שחורגות מ-16:00 (גם דחופות!) */}
+        {rescheduleInfo && rescheduleInfo.tasksOverflowingEndOfDay && rescheduleInfo.tasksOverflowingEndOfDay.length > 0 && (
+          <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700">
+            <div className="text-orange-700 dark:text-orange-400 text-sm font-medium mb-2">
+              ⏰ {rescheduleInfo.tasksOverflowingEndOfDay.length} משימות חורגות מ-16:00!
+            </div>
+            
+            <div className="text-xs text-orange-600 dark:text-orange-300 mb-2">
+              <ul className="space-y-1">
+                {rescheduleInfo.tasksOverflowingEndOfDay.map(task => (
+                  <li key={task.id} className="flex items-center gap-2">
+                    <span className={`px-1.5 py-0.5 rounded text-xs ${
+                      task.priority === 'urgent' ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-600'
+                    }`}>
+                      {task.priority === 'urgent' ? 'דחוף' : 'רגיל'}
+                    </span>
+                    <span>{task.title}</span>
+                    <span className="text-orange-500">
+                      (+{task.overflowMinutes} דק' אחרי 16:00)
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            
+            <div className="text-xs text-orange-500 dark:text-orange-400 mt-2">
+              💡 אפשרויות: לעבוד שעות נוספות, להעביר למחר, או לבטל משימה
             </div>
           </div>
         )}
