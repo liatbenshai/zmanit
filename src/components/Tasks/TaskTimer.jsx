@@ -277,6 +277,58 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     // אם הטיימר לא רץ, מתחילים אותו
     if (!isRunning) {
       const now = new Date();
+      
+      // ✅ בדיקת התחלה באיחור
+      if (currentTask?.due_time && !startTime) {
+        const today = now.toISOString().split('T')[0];
+        const taskDate = currentTask.due_date || today;
+        
+        // בדיקה אם המשימה היא להיום
+        if (taskDate === today) {
+          const [hours, minutes] = currentTask.due_time.split(':').map(Number);
+          const scheduledTime = new Date(now);
+          scheduledTime.setHours(hours, minutes, 0, 0);
+          
+          const lateMinutes = Math.floor((now - scheduledTime) / (1000 * 60));
+          
+          if (lateMinutes > 0) {
+            // 🔔 התראה על התחלה באיחור
+            toast(`⏰ התחלת באיחור של ${lateMinutes} דקות`, {
+              icon: '⚠️',
+              duration: 5000,
+              style: {
+                background: '#FEF3C7',
+                color: '#92400E',
+                direction: 'rtl'
+              }
+            });
+            
+            // 📊 שמירה במערכת הלמידה
+            try {
+              const lateStartsKey = 'late_starts_history';
+              const history = JSON.parse(localStorage.getItem(lateStartsKey) || '[]');
+              history.push({
+                taskId: currentTask.id,
+                taskTitle: currentTask.title,
+                taskType: currentTask.task_type || 'general',
+                scheduledTime: currentTask.due_time,
+                actualStartTime: now.toTimeString().slice(0, 5),
+                lateMinutes: lateMinutes,
+                date: today,
+                dayOfWeek: now.getDay()
+              });
+              // שומרים רק 100 רשומות אחרונות
+              if (history.length > 100) history.shift();
+              localStorage.setItem(lateStartsKey, JSON.stringify(history));
+              
+              console.log('📊 נשמר באיחור:', { lateMinutes, task: currentTask.title });
+            } catch (e) {
+              console.error('שגיאה בשמירת איחור:', e);
+            }
+          }
+        }
+      }
+      
       // אם יש startTime קיים, נשתמש בו (למקרה שהטיימר היה מושהה)
       if (!startTime) {
         setStartTime(now);

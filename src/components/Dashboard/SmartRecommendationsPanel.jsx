@@ -247,7 +247,64 @@ function SmartRecommendationsPanel({ tasks, onUpdateTask, onAddTask, onRefresh }
       }
     }
 
-    // --- 5. התראות על עומס יתר ---
+    // --- 5. ניתוח התחלות באיחור ---
+    try {
+      const lateStartsHistory = JSON.parse(localStorage.getItem('late_starts_history') || '[]');
+      const recentLateStarts = lateStartsHistory.filter(record => {
+        const recordDate = new Date(record.date);
+        const daysSince = (Date.now() - recordDate) / (1000 * 60 * 60 * 24);
+        return daysSince <= 14; // שבועיים אחרונים
+      });
+
+      if (recentLateStarts.length >= 3) {
+        const avgLateMinutes = Math.round(
+          recentLateStarts.reduce((sum, r) => sum + r.lateMinutes, 0) / recentLateStarts.length
+        );
+        
+        // ניתוח לפי שעות
+        const lateByHour = {};
+        recentLateStarts.forEach(r => {
+          const hour = r.scheduledTime?.split(':')[0] || '00';
+          lateByHour[hour] = (lateByHour[hour] || 0) + 1;
+        });
+        const problematicHour = Object.entries(lateByHour)
+          .sort((a, b) => b[1] - a[1])[0];
+        
+        // ניתוח לפי סוג משימה
+        const lateByType = {};
+        recentLateStarts.forEach(r => {
+          const type = r.taskType || 'general';
+          lateByType[type] = (lateByType[type] || 0) + 1;
+        });
+        const problematicType = Object.entries(lateByType)
+          .sort((a, b) => b[1] - a[1])[0];
+
+        const details = [];
+        if (problematicHour && problematicHour[1] >= 2) {
+          details.push(`שעה בעייתית: ${problematicHour[0]}:00 (${problematicHour[1]} פעמים)`);
+        }
+        if (problematicType && problematicType[1] >= 2) {
+          const typeInfo = TASK_TYPES[problematicType[0]] || { name: problematicType[0] };
+          details.push(`סוג בעייתי: ${typeInfo.name} (${problematicType[1]} פעמים)`);
+        }
+        details.push(`💡 טיפ: נסי לתזמן משימות ${avgLateMinutes} דקות מאוחר יותר`);
+
+        allRecommendations.push({
+          id: 'late-starts-pattern',
+          category: 'accuracy',
+          priority: recentLateStarts.length >= 5 ? 'high' : 'medium',
+          icon: '⏰',
+          title: `התחלת באיחור ${recentLateStarts.length} פעמים לאחרונה`,
+          message: `ממוצע איחור: ${avgLateMinutes} דקות. המערכת לומדת את הדפוסים שלך`,
+          action: 'adjust',
+          details
+        });
+      }
+    } catch (e) {
+      console.error('שגיאה בניתוח איחורים:', e);
+    }
+
+    // --- 6. התראות על עומס יתר ---
     const todayTasks = activeTasks.filter(t => t.due_date === today);
     const todayTotal = todayTasks.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
     const availableToday = 8 * 60; // 8 שעות
