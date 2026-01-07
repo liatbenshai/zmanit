@@ -155,9 +155,6 @@ function NotificationChecker() {
       task.due_date === today && 
       task.due_time
     );
-    
-      todayTasksWithTime.map(t => ({ title: t.title, due_time: t.due_time }))
-    );
 
     // ✅ עדכון רשימת המשימות שהושלמו
     tasks.forEach(task => {
