@@ -27,10 +27,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
 
   // קבלת המשימה העדכנית
   const currentTask = useMemo(() => {
-      taskProp: task ? { id: task.id, title: task.title } : 'null',
-      tasksCount: tasks?.length
-    });
-    
     if (!task || !task.id) {
       return null;
     }
@@ -373,11 +369,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     const newId = currentTask?.id;
     
     if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
-        prevId,
-        newId,
-        elapsedSeconds: elapsedSecondsRef.current
-      });
-      
       if (saveProgressRef.current) {
         saveProgressRef.current(true).catch(err => {
           console.warn('⚠️ שמירה בעת מעבר משימה נכשלה:', err);

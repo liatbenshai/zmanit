@@ -642,11 +642,6 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     setLoading(true);
     
     try {
-        ...taskData,
-        blocksForToday,
-        blocksCount
-      });
-
       // ✅ חדש: אם זו משימה בלת"מ - דוחפים את כל המשימות האחרות קודם
       let tasksOverflow = [];
       if (taskData.task_type === 'unexpected' && taskData.due_time) {
@@ -740,12 +735,6 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null,
       category: selectedCategory  // ✅ חדש: הוספת הקטגוריה
     };
-
-      taskType: formData.taskType,
-      calculatedDuration,
-      blocksCount,
-      isEditing
-    });
 
     // עריכה - פשוט מעדכן
     if (isEditing) {

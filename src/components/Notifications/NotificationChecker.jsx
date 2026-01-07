@@ -132,12 +132,6 @@ function NotificationChecker() {
 
   // בדיקת משימות ושליחת התראות
   const checkAndNotify = useCallback(() => {
-    // דיבוג - הדפס פעם אחת
-      permission,
-      tasksCount: tasks?.length || 0,
-      settings
-    });
-    
     // אם אין הרשאה - לא עושים כלום
     if (permission !== 'granted') {
       return;

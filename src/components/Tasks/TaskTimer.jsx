@@ -500,11 +500,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     
     // אם עברנו למשימה אחרת וטיימר היה רץ
     if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
-        prevId,
-        newId,
-        elapsedSeconds: elapsedSecondsRef.current
-      });
-      
       if (saveProgressRef.current) {
         saveProgressRef.current(true, true).catch(err => {
           console.warn('⚠️ שמירה בעת מעבר משימה נכשלה:', err);

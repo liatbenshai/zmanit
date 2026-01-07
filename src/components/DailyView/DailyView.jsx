@@ -282,14 +282,6 @@ function DailyView() {
     
     const info = calculateAutoReschedule(tasks, editTask);
     setRescheduleInfo(info);
-    
-      remainingWorkToday: info.remainingWorkToday,
-      timeNeededToday: info.timeNeededToday,
-      freeTimeToday: info.freeTimeToday,
-      toMoveToTomorrow: info.tasksToMoveToTomorrow.length,
-      toMoveToToday: info.tasksToMoveToToday.length,
-      overflowingEndOfDay: info.tasksOverflowingEndOfDay?.length || 0  // ✅ חדש
-    });
   }, [tasks, selectedDate, currentTime.minutes]);
 
   const handleAutoReschedule = async () => {

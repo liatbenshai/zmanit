@@ -532,11 +532,6 @@ function scheduleTask(task, days, taskProgress, config) {
       progress.remaining = 0;
       
       // לא מעדכנים את totalScheduledMinutes כי זה מחוץ לשעות עבודה
-      
-        title: task.title,
-        time: task.due_time,
-        date: task.due_date
-      });
     }
     return;
   }
@@ -635,11 +630,6 @@ function scheduleTask(task, days, taskProgress, config) {
       progress.blocks.push(block);
       progress.scheduled = duration;
       progress.remaining = 0;
-      
-        title: task.title,
-        date: task.due_date,
-        time: task.due_time || 'לא נקבעה שעה'
-      });
       
       return;
     }
