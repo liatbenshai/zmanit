@@ -1003,7 +1003,6 @@ export async function syncLocalData() {
     localStorage.setItem('interruptions_history', JSON.stringify(localInterruptions));
   } catch (e) {}
 
-  console.log(`🔄 סונכרנו ${synced} רשומות`);
   return { synced };
 }
 

@@ -27,7 +27,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
 
   // קבלת המשימה העדכנית
   const currentTask = useMemo(() => {
-    console.log('🔍 TaskTimer - Finding task:', {
       taskProp: task ? { id: task.id, title: task.title } : 'null',
       tasksCount: tasks?.length
     });
@@ -374,7 +373,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     const newId = currentTask?.id;
     
     if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
-      console.log('🔄 Switching task, saving progress:', {
         prevId,
         newId,
         elapsedSeconds: elapsedSecondsRef.current

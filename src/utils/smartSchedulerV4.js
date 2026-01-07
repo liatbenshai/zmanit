@@ -1,4 +1,3 @@
-console.log('✅ smartSchedulerV4.js LOADED - FIXED VERSION!');
 /**
  * מנוע שיבוץ חכם - גרסה 4 מתוקנת
  * =====================================

@@ -133,7 +133,6 @@ function NotificationChecker() {
   // בדיקת משימות ושליחת התראות
   const checkAndNotify = useCallback(() => {
     // דיבוג - הדפס פעם אחת
-    console.log('🔔 NotificationChecker בודק:', {
       permission,
       tasksCount: tasks?.length || 0,
       settings
@@ -141,12 +140,10 @@ function NotificationChecker() {
     
     // אם אין הרשאה - לא עושים כלום
     if (permission !== 'granted') {
-      console.log('❌ אין הרשאת התראות:', permission);
       return;
     }
     
     if (!tasks || tasks.length === 0) {
-      console.log('❌ אין משימות');
       return;
     }
 
@@ -165,7 +162,6 @@ function NotificationChecker() {
       task.due_time
     );
     
-    console.log('📋 משימות להיום עם שעה:', todayTasksWithTime.length, 
       todayTasksWithTime.map(t => ({ title: t.title, due_time: t.due_time }))
     );
 

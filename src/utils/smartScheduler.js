@@ -533,7 +533,6 @@ function scheduleTask(task, days, taskProgress, config) {
       
       // לא מעדכנים את totalScheduledMinutes כי זה מחוץ לשעות עבודה
       
-      console.log('📌 משימה מחוץ לשעות עבודה:', {
         title: task.title,
         time: task.due_time,
         date: task.due_date
@@ -637,7 +636,6 @@ function scheduleTask(task, days, taskProgress, config) {
       progress.scheduled = duration;
       progress.remaining = 0;
       
-      console.log('📅 משימה בסוף שבוע:', {
         title: task.title,
         date: task.due_date,
         time: task.due_time || 'לא נקבעה שעה'

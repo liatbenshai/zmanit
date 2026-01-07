@@ -326,7 +326,6 @@ export function DeadlineConflictManager() {
         
       case 'start_task':
         // יש לממש הפעלת טיימר
-        console.log('Start task:', solution.action.taskId);
         // TODO: לחבר ל-TaskTimer
         break;
         

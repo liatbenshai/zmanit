@@ -100,6 +100,8 @@ export function TaskProvider({ children }) {
     }
     
     try {
+      const duration = taskData.estimatedDuration || taskData.estimated_duration || 0;
+      
       const taskToCreate = {
         user_id: userId,
         title: taskData.title?.trim(),
@@ -109,18 +111,16 @@ export function TaskProvider({ children }) {
         due_date: taskData.dueDate || taskData.due_date || null,
         due_time: taskData.dueTime || taskData.due_time || null,
         reminder_minutes: taskData.reminderMinutes || taskData.reminder_minutes ? parseInt(taskData.reminderMinutes || taskData.reminder_minutes) : null,
-        estimated_duration: taskData.estimatedDuration || taskData.estimated_duration ? parseInt(taskData.estimatedDuration || taskData.estimated_duration) : null,
+        estimated_duration: duration || null,
         task_type: taskData.taskType || taskData.task_type || 'other',
         task_parameter: taskData.taskParameter || taskData.task_parameter ? parseInt(taskData.taskParameter || taskData.task_parameter) : null,
         priority: taskData.priority || 'normal',
-        category: taskData.category || 'work'  // ✅ חדש: הוספת הקטגוריה
+        category: taskData.category || 'work'
       };
       
       if (!taskToCreate.title || taskToCreate.title.length === 0) {
         throw new Error('❌ חסרה כותרת משימה!');
       }
-      
-      const duration = taskToCreate.estimated_duration || 0;
       
       // אם המשימה ארוכה מ-45 דקות - פיצול אוטומטי
       if (duration > INTERVAL_DURATION) {
@@ -193,7 +193,6 @@ export function TaskProvider({ children }) {
       const taskType = updates.taskType ?? updates.task_type ?? null;
       const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
       
-      console.log('📝 עדכון משימה:', {
         taskId, 
         updates,
         resolved: { startDate, dueDate, dueTime }
@@ -295,7 +294,6 @@ export function TaskProvider({ children }) {
       return;
     }
     
-    console.log('🔄 toggleComplete:', {
       id: task.id, 
       title: task.title, 
       is_completed: task.is_completed,

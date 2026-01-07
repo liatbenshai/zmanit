@@ -120,7 +120,6 @@ function TaskTypeInsights() {
         break;
         
       default:
-        console.log('פעולה לא מוכרת:', rec.action);
     }
   };
 

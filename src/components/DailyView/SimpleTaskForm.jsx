@@ -642,7 +642,6 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     setLoading(true);
     
     try {
-      console.log('📝 Creating task data:', {
         ...taskData,
         blocksForToday,
         blocksCount
@@ -742,7 +741,6 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       category: selectedCategory  // ✅ חדש: הוספת הקטגוריה
     };
 
-    console.log('📋 Task submission:', {
       taskType: formData.taskType,
       calculatedDuration,
       blocksCount,
