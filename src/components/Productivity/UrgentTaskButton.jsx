@@ -165,7 +165,14 @@ function UrgentTaskButton() {
       // 2. הוספת המשימה הדחופה
       // ✅ תיקון: שימוש בשעה הנוכחית במקום 08:00
       const now = new Date();
-      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(Math.ceil(now.getMinutes() / 5) * 5).padStart(2, '0')}`;
+      let minutes = Math.ceil(now.getMinutes() / 5) * 5;
+      let hours = now.getHours();
+      // ✅ תיקון: אם הדקות מתעגלות ל-60, עוברים לשעה הבאה
+      if (minutes >= 60) {
+        minutes = 0;
+        hours = (hours + 1) % 24;
+      }
+      const currentTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
       
       await addTask({
         title: formData.title,
