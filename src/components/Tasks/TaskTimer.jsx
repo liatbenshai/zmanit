@@ -7,6 +7,74 @@ import toast from 'react-hot-toast';
 import Button from '../UI/Button';
 
 /**
+ * פונקציות עזר לניהול localStorage בפורמט אחיד
+ * ✅ תיקון: פורמט אחיד timer_v2_${id} לכל האפליקציה
+ */
+function getTimerKey(taskId) {
+  return taskId ? `timer_v2_${taskId}` : null;
+}
+
+function loadTimerState(taskId) {
+  const key = getTimerKey(taskId);
+  if (!key) return null;
+  
+  try {
+    const data = localStorage.getItem(key);
+    if (!data) return null;
+    
+    const parsed = JSON.parse(data);
+    return {
+      isRunning: parsed.isRunning || false,
+      startTime: parsed.startTime ? new Date(parsed.startTime) : null,
+      originalStartTime: parsed.originalStartTime ? new Date(parsed.originalStartTime) : null,
+      pausedAt: parsed.pausedAt ? new Date(parsed.pausedAt) : null,
+      elapsedSeconds: parsed.elapsedSeconds || 0,
+      isInterrupted: parsed.isInterrupted || false,
+    };
+  } catch (e) {
+    console.warn('שגיאה בטעינת מצב טיימר:', e);
+    return null;
+  }
+}
+
+function saveTimerState(taskId, state) {
+  const key = getTimerKey(taskId);
+  if (!key) return false;
+  
+  try {
+    const dataToSave = {
+      isRunning: state.isRunning || false,
+      startTime: state.startTime ? (state.startTime instanceof Date ? state.startTime.toISOString() : state.startTime) : null,
+      originalStartTime: state.originalStartTime ? (state.originalStartTime instanceof Date ? state.originalStartTime.toISOString() : state.originalStartTime) : null,
+      pausedAt: state.pausedAt ? (state.pausedAt instanceof Date ? state.pausedAt.toISOString() : state.pausedAt) : null,
+      elapsedSeconds: state.elapsedSeconds || 0,
+      isInterrupted: state.isInterrupted || false,
+      updatedAt: new Date().toISOString(),
+    };
+    
+    localStorage.setItem(key, JSON.stringify(dataToSave));
+    return true;
+  } catch (e) {
+    console.warn('שגיאה בשמירת מצב טיימר:', e);
+    return false;
+  }
+}
+
+function clearTimerState(taskId) {
+  const key = getTimerKey(taskId);
+  if (!key) return;
+  
+  try {
+    localStorage.removeItem(key);
+    // מחיקת גם המפתחות הישנים (לתאימות אחורה)
+    localStorage.removeItem(`timer_${taskId}_startTime`);
+    localStorage.removeItem(`timer_${taskId}_startTime_original`);
+  } catch (e) {
+    console.warn('שגיאה במחיקת מצב טיימר:', e);
+  }
+}
+
+/**
  * טיימר למשימה - פרומדורו
  */
 function TaskTimer({ task, onUpdate, onComplete }) {
@@ -34,9 +102,6 @@ function TaskTimer({ task, onUpdate, onComplete }) {
   // מניעת שמירות כפולות במקביל - עם timeout אוטומטי
   const savingRef = useRef(null); // Promise של השמירה הנוכחית
   const savingTimeoutRef = useRef(null);
-
-  // מפתח ב-localStorage לשמירת זמן התחלה
-  const timerStorageKey = currentTask ? `timer_${currentTask.id}_startTime` : null;
 
   // חישובים - יכולים להיות גם כשאין משימה (יחזירו 0)
   const timeSpent = currentTask?.time_spent ? parseInt(currentTask.time_spent) : 0;
@@ -105,28 +170,24 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     }
   }, [currentTask?.estimated_duration]);
 
-  // טעינת זמן התחלה מ-localStorage כשהטיימר נטען
+  // ✅ טעינת זמן התחלה מ-localStorage כשהטיימר נטען - פורמט v2 אחיד
   useEffect(() => {
-    if (currentTask?.id && timerStorageKey) {
-      const savedStartTime = localStorage.getItem(timerStorageKey);
-      const savedOriginalStartTime = localStorage.getItem(`${timerStorageKey}_original`);
+    if (currentTask?.id) {
+      const savedState = loadTimerState(currentTask.id);
       
-      if (savedStartTime) {
-        const start = new Date(savedStartTime);
+      if (savedState && savedState.startTime) {
+        const start = savedState.startTime;
         const now = new Date();
         const elapsed = Math.floor((now - start) / 1000);
 
-        if (elapsed > 0) {
+        if (elapsed > 0 && savedState.isRunning) {
           setStartTime(start);
           setElapsedSeconds(elapsed);
           setIsRunning(true);
           
-          // אם יש זמן התחלה מקורי, נשתמש בו
-          if (savedOriginalStartTime) {
-            const originalStart = new Date(savedOriginalStartTime);
-            setOriginalStartTime(originalStart);
+          if (savedState.originalStartTime) {
+            setOriginalStartTime(savedState.originalStartTime);
           } else {
-            // אם אין, נשתמש ב-startTime כ-originalStartTime
             setOriginalStartTime(start);
           }
 
@@ -144,14 +205,19 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                 });
               }
             }
-          }, 2000); // נמתין 2 שניות כדי לוודא שהכל נטען
-        } else {
-          localStorage.removeItem(timerStorageKey);
-          localStorage.removeItem(`${timerStorageKey}_original`);
+          }, 2000);
+        } else if (!savedState.isRunning && savedState.elapsedSeconds > 0) {
+          // טיימר היה מושהה - שחזור מצב
+          setElapsedSeconds(savedState.elapsedSeconds);
+          if (savedState.originalStartTime) {
+            setOriginalStartTime(savedState.originalStartTime);
+          }
+        } else if (elapsed <= 0) {
+          clearTimerState(currentTask.id);
         }
       }
     }
-  }, [currentTask?.id, timerStorageKey]);
+  }, [currentTask?.id]);
 
   // עדכון זמן כל שנייה
   useEffect(() => {
@@ -334,19 +400,22 @@ function TaskTimer({ task, onUpdate, onComplete }) {
       // אם יש startTime קיים, נשתמש בו (למקרה שהטיימר היה מושהה)
       if (!startTime) {
         setStartTime(now);
-        // שמירת זמן התחלה ב-localStorage
-        if (currentTask?.id) {
-          localStorage.setItem(timerStorageKey, now.toISOString());
-        }
       }
       // שמירת זמן התחלה מקורי (אם עדיין לא נשמר)
       if (!originalStartTime) {
         setOriginalStartTime(now);
-        // שמירה ב-localStorage
-        if (currentTask?.id) {
-          localStorage.setItem(`${timerStorageKey}_original`, now.toISOString());
-        }
       }
+      
+      // ✅ שמירה ב-localStorage בפורמט אחיד v2
+      if (currentTask?.id) {
+        saveTimerState(currentTask.id, {
+          isRunning: true,
+          startTime: startTime || now,
+          originalStartTime: originalStartTime || now,
+          elapsedSeconds: 0,
+        });
+      }
+      
       setIsRunning(true);
       toast.success('טיימר הופעל');
     }
@@ -354,6 +423,17 @@ function TaskTimer({ task, onUpdate, onComplete }) {
   
   const pauseTimer = async () => {
     setIsRunning(false);
+    
+    // ✅ עדכון localStorage בפורמט v2
+    if (currentTask?.id) {
+      saveTimerState(currentTask.id, {
+        isRunning: false,
+        startTime: startTime,
+        originalStartTime: originalStartTime,
+        elapsedSeconds: elapsedSeconds,
+        pausedAt: new Date(),
+      });
+    }
     
     // ✅ שמירת הזמן שעבד עד עכשיו
     if (elapsedSeconds >= 60) {
@@ -392,9 +472,9 @@ function TaskTimer({ task, onUpdate, onComplete }) {
       }
     }
     
-    // ניקוי מ-localStorage
+    // ✅ ניקוי מ-localStorage בפורמט v2
     if (currentTask?.id) {
-      localStorage.removeItem(timerStorageKey);
+      clearTimerState(currentTask.id);
     }
     
     setElapsedSeconds(0);
@@ -408,10 +488,9 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     setStartTime(null);
     setOriginalStartTime(null); // גם מאפסים את הזמן המקורי
     
-    // ניקוי מ-localStorage
+    // ✅ ניקוי מ-localStorage בפורמט v2
     if (currentTask?.id) {
-      localStorage.removeItem(timerStorageKey);
-      localStorage.removeItem(`${timerStorageKey}_original`);
+      clearTimerState(currentTask.id);
     }
   };
 
@@ -451,9 +530,14 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         if (!reset && startTime) {
           const now = new Date();
           setStartTime(now);
-          // עדכון localStorage
+          // ✅ עדכון localStorage בפורמט v2
           if (currentTask?.id) {
-            localStorage.setItem(timerStorageKey, now.toISOString());
+            saveTimerState(currentTask.id, {
+              isRunning: true,
+              startTime: now,
+              originalStartTime: originalStartTime,
+              elapsedSeconds: 0,
+            });
           }
           // מאפסים את elapsedSeconds כי הזמן כבר נשמר
           setElapsedSeconds(0);
@@ -501,6 +585,7 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     
     // אם עברנו למשימה אחרת וטיימר היה רץ
     if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
+      console.log('🔄 מעבר משימה:', {
         prevId,
         newId,
         elapsedSeconds: elapsedSecondsRef.current
@@ -770,6 +855,15 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                 <Button
                   onClick={() => {
                     setIsRunning(true);
+                    // ✅ עדכון localStorage בפורמט v2
+                    if (currentTask?.id) {
+                      saveTimerState(currentTask.id, {
+                        isRunning: true,
+                        startTime: new Date(),
+                        originalStartTime: originalStartTime,
+                        elapsedSeconds: 0,
+                      });
+                    }
                     toast.success('▶ ממשיכה לעבוד!');
                   }}
                   className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold shadow-lg text-lg py-3"
@@ -907,4 +1001,3 @@ function TaskTimer({ task, onUpdate, onComplete }) {
 }
 
 export default TaskTimer;
-
