@@ -249,16 +249,35 @@ export function DeadlineConflictManager() {
   const [dismissedConflicts, setDismissedConflicts] = useState(new Set());
   const [lastCheck, setLastCheck] = useState(null);
   
+  // ✅ בדיקה אם יש טיימר רץ על משימה מסוימת
+  const isTimerRunningOnTask = useCallback((taskId) => {
+    try {
+      // בדיקת כל המפתחות האפשריים
+      const keys = [`timer_v2_${taskId}`, `timer_${taskId}_startTime`];
+      for (const key of keys) {
+        const data = localStorage.getItem(key);
+        if (data) {
+          const parsed = JSON.parse(data);
+          if (parsed.isRunning === true && !parsed.isInterrupted) {
+            return true;
+          }
+        }
+      }
+    } catch (e) {}
+    return false;
+  }, []);
+  
   // בדיקת התנגשויות
   const checkConflicts = useCallback(() => {
     if (!tasks || tasks.length === 0) return;
     
     const conflicts = detectDeadlineConflicts(tasks);
     
-    // מצא את ההתנגשות הדחופה ביותר שלא נדחתה
+    // מצא את ההתנגשות הדחופה ביותר שלא נדחתה ושאין עליה טיימר רץ
     const urgentConflict = conflicts.find(c => 
       !dismissedConflicts.has(c.taskId) && 
-      (c.severity === 'critical' || c.severity === 'warning')
+      (c.severity === 'critical' || c.severity === 'warning') &&
+      !isTimerRunningOnTask(c.taskId) // ✅ לא להתריע על משימה שעובדים עליה!
     );
     
     if (urgentConflict && !currentConflict) {
@@ -266,7 +285,7 @@ export function DeadlineConflictManager() {
     }
     
     setLastCheck(new Date());
-  }, [tasks, dismissedConflicts, currentConflict]);
+  }, [tasks, dismissedConflicts, currentConflict, isTimerRunningOnTask]);
   
   // בדיקה תקופתית
   useEffect(() => {
@@ -296,6 +315,13 @@ export function DeadlineConflictManager() {
       return () => clearTimeout(timeout);
     }
   }, [tasks, checkConflicts]);
+  
+  // ✅ סגור התראה אם התחיל טיימר על המשימה
+  useEffect(() => {
+    if (currentConflict && isTimerRunningOnTask(currentConflict.taskId)) {
+      setCurrentConflict(null);
+    }
+  }, [currentConflict, isTimerRunningOnTask]);
   
   // טיפול בסגירת ההתראה
   const handleClose = () => {
