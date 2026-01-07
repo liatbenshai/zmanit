@@ -21,6 +21,7 @@ import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import DailySummary from './components/Productivity/DailySummary';
 import NotificationChecker from './components/Notifications/NotificationChecker';
 import OverdueTaskManager from './components/Notifications/OverdueTaskManager';
+import { DeadlineConflictManager } from './components/Notifications/DeadlineConflictModal';
 import EndOfDaySummary from './components/Learning/EndOfDaySummary';
 import { useTasks } from './hooks/useTasks';
 
@@ -88,6 +89,9 @@ function App() {
       
       {/* ✅ חדש: סיכום יומי אוטומטי בסוף היום */}
       {user && <EndOfDaySummaryWrapper />}
+      
+      {/* ✅ חדש: מנהל התנגשויות דדליין */}
+      {user && <DeadlineConflictManager />}
 
       {/* כותרת עליונה */}
       {user && <Header />}

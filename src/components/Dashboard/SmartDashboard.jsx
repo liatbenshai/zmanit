@@ -11,6 +11,7 @@ import WeeklyReview from '../Analytics/WeeklyReview';
 import AdminSettings from '../Admin/AdminSettings';
 import InterruptionsTracker from './InterruptionsTracker'; // ✅ חדש
 import SmartRecommendationsPanel from './SmartRecommendationsPanel'; // ✅ המלצות חכמות
+import { DeadlineConflictBanner } from '../Notifications/DeadlineConflictModal'; // ✅ התראות דדליין
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
@@ -345,6 +346,11 @@ function SmartDashboard() {
           )}
         </div>
       </motion.div>
+
+      {/* === ✅ התראות התנגשות דדליין === */}
+      <div className="mb-6">
+        <DeadlineConflictBanner />
+      </div>
 
       {/* === Progress Ring + Quick Stats === */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

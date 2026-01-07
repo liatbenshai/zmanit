@@ -163,12 +163,16 @@ function UrgentTaskButton() {
       }
 
       // 2. הוספת המשימה הדחופה
+      // ✅ תיקון: שימוש בשעה הנוכחית במקום 08:00
+      const now = new Date();
+      const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(Math.ceil(now.getMinutes() / 5) * 5).padStart(2, '0')}`;
+      
       await addTask({
         title: formData.title,
         taskType: formData.taskType,
         estimatedDuration: formData.estimatedDuration,
         dueDate: formData.dueDate,
-        dueTime: formData.dueTime || '08:00',
+        dueTime: formData.dueTime || currentTime, // ✅ שעה נוכחית במקום 08:00
         priority: 'urgent'
       });
 
