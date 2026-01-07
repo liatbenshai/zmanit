@@ -163,23 +163,29 @@ function UrgentTaskButton() {
       }
 
       // 2. הוספת המשימה הדחופה
-      // ✅ תיקון: שימוש בשעה הנוכחית במקום 08:00
+      // ✅ תיקון: הדדליין = שעה נוכחית + משך המשימה (לא השעה הנוכחית!)
       const now = new Date();
-      let minutes = Math.ceil(now.getMinutes() / 5) * 5;
-      let hours = now.getHours();
-      // ✅ תיקון: אם הדקות מתעגלות ל-60, עוברים לשעה הבאה
-      if (minutes >= 60) {
-        minutes = 0;
-        hours = (hours + 1) % 24;
+      const taskDurationMinutes = formData.estimatedDuration || 60;
+      
+      // חישוב שעת סיום = עכשיו + משך המשימה
+      const deadlineDate = new Date(now.getTime() + taskDurationMinutes * 60 * 1000);
+      let deadlineHours = deadlineDate.getHours();
+      let deadlineMinutes = Math.ceil(deadlineDate.getMinutes() / 5) * 5;
+      if (deadlineMinutes >= 60) {
+        deadlineMinutes = 0;
+        deadlineHours = (deadlineHours + 1) % 24;
       }
-      const currentTime = `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+      const deadlineTime = `${String(deadlineHours).padStart(2, '0')}:${String(deadlineMinutes).padStart(2, '0')}`;
+      
+      // ✅ תיקון: אם הדדליין עובר חצות, עדכון גם התאריך (שימוש בתאריך מקומי)
+      const deadlineDateISO = `${deadlineDate.getFullYear()}-${String(deadlineDate.getMonth() + 1).padStart(2, '0')}-${String(deadlineDate.getDate()).padStart(2, '0')}`;
       
       await addTask({
         title: formData.title,
         taskType: formData.taskType,
         estimatedDuration: formData.estimatedDuration,
-        dueDate: formData.dueDate,
-        dueTime: formData.dueTime || currentTime, // ✅ שעה נוכחית במקום 08:00
+        dueDate: formData.dueTime ? formData.dueDate : deadlineDateISO, // אם המשתמש בחר שעה, השתמש בתאריך שלו
+        dueTime: formData.dueTime || deadlineTime, // ✅ דדליין = עכשיו + משך המשימה
         priority: 'urgent'
       });
 
