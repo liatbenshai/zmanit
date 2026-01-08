@@ -36,6 +36,16 @@ function FocusedDashboard() {
     }
   }, []);
 
+  // ✅ בדיקה אם יש משימה להפעלה מהתראה
+  useEffect(() => {
+    const startTaskId = localStorage.getItem('start_task_id');
+    if (startTaskId) {
+      setActiveTaskId(startTaskId);
+      localStorage.removeItem('start_task_id');
+      toast.success('🎯 משימה נבחרה - התחל לעבוד!');
+    }
+  }, []);
+
   const requestNotificationPermission = async () => {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();

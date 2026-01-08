@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../hooks/useTasks';
 import { useAuth } from '../hooks/useAuth';
+import { useSettings } from '../hooks/useSettings';
 import { TASK_TYPES } from '../config/taskTypes';
 import { getInterruptionStats, getLearningData } from '../services/supabase';
 import LearningInsightsPanel from '../components/Learning/LearningInsightsPanel';
@@ -15,6 +16,7 @@ import toast from 'react-hot-toast';
 function TaskInsights() {
   const { tasks } = useTasks();
   const { user } = useAuth();
+  const { settings, updateSettings } = useSettings();
   
   const [interruptionStats, setInterruptionStats] = useState(null);
   const [learningData, setLearningData] = useState([]);
@@ -214,10 +216,72 @@ function TaskInsights() {
     setAcceptedSuggestions(newAccepted);
     localStorage.setItem(`accepted_suggestions_${user?.id}`, JSON.stringify(newAccepted));
 
-    // TODO: יישום בפועל של ההצעה
-    // לדוגמה: עדכון יחס זמן ב-taskTypes
-    
-    toast.success('ההצעה התקבלה! השינויים יופיעו במשימות הבאות');
+    // ✅ יישום בפועל של ההצעה
+    try {
+      switch (suggestion.type) {
+        case 'time_correction':
+          // עדכון יחס זמן לסוג משימה
+          if (suggestion.data?.taskType && suggestion.data?.newRatio) {
+            const currentTaskTypes = settings?.task_types || {};
+            const updatedTaskTypes = {
+              ...currentTaskTypes,
+              [suggestion.data.taskType]: {
+                ...currentTaskTypes[suggestion.data.taskType],
+                timeRatio: suggestion.data.newRatio
+              }
+            };
+            await updateSettings('task_types', updatedTaskTypes);
+            toast.success(`יחס הזמן ל-${suggestion.data.taskType} עודכן ל-${suggestion.data.newRatio}x`);
+          }
+          break;
+          
+        case 'schedule':
+          // חסימת שעות לעבודה עמוקה
+          if (suggestion.data?.peakHour !== undefined) {
+            const blockedHours = settings?.blocked_hours || [];
+            if (!blockedHours.includes(suggestion.data.peakHour)) {
+              await updateSettings('blocked_hours', [...blockedHours, suggestion.data.peakHour]);
+            }
+            toast.success(`שעה ${suggestion.data.peakHour}:00 נחסמה להפרעות`);
+          }
+          break;
+          
+        case 'estimation':
+          // הוספת buffer אוטומטי
+          await updateSettings('auto_buffer', { enabled: true, percent: 20 });
+          toast.success('נוסף buffer אוטומטי של 20% לכל משימה');
+          break;
+          
+        case 'pattern':
+          // שמירת הדפוס בהגדרות
+          if (suggestion.data?.busyDay !== undefined) {
+            const busyDays = settings?.busy_days || [];
+            if (!busyDays.includes(suggestion.data.busyDay)) {
+              await updateSettings('busy_days', [...busyDays, suggestion.data.busyDay]);
+            }
+          }
+          toast.success('הדפוס נשמר - המערכת תציע משימות קלות יותר');
+          break;
+          
+        case 'focus':
+          // הגדרת שעות קבועות לסוג משימה
+          if (suggestion.data?.taskType) {
+            const focusSchedule = settings?.focus_schedule || {};
+            await updateSettings('focus_schedule', {
+              ...focusSchedule,
+              [suggestion.data.taskType]: { enabled: true, preferredHours: '09:00-11:00' }
+            });
+            toast.success('נקבעו שעות קבועות לטיפול');
+          }
+          break;
+          
+        default:
+          toast.success('ההצעה התקבלה! השינויים יופיעו במשימות הבאות');
+      }
+    } catch (error) {
+      console.error('שגיאה ביישום ההצעה:', error);
+      toast.error('שגיאה בשמירת השינויים');
+    }
   };
 
   // דחיית הצעה

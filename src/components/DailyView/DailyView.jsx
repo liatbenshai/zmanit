@@ -213,6 +213,7 @@ function DailyView() {
   const [showRescheduleModal, setShowRescheduleModal] = useState(false);
   const [dragOverTime, setDragOverTime] = useState(null);
   const [taskOrder, setTaskOrder] = useState([]);
+  const [highlightedTaskId, setHighlightedTaskId] = useState(null); // ✅ משימה מודגשת
   const timelineRef = useRef(null);
   
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -227,6 +228,27 @@ function DailyView() {
   } = useGoogleCalendar();
   
   const [showGoogleMenu, setShowGoogleMenu] = useState(false);
+  
+  // ✅ בדיקה אם יש משימה להפעלה מהתראה
+  useEffect(() => {
+    const startTaskId = localStorage.getItem('start_task_id');
+    if (startTaskId) {
+      setHighlightedTaskId(startTaskId);
+      localStorage.removeItem('start_task_id');
+      toast.success('🎯 משימה נבחרה - לחצי על ▶️ להתחיל!');
+      
+      // גלילה למשימה אחרי טעינה
+      setTimeout(() => {
+        const taskElement = document.getElementById(`task-${startTaskId}`);
+        if (taskElement) {
+          taskElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+      }, 500);
+      
+      // הסרת ההדגשה אחרי 5 שניות
+      setTimeout(() => setHighlightedTaskId(null), 5000);
+    }
+  }, []);
   
   useEffect(() => {
     const syncGoogleForDate = async () => {
@@ -806,6 +828,7 @@ function DailyView() {
     return (
     <motion.div
       key={block.id || block.taskId || `block-${index}`}
+      id={`task-${block.taskId || block.id}`}
       layout
       initial={{ opacity: 0, y: 20 }}
       animate={{ 
@@ -817,6 +840,7 @@ function DailyView() {
         relative
         ${dragOverIndex === index ? 'ring-2 ring-blue-500 ring-dashed rounded-xl' : ''}
         ${isFromGoogle ? 'ring-1 ring-purple-400 bg-purple-50 dark:bg-purple-900/20' : ''}
+        ${highlightedTaskId === (block.taskId || block.id) ? 'ring-2 ring-yellow-400 bg-yellow-50 dark:bg-yellow-900/20 animate-pulse' : ''}
       `}
       draggable={!isFromGoogle}
       onDragStart={(e) => !isFromGoogle && handleReorderDragStart(e, index)}

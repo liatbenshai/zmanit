@@ -38,7 +38,7 @@ const MOTIVATIONAL_QUOTES = [
  * ✅ ניתוח הפרעות
  */
 function SmartDashboard() {
-  const { tasks, loading, toggleComplete, loadTasks } = useTasks();
+  const { tasks, loading, toggleComplete, loadTasks, editTask, addTask } = useTasks();
   const { user } = useAuth();
   
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -713,14 +713,22 @@ function SmartDashboard() {
       <SmartRecommendationsPanel 
         tasks={tasks}
         onUpdateTask={async (taskId, updates) => {
-          // TODO: implement update task
-          toast.success('המשימה עודכנה');
-          loadTasks();
+          try {
+            await editTask(taskId, updates);
+            toast.success('המשימה עודכנה');
+            loadTasks();
+          } catch (err) {
+            toast.error('שגיאה בעדכון המשימה');
+          }
         }}
         onAddTask={async (taskData) => {
-          // TODO: implement add task
-          toast.success('משימה נוספה');
-          loadTasks();
+          try {
+            await addTask(taskData);
+            toast.success('משימה נוספה');
+            loadTasks();
+          } catch (err) {
+            toast.error('שגיאה בהוספת המשימה');
+          }
         }}
         onRefresh={loadTasks}
       />
@@ -763,10 +771,17 @@ function SmartDashboard() {
               tasks={tasks}
               date={today}
               onClose={() => setShowDailySummary(false)}
-              onMoveTasks={(tasksToMove, targetDate) => {
-                // TODO: implement move tasks
-                toast.success(`${tasksToMove.length} משימות הועברו`);
-                setShowDailySummary(false);
+              onMoveTasks={async (tasksToMove, targetDate) => {
+                try {
+                  for (const taskId of tasksToMove) {
+                    await editTask(taskId, { due_date: targetDate, was_deferred: true });
+                  }
+                  toast.success(`${tasksToMove.length} משימות הועברו`);
+                  loadTasks();
+                  setShowDailySummary(false);
+                } catch (err) {
+                  toast.error('שגיאה בהעברת המשימות');
+                }
               }}
             />
           </Modal>

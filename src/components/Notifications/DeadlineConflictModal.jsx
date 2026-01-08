@@ -370,8 +370,9 @@ export function DeadlineConflictManager() {
         break;
         
       case 'start_task':
-        // יש לממש הפעלת טיימר
-        // TODO: לחבר ל-TaskTimer
+        // ✅ שמור את המשימה להפעלה ונווט לתצוגה יומית
+        localStorage.setItem('start_task_id', solution.action.taskId);
+        window.location.href = '/daily';
         break;
         
       case 'cancel_task':

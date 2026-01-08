@@ -394,20 +394,53 @@ function SmartWorkIntake({ onClose, onCreated }) {
   };
 
   // חישוב מחדש אחרי בחירת משימות להזזה
-  const recalculateWithMovedTasks = () => {
-    // TODO: לוגיקה מורכבת יותר - להזיז את המשימות הנבחרות ולחשב מחדש
-    toast.success('המשימות יוזזו אחרי הדדליין');
-    // בינתיים - פשוט מוסיפים את הזמן שהתפנה
-    const freedTime = selectedToMove.reduce((sum, taskId) => {
-      const task = tasksToMove.find(t => t.id === taskId);
-      return sum + (task?.estimated_duration || 30);
-    }, 0);
+  const recalculateWithMovedTasks = async () => {
+    if (selectedToMove.length === 0) {
+      toast.error('בחרי משימות להזזה');
+      return;
+    }
     
-    setAnalysis(prev => ({
-      ...prev,
-      totalFreeTime: prev.totalFreeTime + freedTime,
-      hasEnoughTime: prev.totalFreeTime + freedTime >= prev.totalMinutes
-    }));
+    // ✅ מחשב את התאריך אחרי הדדליין של המשימה החדשה
+    const deadline = formData.dueDate || new Date().toISOString().split('T')[0];
+    const dayAfterDeadline = new Date(deadline);
+    dayAfterDeadline.setDate(dayAfterDeadline.getDate() + 1);
+    const newDate = dayAfterDeadline.toISOString().split('T')[0];
+    
+    // ✅ מזיז את כל המשימות הנבחרות
+    try {
+      setLoading(true);
+      for (const taskId of selectedToMove) {
+        const task = tasksToMove.find(t => t.id === taskId);
+        if (task) {
+          await editTask(taskId, { 
+            due_date: newDate,
+            was_deferred: true 
+          });
+        }
+      }
+      
+      // ✅ מחשב כמה זמן התפנה
+      const freedTime = selectedToMove.reduce((sum, taskId) => {
+        const task = tasksToMove.find(t => t.id === taskId);
+        return sum + (task?.estimated_duration || 30);
+      }, 0);
+      
+      // ✅ מעדכן את הניתוח
+      setAnalysis(prev => ({
+        ...prev,
+        totalFreeTime: prev.totalFreeTime + freedTime,
+        hasEnoughTime: prev.totalFreeTime + freedTime >= prev.totalMinutes
+      }));
+      
+      await loadTasks();
+      toast.success(`${selectedToMove.length} משימות הועברו ל-${newDate}`);
+      setSelectedToMove([]);
+    } catch (err) {
+      console.error('שגיאה בהזזת משימות:', err);
+      toast.error('שגיאה בהזזת משימות');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const selectedType = TASK_TYPES[formData.taskType];
