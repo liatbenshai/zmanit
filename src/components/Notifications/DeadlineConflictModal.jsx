@@ -133,7 +133,7 @@ function DeadlineConflictModal({ conflict, onClose, onAction }) {
                 <div className="mt-2 space-y-1 text-sm text-gray-600 dark:text-gray-400">
                   <div className="flex items-center gap-2">
                     <span>📅</span>
-                    <span>דדליין: {conflict.task.due_date} {conflict.task.due_time || ''}</span>
+                    <span>דדליין: {conflict.deadlineStr || `${conflict.task.due_date} ${conflict.task.due_time || ''}`}</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <span>⏱️</span>
@@ -476,7 +476,7 @@ export function DeadlineConflictBanner() {
             <span>{conflict.severity === 'critical' ? '🔴' : '🟠'}</span>
             <span className="truncate">{conflict.task.title}</span>
             <span className="text-xs text-gray-500 whitespace-nowrap">
-              ({conflict.task.due_time || 'ללא שעה'})
+              (עד {conflict.deadlineStr?.split(' ')[1] || conflict.task.due_time || 'ללא שעה'})
             </span>
           </div>
         ))}

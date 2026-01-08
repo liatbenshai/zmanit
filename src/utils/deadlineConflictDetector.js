@@ -250,10 +250,18 @@ function buildScheduledTimeline(tasks, fromDate) {
     .map(task => {
       // ✅ חשב זמן כולל כולל אינטרוולים
       const totalTimeSpent = getTotalTimeSpent(task, tasks);
+      const taskDuration = task.estimated_duration || 30;
+      
+      // ✅ תיקון: הדדליין = זמן התחלה + משך המשימה
+      const startTime = parseDateTime(task.due_date, task.due_time);
+      const deadline = startTime 
+        ? new Date(startTime.getTime() + taskDuration * 60 * 1000)
+        : parseDateTime(task.due_date, null); // ברירת מחדל: סוף יום
+      
       return {
         ...task,
-        deadline: parseDateTime(task.due_date, task.due_time),
-        remainingDuration: Math.max(0, (task.estimated_duration || 30) - totalTimeSpent)
+        deadline,
+        remainingDuration: Math.max(0, taskDuration - totalTimeSpent)
       };
     })
     .sort((a, b) => a.deadline - b.deadline);
@@ -263,8 +271,14 @@ function buildScheduledTimeline(tasks, fromDate) {
  * ניתוח דדליין של משימה בודדת
  */
 function analyzeTaskDeadline(task, scheduledTasks, allTasks, now) {
-  const deadline = parseDateTime(task.due_date, task.due_time);
-  if (!deadline) return null;
+  // ✅ תיקון: הדדליין = זמן התחלה + משך המשימה
+  // due_time הוא זמן ההתחלה, לא הסיום!
+  const startTime = parseDateTime(task.due_date, task.due_time);
+  if (!startTime) return null;
+  
+  // חישוב הדדליין האמיתי = התחלה + משך
+  const taskDuration = task.estimated_duration || 30;
+  const deadline = new Date(startTime.getTime() + taskDuration * 60 * 1000);
   
   // ✅ אם יש טיימר רץ על המשימה או על אחד מהאינטרוולים - לא מציגים התראה!
   if (isTimerRunningOnTaskOrIntervals(task.id, allTasks)) {
@@ -273,6 +287,10 @@ function analyzeTaskDeadline(task, scheduledTasks, allTasks, now) {
   
   // כמה זמן נשאר עד הדדליין
   const minutesToDeadline = Math.floor((deadline - now) / (1000 * 60));
+  
+  // ✅ פורמט הדדליין לתצוגה
+  const deadlineTimeStr = `${String(deadline.getHours()).padStart(2, '0')}:${String(deadline.getMinutes()).padStart(2, '0')}`;
+  
   if (minutesToDeadline < 0) {
     // כבר עבר הדדליין!
     return {
@@ -281,9 +299,9 @@ function analyzeTaskDeadline(task, scheduledTasks, allTasks, now) {
       type: 'overdue',
       severity: 'critical',
       deadline,
-      deadlineStr: `${task.due_date} ${task.due_time || ''}`,
+      deadlineStr: `${task.due_date} ${deadlineTimeStr}`,
       minutesToDeadline,
-      message: `🚨 הדדליין עבר! המשימה הייתה צריכה להסתיים ב-${task.due_time || 'סוף היום'}`,
+      message: `🚨 הדדליין עבר! המשימה הייתה צריכה להסתיים ב-${deadlineTimeStr}`,
       solutions: generateOverdueSolutions(task, allTasks)
     };
   }
