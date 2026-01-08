@@ -10,7 +10,18 @@ const DEFAULT_SETTINGS = {
   reminderMinutes: 5,
   notifyOnTime: true,
   soundEnabled: true,
-  repeatEveryMinutes: 10
+  repeatEveryMinutes: 10,
+  dailySummaryEnabled: true,
+  dailySummaryTime: '17:00'
+};
+
+// סוגי צלילים
+const SOUND_TYPES = {
+  default: { freq1: 800, freq2: 1000, duration: 0.3 },
+  success: { freq1: 523, freq2: 659, freq3: 784, duration: 0.2 },  // C-E-G chord
+  warning: { freq1: 440, freq2: 440, duration: 0.4 },  // A note repeated
+  error: { freq1: 200, freq2: 150, duration: 0.5 },  // Low descending
+  complete: { freq1: 392, freq2: 523, freq3: 659, freq4: 784, duration: 0.15 }  // Victory fanfare
 };
 
 /**
@@ -119,39 +130,51 @@ export function NotificationProvider({ children }) {
     }
   };
 
-  // השמעת צליל
-  const playSound = useCallback(() => {
+  // השמעת צליל לפי סוג
+  const playSound = useCallback((type = 'default') => {
     if (!settings.soundEnabled) return;
     
     try {
       const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      const soundConfig = SOUND_TYPES[type] || SOUND_TYPES.default;
       
-      const osc1 = audioContext.createOscillator();
-      const gain1 = audioContext.createGain();
-      osc1.connect(gain1);
-      gain1.connect(audioContext.destination);
-      osc1.frequency.value = 800;
-      osc1.type = 'sine';
-      gain1.gain.setValueAtTime(0.3, audioContext.currentTime);
-      gain1.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-      osc1.start(audioContext.currentTime);
-      osc1.stop(audioContext.currentTime + 0.5);
+      const playTone = (freq, startTime, duration, volume = 0.3) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(volume, startTime);
+        gain.gain.exponentialRampToValueAtTime(0.01, startTime + duration);
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+      };
       
-      setTimeout(() => {
-        try {
-          const osc2 = audioContext.createOscillator();
-          const gain2 = audioContext.createGain();
-          osc2.connect(gain2);
-          gain2.connect(audioContext.destination);
-          osc2.frequency.value = 1000;
-          osc2.type = 'sine';
-          gain2.gain.setValueAtTime(0.3, audioContext.currentTime);
-          gain2.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.5);
-          osc2.start(audioContext.currentTime);
-          osc2.stop(audioContext.currentTime + 0.5);
-        } catch (e) {}
-      }, 250);
+      const now = audioContext.currentTime;
+      const { duration } = soundConfig;
+      
+      if (type === 'success' || type === 'complete') {
+        // צליל הצלחה - אקורד עולה
+        playTone(soundConfig.freq1, now, duration, 0.25);
+        playTone(soundConfig.freq2, now + duration, duration, 0.25);
+        if (soundConfig.freq3) playTone(soundConfig.freq3, now + duration * 2, duration, 0.25);
+        if (soundConfig.freq4) playTone(soundConfig.freq4, now + duration * 3, duration * 1.5, 0.3);
+      } else if (type === 'warning') {
+        // צליל אזהרה - צליל חוזר
+        playTone(soundConfig.freq1, now, duration, 0.3);
+        playTone(soundConfig.freq2, now + duration * 1.5, duration, 0.3);
+      } else if (type === 'error') {
+        // צליל שגיאה - יורד
+        playTone(soundConfig.freq1, now, duration, 0.35);
+        playTone(soundConfig.freq2, now + duration, duration * 1.2, 0.3);
+      } else {
+        // צליל רגיל
+        playTone(soundConfig.freq1, now, duration, 0.3);
+        playTone(soundConfig.freq2, now + duration + 0.1, duration, 0.3);
+      }
     } catch (e) {
+      // שגיאה בהשמעת צליל - לא קריטי
     }
   }, [settings.soundEnabled]);
 
@@ -159,9 +182,38 @@ export function NotificationProvider({ children }) {
   const sendNotification = useCallback((title, options = {}) => {
     if (permission !== 'granted') return null;
     
-    playSound();
+    const soundType = options.soundType || 'default';
+    playSound(soundType);
+    
     return sendLocalNotification(title, options);
   }, [permission, playSound]);
+
+  // התראת הצלחה (השלמת משימה)
+  const notifySuccess = useCallback((title, body) => {
+    return sendNotification(title, {
+      body,
+      tag: 'success-' + Date.now(),
+      soundType: 'success'
+    });
+  }, [sendNotification]);
+
+  // התראת אזהרה
+  const notifyWarning = useCallback((title, body) => {
+    return sendNotification(title, {
+      body,
+      tag: 'warning-' + Date.now(),
+      soundType: 'warning'
+    });
+  }, [sendNotification]);
+
+  // התראת השלמת משימה (fanfare!)
+  const notifyComplete = useCallback((taskTitle) => {
+    playSound('complete');
+    return sendNotification('🎉 כל הכבוד!', {
+      body: `"${taskTitle}" הושלמה בהצלחה!`,
+      tag: 'complete-' + Date.now()
+    });
+  }, [sendNotification, playSound]);
 
   // בדיקת התראות
   const testNotification = useCallback(() => {
@@ -178,6 +230,10 @@ export function NotificationProvider({ children }) {
     requestPermission,
     saveSettings,
     sendNotification,
+    notifySuccess,
+    notifyWarning,
+    notifyComplete,
+    playSound,
     testNotification
   };
 

@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import TaskTimerWithInterruptions from '../Tasks/TaskTimerWithInterruptions';
 import { getTaskType, getAllTaskTypes } from '../../config/taskTypes';
 import { recordTaskCompletion } from '../../utils/taskLearning';
+import ConfirmDialog from '../UI/ConfirmDialog';
 
 // קבלת TASK_TYPES מ-config (לתאימות לאחור)
 const TASK_TYPES = getAllTaskTypes();
@@ -202,6 +203,7 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
   const { toggleComplete, removeTask, editTask, tasks } = useTasks();
   const [showTimer, setShowTimer] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [liveSpent, setLiveSpent] = useState(task.time_spent || 0);
   const [isTimerRunning, setIsTimerRunning] = useState(false);
   const [showFeedback, setShowFeedback] = useState(false);
@@ -391,11 +393,15 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
       return;
     }
     
-    if (!confirm('למחוק את המשימה?')) return;
+    setShowDeleteConfirm(true);
+  };
+  
+  const confirmDelete = async () => {
     setDeleting(true);
     try {
       await removeTask(currentTask.id);
       toast.success('המשימה נמחקה');
+      setShowDeleteConfirm(false);
     } catch (err) {
       toast.error('שגיאה במחיקה');
       setDeleting(false);
@@ -676,6 +682,19 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
         task={currentTask}
         actualMinutes={liveSpent}
         onConfirm={completeTask}
+      />
+      
+      {/* דיאלוג אישור מחיקה */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={confirmDelete}
+        title="למחוק את המשימה?"
+        message={`"${currentTask.title}" תימחק לצמיתות`}
+        confirmText="מחק"
+        cancelText="ביטול"
+        type="danger"
+        loading={deleting}
       />
     </>
   );
