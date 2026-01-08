@@ -66,14 +66,29 @@ function isTimerRunningOnTaskOrIntervals(taskId, allTasks) {
  */
 function isTimerRunning(taskId) {
   try {
-    const keys = [`timer_v2_${taskId}`, `timer_${taskId}_startTime`];
-    for (const key of keys) {
-      const data = localStorage.getItem(key);
-      if (data) {
-        const parsed = JSON.parse(data);
+    // בדיקת פורמט JSON (TaskTimerWithInterruptions)
+    const jsonKey = `timer_v2_${taskId}`;
+    const jsonData = localStorage.getItem(jsonKey);
+    if (jsonData) {
+      try {
+        const parsed = JSON.parse(jsonData);
         if (parsed.isRunning === true && !parsed.isInterrupted) {
           return true;
         }
+      } catch (e) {
+        // לא JSON תקין - ממשיכים לבדיקה הבאה
+      }
+    }
+    
+    // בדיקת פורמט ISO string (TaskTimer)
+    const isoKey = `timer_${taskId}_startTime`;
+    const isoData = localStorage.getItem(isoKey);
+    if (isoData) {
+      // אם יש startTime, הטיימר רץ (אלא אם יש endTime)
+      const endKey = `timer_${taskId}_endTime`;
+      const endData = localStorage.getItem(endKey);
+      if (!endData) {
+        return true;
       }
     }
   } catch (e) {}
@@ -271,6 +286,15 @@ function buildScheduledTimeline(tasks, fromDate) {
  * ניתוח דדליין של משימה בודדת
  */
 function analyzeTaskDeadline(task, scheduledTasks, allTasks, now) {
+  // ✅ לא מתריעים על משימות שנוצרו תוך 2 דקות אחרונות
+  if (task.created_at) {
+    const createdAt = new Date(task.created_at);
+    const minutesSinceCreation = (now - createdAt) / (1000 * 60);
+    if (minutesSinceCreation < 2) {
+      return null;
+    }
+  }
+  
   // ✅ תיקון: הדדליין = זמן התחלה + משך המשימה
   // due_time הוא זמן ההתחלה, לא הסיום!
   const startTime = parseDateTime(task.due_date, task.due_time);
