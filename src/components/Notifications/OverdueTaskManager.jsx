@@ -58,6 +58,25 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [showRescheduleInput, setShowRescheduleInput] = useState(false);
   
+  // ✅ ניקוי handledToday כשמשימות נמחקות
+  useEffect(() => {
+    if (tasks) {
+      const currentTaskIds = new Set(tasks.map(t => t.id));
+      setHandledToday(prev => {
+        const validHandled = new Set([...prev].filter(id => currentTaskIds.has(id)));
+        return validHandled.size !== prev.size ? validHandled : prev;
+      });
+      
+      // ✅ סגור פופאפ אם המשימה נמחקה או הושלמה
+      if (currentOverdue) {
+        const task = tasks.find(t => t.id === currentOverdue.id);
+        if (!task || task.is_completed) {
+          setCurrentOverdue(null);
+        }
+      }
+    }
+  }, [tasks, currentOverdue]);
+  
   // פונקציה להשמעת צליל התראה
   const playAlarmSound = useCallback(() => {
     try {

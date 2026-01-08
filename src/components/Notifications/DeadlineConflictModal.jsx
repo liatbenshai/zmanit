@@ -332,15 +332,30 @@ export function DeadlineConflictManager() {
     }
   }, [currentConflict, isTimerRunningOnTask]);
   
-  // ✅ סגור התראה אם המשימה הושלמה
+  // ✅ סגור התראה אם המשימה הושלמה או נמחקה
   useEffect(() => {
     if (currentConflict && tasks) {
       const task = tasks.find(t => t.id === currentConflict.taskId);
       if (!task || task.is_completed) {
         setCurrentConflict(null);
+        // ✅ גם הוסף ל-dismissed כדי לא להציג שוב
+        setDismissedConflicts(prev => new Set([...prev, currentConflict.taskId]));
       }
     }
   }, [currentConflict, tasks]);
+  
+  // ✅ ניקוי dismissed של משימות שנמחקו
+  useEffect(() => {
+    if (tasks && dismissedConflicts.size > 0) {
+      const taskIds = new Set(tasks.map(t => t.id));
+      const validDismissed = new Set(
+        [...dismissedConflicts].filter(id => taskIds.has(id))
+      );
+      if (validDismissed.size !== dismissedConflicts.size) {
+        setDismissedConflicts(validDismissed);
+      }
+    }
+  }, [tasks, dismissedConflicts]);
   
   // טיפול בסגירת ההתראה
   const handleClose = () => {

@@ -112,6 +112,35 @@ function NotificationChecker() {
   // מעקב אחרי התראות "הזמן נגמר" שנשלחו
   const timeUpNotifiedRef = useRef(new Set());
 
+  // ✅ ניקוי refs כשמשימות נמחקות
+  useEffect(() => {
+    if (tasks) {
+      const currentTaskIds = new Set(tasks.map(t => t.id));
+      
+      // נקה completed tasks שנמחקו
+      const validCompleted = new Set(
+        [...completedTasksRef.current].filter(id => currentTaskIds.has(id))
+      );
+      completedTasksRef.current = validCompleted;
+      
+      // נקה timeUp notifications שנמחקו
+      const validTimeUp = new Set(
+        [...timeUpNotifiedRef.current].filter(id => currentTaskIds.has(id))
+      );
+      timeUpNotifiedRef.current = validTimeUp;
+      
+      // נקה lastNotified של משימות שנמחקו
+      const newLastNotified = {};
+      Object.keys(lastNotifiedRef.current).forEach(key => {
+        const taskId = key.split('-')[0];
+        if (currentTaskIds.has(taskId)) {
+          newLastNotified[key] = lastNotifiedRef.current[key];
+        }
+      });
+      lastNotifiedRef.current = newLastNotified;
+    }
+  }, [tasks]);
+
   // בדיקה אם עבר מספיק זמן מההתראה האחרונה
   const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
     const now = Date.now();
