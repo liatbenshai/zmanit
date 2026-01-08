@@ -271,6 +271,15 @@ export function DeadlineConflictManager() {
   const checkConflicts = useCallback(() => {
     if (!tasks || tasks.length === 0) return;
     
+    // ✅ אם יש התראה פתוחה - בדוק אם היא עדיין רלוונטית
+    if (currentConflict) {
+      const task = tasks.find(t => t.id === currentConflict.taskId);
+      if (!task || task.is_completed || isTimerRunningOnTask(currentConflict.taskId)) {
+        setCurrentConflict(null);
+        return;
+      }
+    }
+    
     const conflicts = detectDeadlineConflicts(tasks);
     
     // מצא את ההתנגשות הדחופה ביותר שלא נדחתה ושאין עליה טיימר רץ
@@ -322,6 +331,16 @@ export function DeadlineConflictManager() {
       setCurrentConflict(null);
     }
   }, [currentConflict, isTimerRunningOnTask]);
+  
+  // ✅ סגור התראה אם המשימה הושלמה
+  useEffect(() => {
+    if (currentConflict && tasks) {
+      const task = tasks.find(t => t.id === currentConflict.taskId);
+      if (!task || task.is_completed) {
+        setCurrentConflict(null);
+      }
+    }
+  }, [currentConflict, tasks]);
   
   // טיפול בסגירת ההתראה
   const handleClose = () => {
