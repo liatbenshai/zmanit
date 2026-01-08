@@ -38,6 +38,73 @@ const CONFIG = {
 };
 
 // ============================================
+// פונקציות עזר לאינטרוולים וטיימרים
+// ============================================
+
+/**
+ * בדיקה אם יש טיימר רץ על משימה או על אחד מהאינטרוולים שלה
+ */
+function isTimerRunningOnTaskOrIntervals(taskId, allTasks) {
+  // בדיקת טיימר על המשימה עצמה
+  if (isTimerRunning(taskId)) {
+    return true;
+  }
+  
+  // בדיקת טיימר על אינטרוולים (משימות ילד)
+  const intervals = allTasks.filter(t => t.parent_task_id === taskId);
+  for (const interval of intervals) {
+    if (isTimerRunning(interval.id)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
+ * בדיקה אם טיימר רץ על משימה ספציפית
+ */
+function isTimerRunning(taskId) {
+  try {
+    const keys = [`timer_v2_${taskId}`, `timer_${taskId}_startTime`];
+    for (const key of keys) {
+      const data = localStorage.getItem(key);
+      if (data) {
+        const parsed = JSON.parse(data);
+        if (parsed.isRunning === true && !parsed.isInterrupted) {
+          return true;
+        }
+      }
+    }
+  } catch (e) {}
+  return false;
+}
+
+/**
+ * חישוב סך הזמן שנעבד על משימה כולל כל האינטרוולים
+ */
+function getTotalTimeSpent(task, allTasks) {
+  let totalTimeSpent = task.time_spent || 0;
+  
+  // אם יש אינטרוולים - חשב גם אותם
+  const intervals = allTasks.filter(t => t.parent_task_id === task.id);
+  if (intervals.length > 0) {
+    // חשב זמן מאינטרוולים שהושלמו
+    const completedIntervals = intervals.filter(i => i.is_completed);
+    const intervalTimeSpent = completedIntervals.reduce((sum, i) => sum + (i.time_spent || i.estimated_duration || 0), 0);
+    
+    // חשב זמן מאינטרוול בתהליך
+    const inProgressInterval = intervals.find(i => !i.is_completed && (i.time_spent || 0) > 0);
+    const inProgressTime = inProgressInterval ? (inProgressInterval.time_spent || 0) : 0;
+    
+    // הזמן הכולל = מקסימום בין זמן המשימה לבין סכום האינטרוולים
+    totalTimeSpent = Math.max(totalTimeSpent, intervalTimeSpent + inProgressTime);
+  }
+  
+  return totalTimeSpent;
+}
+
+// ============================================
 // פונקציות עזר לזמן
 // ============================================
 
@@ -137,9 +204,10 @@ export function detectDeadlineConflicts(tasks) {
   const todayISO = toLocalISODate(now);
   const conflicts = [];
   
-  // סנן רק משימות לא מושלמות עם דדליין
+  // ✅ סנן רק משימות ראשיות (לא אינטרוולים) שלא הושלמו עם דדליין
   const tasksWithDeadline = tasks.filter(task => 
     !task.is_completed && 
+    !task.parent_task_id &&  // ✅ לא לבדוק אינטרוולים - רק משימות ראשיות
     task.due_date &&
     task.due_date >= todayISO
   );
@@ -178,12 +246,16 @@ function buildScheduledTimeline(tasks, fromDate) {
   const todayISO = toLocalISODate(fromDate);
   
   return tasks
-    .filter(t => !t.is_completed && t.due_date && t.due_date >= todayISO)
-    .map(task => ({
-      ...task,
-      deadline: parseDateTime(task.due_date, task.due_time),
-      remainingDuration: Math.max(0, (task.estimated_duration || 30) - (task.time_spent || 0))
-    }))
+    .filter(t => !t.is_completed && t.due_date && t.due_date >= todayISO && !t.parent_task_id) // ✅ סנן אינטרוולים
+    .map(task => {
+      // ✅ חשב זמן כולל כולל אינטרוולים
+      const totalTimeSpent = getTotalTimeSpent(task, tasks);
+      return {
+        ...task,
+        deadline: parseDateTime(task.due_date, task.due_time),
+        remainingDuration: Math.max(0, (task.estimated_duration || 30) - totalTimeSpent)
+      };
+    })
     .sort((a, b) => a.deadline - b.deadline);
 }
 
@@ -193,6 +265,11 @@ function buildScheduledTimeline(tasks, fromDate) {
 function analyzeTaskDeadline(task, scheduledTasks, allTasks, now) {
   const deadline = parseDateTime(task.due_date, task.due_time);
   if (!deadline) return null;
+  
+  // ✅ אם יש טיימר רץ על המשימה או על אחד מהאינטרוולים - לא מציגים התראה!
+  if (isTimerRunningOnTaskOrIntervals(task.id, allTasks)) {
+    return null;
+  }
   
   // כמה זמן נשאר עד הדדליין
   const minutesToDeadline = Math.floor((deadline - now) / (1000 * 60));
@@ -211,8 +288,9 @@ function analyzeTaskDeadline(task, scheduledTasks, allTasks, now) {
     };
   }
   
-  // כמה זמן עבודה נדרש להשלמת המשימה
-  const remainingDuration = Math.max(0, (task.estimated_duration || 30) - (task.time_spent || 0));
+  // ✅ כמה זמן עבודה נדרש - כולל זמן מאינטרוולים!
+  const totalTimeSpent = getTotalTimeSpent(task, allTasks);
+  const remainingDuration = Math.max(0, (task.estimated_duration || 30) - totalTimeSpent);
   
   // כמה זמן עבודה זמין עד הדדליין
   const availableMinutes = calculateAvailableWorkMinutes(now, deadline);
