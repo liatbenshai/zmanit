@@ -3,9 +3,11 @@
  * =====================================
  * 
  * תיקון: שעות עבודה נקראות מההגדרות של המשתמש
+ * ✅ תמיכה בזמני בית/משפחה
  */
 
-import { WORK_HOURS } from '../config/workSchedule';
+import { WORK_HOURS, HOME_HOURS, getScheduleByType } from '../config/workSchedule';
+import { getTaskType } from '../config/taskTypes';
 import { toLocalISODate } from './dateHelpers';
 
 // ============================================
@@ -28,22 +30,24 @@ export const SMART_SCHEDULE_CONFIG = {
   
   morningTaskTypes: ['transcription', 'תמלול'],
   
-  // ✅ פונקציה לקבלת שעות עבודה ליום ספציפי
-  getDayHours(dayOfWeek) {
-    const dayConfig = WORK_HOURS[dayOfWeek];
+  // ✅ פונקציה לקבלת שעות ליום ספציפי לפי סוג (work/home)
+  getDayHours(dayOfWeek, scheduleType = 'work') {
+    const schedule = scheduleType === 'home' ? HOME_HOURS : WORK_HOURS;
+    const dayConfig = schedule[dayOfWeek];
     if (!dayConfig || !dayConfig.enabled) {
-      return null; // יום לא עובד
+      return null; // יום לא פעיל
     }
     
     // קריאה מההגדרות האמיתיות
-    const startHour = dayConfig.start || 8;
-    const endHour = dayConfig.end || 16;
+    const startHour = dayConfig.start || (scheduleType === 'home' ? 17 : 8);
+    const endHour = dayConfig.end || (scheduleType === 'home' ? 21 : 16);
     
     return {
       start: startHour * 60,  // המרה לדקות
       end: endHour * 60,
       startHour,
-      endHour
+      endHour,
+      flexible: dayConfig.flexible || false
     };
   },
   
@@ -211,12 +215,45 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
   const warnings = [];
   const unscheduledTasks = [];
   
-  // ✅ מעקב אחרי הזמן הבא הפנוי בכל יום - עם שעות ספציפיות ליום
-  const dayNextAvailable = new Map();
+  // ✅ קטגוריות שנחשבות כבית/משפחה
+  const homeCategories = ['family', 'home', 'kids', 'personal'];
+  
+  // ✅ פונקציה לבדיקה אם משימה היא בית/משפחה
+  const isHomeTask = (task) => {
+    // בדיקה ראשונה: קטגוריה ישירה על המשימה
+    const category = task.category || '';
+    if (homeCategories.includes(category)) {
+      return true;
+    }
+    
+    // בדיקה שנייה: קבלת הקטגוריה מתוך הגדרות סוג המשימה
+    const taskType = task.task_type || '';
+    if (taskType) {
+      const typeConfig = getTaskType(taskType);
+      if (typeConfig && homeCategories.includes(typeConfig.category)) {
+        return true;
+      }
+    }
+    
+    return false;
+  };
+  
+  // ✅ מעקב אחרי הזמן הבא הפנוי בכל יום - עבודה ובית בנפרד
+  const dayNextAvailableWork = new Map();
+  const dayNextAvailableHome = new Map();
+  
   for (const day of days) {
-    if (day.isWorkDay && day.date >= todayISO) {
-      const dayStart = day.dayStart || config.defaultDayStart;
-      dayNextAvailable.set(day.date, dayStart);
+    if (day.date >= todayISO) {
+      // זמני עבודה
+      if (day.isWorkDay) {
+        const dayStart = day.dayStart || config.defaultDayStart;
+        dayNextAvailableWork.set(day.date, dayStart);
+      }
+      // זמני בית
+      if (day.isHomeDay) {
+        const homeStart = day.homeDayStart || 17 * 60;
+        dayNextAvailableHome.set(day.date, homeStart);
+      }
     }
   }
   
@@ -226,9 +263,17 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
     let remainingDuration = totalDuration;
     let blocksCreated = 0;
     
+    // ✅ בדיקה אם זו משימת בית/משפחה
+    const isHome = isHomeTask(task);
+    
     // מציאת ימים רלוונטיים
     const relevantDays = days.filter(d => {
-      if (!d.isWorkDay) return false;
+      // ✅ לפי סוג המשימה - בודקים יום עבודה או יום בית
+      if (isHome) {
+        if (!d.isHomeDay) return false;
+      } else {
+        if (!d.isWorkDay) return false;
+      }
       if (d.date < todayISO) return false;
       if (task.start_date && d.date < task.start_date) return false;
       return true;
@@ -246,9 +291,13 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
     for (const day of relevantDays) {
       if (remainingDuration <= 0) break;
       
-      // ✅ מציאת חלונות פנויים עם מעקב אחרי הזמן הנוכחי
-      const currentStart = dayNextAvailable.get(day.date) || config.dayStart;
-      const freeSlots = findFreeSlotsForDay(day, currentStart, config);
+      // ✅ מציאת חלונות פנויים לפי סוג המשימה
+      const dayNextAvailable = isHome ? dayNextAvailableHome : dayNextAvailableWork;
+      const dayStart = isHome ? (day.homeDayStart || 17 * 60) : (day.dayStart || config.defaultDayStart);
+      const dayEnd = isHome ? (day.homeDayEnd || 21 * 60) : (day.dayEnd || config.defaultDayEnd);
+      
+      const currentStart = dayNextAvailable.get(day.date) || dayStart;
+      const freeSlots = findFreeSlotsForDayWithRange(day, currentStart, dayEnd, config, isHome);
       
       for (const slot of freeSlots) {
         if (remainingDuration <= 0) break;
@@ -264,6 +313,7 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
           task: task,
           type: task.task_type || 'other',
           taskType: task.task_type || 'other',
+          category: task.category || (isHome ? 'home' : 'work'),
           priority: task.priority || 'normal',
           title: task.title,
           startMinute: slot.start,
@@ -273,6 +323,7 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
           duration: blockDuration,
           dayDate: day.date,
           isFixed: false,
+          isHomeTask: isHome,
           blockType: BLOCK_TYPES.FLEXIBLE_TASK,
           canMove: true,
           canResize: true,
@@ -344,6 +395,49 @@ function findFreeSlotsForDay(day, startFrom, config) {
   // רווח אחרי כל הבלוקים הקבועים
   if (dayEnd > currentStart) {
     slots.push({ start: currentStart, end: dayEnd });
+  }
+  
+  return slots;
+}
+
+/**
+ * ✅ פונקציה משופרת למציאת חלונות פנויים - עם תמיכה בטווחי זמן שונים (עבודה/בית)
+ */
+function findFreeSlotsForDayWithRange(day, startFrom, endAt, config, isHomeTask = false) {
+  const slots = [];
+  
+  // ✅ סינון בלוקים - בודקים רק בלוקים מאותו סוג (עבודה או בית)
+  const relevantBlocks = day.blocks.filter(b => {
+    if (b.isFixed || b.isGoogleEvent) return true;
+    // אם זו משימת בית, בודקים רק בלוקים של בית
+    if (isHomeTask) return b.isHomeTask === true;
+    // אחרת בודקים רק בלוקים של עבודה
+    return b.isHomeTask !== true;
+  });
+  
+  // מיון לפי זמן התחלה
+  relevantBlocks.sort((a, b) => a.startMinute - b.startMinute);
+  
+  let currentStart = Math.max(startFrom, 0);
+  
+  for (const block of relevantBlocks) {
+    // רק בלוקים בטווח הרלוונטי
+    if (block.endMinute <= startFrom || block.startMinute >= endAt) continue;
+    
+    // אם הבלוק מתחיל אחרי המיקום הנוכחי
+    if (block.startMinute > currentStart) {
+      const gapEnd = Math.min(block.startMinute, endAt);
+      if (gapEnd - currentStart >= 15) {
+        slots.push({ start: currentStart, end: gapEnd });
+      }
+    }
+    // קפיצה לאחרי הבלוק
+    currentStart = Math.max(currentStart, block.endMinute + config.breakDuration);
+  }
+  
+  // רווח אחרי כל הבלוקים עד סוף הטווח
+  if (endAt > currentStart) {
+    slots.push({ start: currentStart, end: endAt });
   }
   
   return slots;
@@ -436,33 +530,52 @@ function initializeDays(weekStart, config) {
     
     const dateISO = toLocalISODate(date);
     const dayOfWeek = date.getDay();
-    const dayConfig = WORK_HOURS[dayOfWeek];
-    const isWorkDay = dayConfig?.enabled || false;
     
-    // ✅ קריאת שעות עבודה אמיתיות מההגדרות
-    const workHours = config.getDayHours(dayOfWeek);
-    const dayStart = workHours?.start || config.defaultDayStart;
-    const dayEnd = workHours?.end || config.defaultDayEnd;
-    const availableMinutes = isWorkDay ? (dayEnd - dayStart) : 0;
+    // ✅ קריאת שעות עבודה
+    const workDayConfig = WORK_HOURS[dayOfWeek];
+    const isWorkDay = workDayConfig?.enabled || false;
+    const workHours = config.getDayHours(dayOfWeek, 'work');
+    const workDayStart = workHours?.start || config.defaultDayStart;
+    const workDayEnd = workHours?.end || config.defaultDayEnd;
+    const workAvailableMinutes = isWorkDay ? (workDayEnd - workDayStart) : 0;
+    
+    // ✅ קריאת שעות בית/משפחה
+    const homeDayConfig = HOME_HOURS[dayOfWeek];
+    const isHomeDay = homeDayConfig?.enabled || false;
+    const homeHours = config.getDayHours(dayOfWeek, 'home');
+    const homeDayStart = homeHours?.start || 17 * 60;
+    const homeDayEnd = homeHours?.end || 21 * 60;
+    const homeAvailableMinutes = isHomeDay ? (homeDayEnd - homeDayStart) : 0;
+    const isFlexibleHomeDay = homeHours?.flexible || false;
     
     days.push({
       date: dateISO,
-      dayName: dayConfig?.name || dayNames[dayOfWeek] || '',
+      dayName: workDayConfig?.name || homeDayConfig?.name || dayNames[dayOfWeek] || '',
       dayOfWeek,
       isWorkDay,
+      isHomeDay,
       isWeekend: dayOfWeek === 5 || dayOfWeek === 6,
       blocks: [],
       fixedMinutes: 0,
       totalScheduledMinutes: 0,
       suggestedBreaks: [],
-      // ✅ שעות עבודה אמיתיות
+      // ✅ שעות עבודה
       workHours: isWorkDay ? { 
         start: workHours?.startHour || 8, 
         end: workHours?.endHour || 16 
       } : null,
-      dayStart,  // בדקות
-      dayEnd,    // בדקות
-      availableMinutes
+      dayStart: workDayStart,  // בדקות (עבודה)
+      dayEnd: workDayEnd,      // בדקות (עבודה)
+      availableMinutes: workAvailableMinutes,
+      // ✅ שעות בית/משפחה
+      homeHours: isHomeDay ? {
+        start: homeHours?.startHour || 17,
+        end: homeHours?.endHour || 21,
+        flexible: isFlexibleHomeDay
+      } : null,
+      homeDayStart,
+      homeDayEnd,
+      homeAvailableMinutes
     });
   }
   

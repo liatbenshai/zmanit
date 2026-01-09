@@ -16,6 +16,7 @@ const GOOGLE_CLIENT_ID = '817535440248-c3bfvtta658ogdjdk473brbecumhs182.apps.goo
 const SCOPES = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly';
 const DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest';
 const TOKEN_KEY = 'zmanit_google_token';
+const CALENDAR_ID_KEY = 'zmanit_selected_calendar_id';
 
 // =====================================
 // Hook
@@ -28,9 +29,18 @@ export function useGoogleCalendar() {
   const [tokenClient, setTokenClient] = useState(null);
   const [gapiReady, setGapiReady] = useState(false);
   const [calendars, setCalendars] = useState([]);
-  const [selectedCalendarId, setSelectedCalendarId] = useState('primary');
+  // ✅ טעינת היומן השמור או 'primary' כברירת מחדל
+  const [selectedCalendarId, setSelectedCalendarIdState] = useState(() => {
+    return localStorage.getItem(CALENDAR_ID_KEY) || 'primary';
+  });
   const [googleEmail, setGoogleEmail] = useState(null);
   const [lastSyncAt, setLastSyncAt] = useState(null);
+
+  // ✅ פונקציה לשמירת בחירת היומן
+  const setSelectedCalendarId = useCallback((calendarId) => {
+    setSelectedCalendarIdState(calendarId);
+    localStorage.setItem(CALENDAR_ID_KEY, calendarId);
+  }, []);
 
   // =====================================
   // אתחול Google API

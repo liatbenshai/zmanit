@@ -312,10 +312,11 @@ function EstimateSuggestion({ taskType, currentEstimate, onAcceptSuggestion }) {
  * - משימה בלת"מ (unexpected) → עכשיו
  * - משימה רגילה → אחרי המשימה האחרונה ברשימה
  */
-function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration) {
+function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, scheduleType = 'work') {
   const now = new Date();
   const todayISO = getLocalDateISO(now);
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  const dayOfWeek = now.getDay();
   
   // פונקציית עזר - המרת דקות לפורמט HH:MM
   const minutesToTime = (minutes) => {
@@ -323,6 +324,25 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration) {
     const m = minutes % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
+  
+  // ✅ קביעת שעות לפי סוג הלוח זמנים
+  const isHomeTask = scheduleType === 'home' || scheduleType === 'family';
+  const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
+  
+  // ✅ שעות התחלה לפי סוג
+  let scheduleStart, scheduleEnd;
+  if (isHomeTask) {
+    if (isWeekend) {
+      scheduleStart = 8 * 60;   // 08:00 בסופ"ש
+      scheduleEnd = 22 * 60;    // 22:00
+    } else {
+      scheduleStart = 17 * 60;  // 17:00
+      scheduleEnd = 21 * 60;    // 21:00
+    }
+  } else {
+    scheduleStart = 8.5 * 60;   // 08:30
+    scheduleEnd = 16.25 * 60;   // 16:15
+  }
   
   // אם זו משימה בלת"מ - מתחילה עכשיו
   if (taskType === 'unexpected') {
@@ -344,9 +364,8 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration) {
   );
   
   if (todayTasks.length === 0) {
-    // אין משימות להיום - מתחילים עכשיו (או מתחילת שעות העבודה אם עוד מוקדם)
-    const workStart = 8.5 * 60; // 08:30
-    const startMinutes = Math.max(currentMinutes, workStart);
+    // אין משימות להיום - מתחילים עכשיו (או מתחילת השעות אם עוד מוקדם)
+    const startMinutes = Math.max(currentMinutes, scheduleStart);
     const roundedMinutes = Math.ceil(startMinutes / 5) * 5;
     return minutesToTime(roundedMinutes);
   }
@@ -718,7 +737,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         tasks, 
         formData.taskType, 
         formData.dueDate || defaultDate,
-        calculatedDuration
+        calculatedDuration,
+        selectedCategory  // ✅ העברת סוג הלוח זמנים
       );
     }
 
