@@ -42,8 +42,14 @@ const CONFIG = {
 /**
  * חישוב "ניקוד דחייה" של משימה
  * ככל שהמספר גבוה יותר, כך קל יותר לדחות את המשימה
+ * ✅ משימות עם שעה קבועה מקבלות ניקוד 0 (לא ניתנות לדחייה)
  */
 export function calculateDeferScore(task) {
+  // ✅ משימות עם שעה קבועה לא ניתנות לדחייה כלל
+  if (task.due_time || task.is_fixed_time || task.google_event_id) {
+    return 0;
+  }
+  
   // ניקוד בסיס לפי רבע
   let score = CONFIG.DEFER_PRIORITY[task.quadrant] || 50;
   
@@ -85,6 +91,7 @@ export function calculateDeferScore(task) {
 /**
  * מציאת משימות שאפשר לדחות
  * ממוינות לפי קלות הדחייה (Q4 ראשון, אח"כ Q3, אח"כ Q2)
+ * ✅ מתוקן: לא לדחות משימות עם שעה קבועה
  * 
  * @param {Array} tasks - כל המשימות
  * @param {string} date - התאריך שצריך לפנות בו מקום
@@ -95,9 +102,16 @@ export function findTasksToDefer(tasks, date, requiredMinutes) {
   const dateISO = typeof date === 'string' ? date : date.toISOString().split('T')[0];
   
   // מסנן משימות של היום שלא הושלמו ושאינן Q1 (תומך גם ב-snake_case וגם ב-camelCase)
+  // ✅ רק משימות שניתנות להזזה
   const dayTasks = tasks.filter(t => {
     const isCompleted = t.is_completed || t.isCompleted;
     const taskDate = t.due_date || t.dueDate;
+    
+    // לא לדחות משימות עם שעה קבועה
+    if (t.due_time || t.is_fixed_time || t.google_event_id) {
+      return false;
+    }
+    
     return !isCompleted && taskDate === dateISO && t.quadrant !== 1; // לעולם לא דוחים Q1!
   });
   
@@ -140,16 +154,27 @@ export function findTasksToDefer(tasks, date, requiredMinutes) {
 /**
  * חישוב תאריך יעד חדש למשימה שנדחית
  * מחפש את היום הקרוב ביותר עם מקום פנוי
+ * ✅ מתוקן: משימות עבודה לא עוברות לסוף שבוע
  */
 export function calculateNewDueDate(task, existingTasks) {
   const taskDueDate = task.due_date || task.dueDate;
   const currentDueDate = taskDueDate ? new Date(taskDueDate) : new Date();
   let newDate = getNextWorkDay(currentDueDate);
   
+  // בדיקה אם זו משימת עבודה
+  const isWork = isWorkTask(task);
+  
   // בודק זמינות בימים הבאים
   let attempts = 0;
   const taskDuration = task.estimated_duration || task.estimatedDuration || 30;
-  while (attempts < 7) {
+  while (attempts < 14) { // מרחיב ל-14 ימים במקום 7
+    // ✅ משימות עבודה לא יכולות לעבור לסוף שבוע
+    if (isWork && isWeekendDay(newDate)) {
+      newDate = getNextWorkDay(newDate);
+      attempts++;
+      continue;
+    }
+    
     const available = getAvailableMinutesForDay(newDate, existingTasks);
     if (available >= taskDuration) {
       return newDate.toISOString().split('T')[0];
@@ -158,8 +183,14 @@ export function calculateNewDueDate(task, existingTasks) {
     attempts++;
   }
   
-  // אם לא נמצא יום פנוי, מחזיר את היום הבא
-  return getNextWorkDay(currentDueDate).toISOString().split('T')[0];
+  // אם לא נמצא יום פנוי, מחזיר את יום העבודה הבא (לא סוף שבוע לעבודה)
+  let fallbackDate = getNextWorkDay(currentDueDate);
+  if (isWork) {
+    while (isWeekendDay(fallbackDate)) {
+      fallbackDate.setDate(fallbackDate.getDate() + 1);
+    }
+  }
+  return fallbackDate.toISOString().split('T')[0];
 }
 
 /**
@@ -463,7 +494,71 @@ export function checkScheduleConflicts(tasks, date) {
 }
 
 /**
+ * בדיקה אם משימה היא משימת עבודה
+ */
+function isWorkTask(task) {
+  const workTypes = ['work', 'deep_work', 'client_communication', 'admin'];
+  return workTypes.includes(task.task_type);
+}
+
+/**
+ * בדיקה אם משימה היא משימת בית/משפחה
+ */
+function isHomeTask(task) {
+  const homeTypes = ['home', 'family', 'personal', 'health', 'social'];
+  return homeTypes.includes(task.task_type);
+}
+
+/**
+ * בדיקה אם יום הוא סוף שבוע (שישי אחה"צ או שבת)
+ */
+function isWeekendDay(date) {
+  const d = typeof date === 'string' ? new Date(date) : date;
+  const day = d.getDay();
+  // שישי (5) או שבת (6)
+  return day === 5 || day === 6;
+}
+
+/**
+ * בדיקה אם משימה ניתנת להזזה
+ * משימות עם שעה קבועה לא ניתנות להזזה!
+ */
+function isTaskMovable(task) {
+  // אם יש שעה קבועה - לא ניתן להזיז
+  if (task.due_time) {
+    return false;
+  }
+  // אם מסומן כפגישה קבועה
+  if (task.is_fixed_time || task.fixed_time) {
+    return false;
+  }
+  // אם מסונכרן עם גוגל קלנדר
+  if (task.google_event_id) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * בדיקה אם אפשר להעביר משימה ליום מסוים
+ */
+function canMoveTaskToDay(task, targetDate) {
+  const targetDay = new Date(targetDate);
+  const isTargetWeekend = isWeekendDay(targetDay);
+  
+  // משימת עבודה לא יכולה לעבור לסוף שבוע
+  if (isWorkTask(task) && isTargetWeekend) {
+    return false;
+  }
+  
+  return true;
+}
+
+/**
  * הצעת איזון עומס שבועי
+ * ✅ מתוקן: לא מציע הזזה של משימות עם שעה קבועה
+ * ✅ מתוקן: לא מציע להעביר עבודה לסוף שבוע
+ * ✅ מתוקן: לא מציע להקדים משימות מיום ראשון לשישי
  */
 export function suggestWeeklyBalance(tasks) {
   const today = new Date();
@@ -480,6 +575,8 @@ export function suggestWeeklyBalance(tasks) {
       weekDays.push({
         date: dateISO,
         dayName: ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'][date.getDay()],
+        dayOfWeek: date.getDay(),
+        isWeekend: isWeekendDay(date),
         ...conflict
       });
     }
@@ -494,15 +591,26 @@ export function suggestWeeklyBalance(tasks) {
   
   for (const overDay of overloadedDays) {
     // מצא משימות שאפשר לדחות (Q4 ← Q3 ← Q2)
+    // ✅ רק משימות שניתנות להזזה (בלי שעה קבועה)
     const deferable = overDay.tasks
-      .filter(t => t.quadrant !== 1)
+      .filter(t => t.quadrant !== 1 && isTaskMovable(t))
       .map(t => ({ ...t, deferScore: calculateDeferScore(t) }))
       .sort((a, b) => b.deferScore - a.deferScore);
     
     for (const underDay of underutilizedDays) {
+      // ✅ לא להציע להקדים - רק לדחות (מיום מוקדם ליום מאוחר יותר)
+      if (new Date(underDay.date) < new Date(overDay.date)) {
+        continue; // דילוג - לא מקדימים משימות
+      }
+      
       const freeSpace = underDay.available - underDay.totalScheduled;
       
       for (const task of deferable) {
+        // ✅ בדיקה שאפשר להעביר את המשימה ליום הזה
+        if (!canMoveTaskToDay(task, underDay.date)) {
+          continue; // עבודה לא יכולה לעבור לסוף שבוע
+        }
+        
         if ((task.estimated_duration || 30) <= freeSpace) {
           const quadrantName = { 2: 'Q2', 3: 'Q3', 4: 'Q4' }[task.quadrant] || '';
           balanceSuggestions.push({
@@ -543,5 +651,11 @@ export default {
   suggestDeferrals,
   suggestDailyReschedule,
   checkScheduleConflicts,
-  suggestWeeklyBalance
+  suggestWeeklyBalance,
+  // ✅ פונקציות עזר חדשות
+  isWorkTask,
+  isHomeTask,
+  isWeekendDay,
+  isTaskMovable,
+  canMoveTaskToDay
 };
