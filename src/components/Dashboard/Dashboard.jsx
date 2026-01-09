@@ -14,6 +14,7 @@ import TimeGapsReport from '../Analytics/TimeGapsReport';
 import WorkPreferences from '../Settings/WorkPreferences';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import InterruptionsTracker from './InterruptionsTracker';
+import MiniTimer from './MiniTimer';
 
 /**
  * שעות העבודה
@@ -353,33 +354,21 @@ function Dashboard({ onNavigate }) {
           )}
         </motion.div>
 
-        {/* המשימה הבאה */}
-        {nextTask && (
-          <motion.div
-            initial={{ opacity: 0, x: -20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ delay: 0.2 }}
-            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow border border-gray-100 dark:border-gray-700"
-          >
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${nextTaskType?.color}`}>
-                  {nextTaskType?.icon}
-                </div>
-                <div>
-                  <div className="text-xs text-gray-500 dark:text-gray-400">הבא בתור</div>
-                  <div className="font-medium text-gray-900 dark:text-white">{nextTask.title}</div>
-                </div>
-              </div>
-              <div className="text-left">
-                <div className="font-bold text-gray-900 dark:text-white">{nextTask.due_time}</div>
-                <div className="text-xs text-gray-500">
-                  {timeUntilNext > 0 ? `עוד ${formatMinutes(timeUntilNext)}` : 'עכשיו'}
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
+        {/* 🔥 טיימר מהיר - התחל לעבוד! */}
+        <MiniTimer 
+          task={currentTask || nextTask}
+          onComplete={async (task) => {
+            await editTask(task.id, { 
+              is_completed: true, 
+              completed_at: new Date().toISOString() 
+            });
+            loadTasks();
+          }}
+          onNavigateToTask={(task) => {
+            // TODO: ניווט לתצוגה היומית עם המשימה
+            console.log('Navigate to task:', task.id);
+          }}
+        />
 
         {/* סטטיסטיקות */}
         <motion.div
