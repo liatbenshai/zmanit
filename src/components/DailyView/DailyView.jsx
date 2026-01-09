@@ -192,6 +192,44 @@ function DailyView() {
   const [draggedIndex, setDraggedIndex] = useState(null);
   const [dragOverIndex, setDragOverIndex] = useState(null);
   
+  // ✅ חדש: מעקב אחרי טיימרים פעילים
+  const [activeTimers, setActiveTimers] = useState({});
+  
+  // ✅ חדש: בדיקת טיימרים כל 5 שניות
+  useEffect(() => {
+    const checkTimers = () => {
+      const timers = {};
+      tasks.forEach(task => {
+        try {
+          const timerData = localStorage.getItem(`timer_v2_${task.id}`);
+          if (timerData) {
+            const parsed = JSON.parse(timerData);
+            if (parsed.isRunning || parsed.isPaused) {
+              timers[task.id] = parsed;
+            }
+          }
+        } catch (e) {}
+      });
+      setActiveTimers(timers);
+    };
+    
+    checkTimers(); // בדיקה ראשונית
+    const interval = setInterval(checkTimers, 5000); // כל 5 שניות
+    
+    // האזנה לשינויים ב-localStorage
+    const handleStorage = (e) => {
+      if (e.key?.startsWith('timer_v2_')) {
+        checkTimers();
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('storage', handleStorage);
+    };
+  }, [tasks]);
+  
   const { 
     isConnected: isGoogleConnected, 
     isLoading: isGoogleLoading,
@@ -356,23 +394,17 @@ function DailyView() {
   const timeStats = useMemo(() => {
     const blocks = selectedDayData.blocks || [];
     
+    // ✅ תיקון: שימוש ב-activeTimers state במקום לקרוא מ-localStorage
     const checkTimerRunning = (block) => {
       const taskId = block.taskId || block.task?.id || block.id;
       if (!taskId) return false;
-      try {
-        const timerData = localStorage.getItem(`timer_v2_${taskId}`);
-        if (timerData) {
-          const parsed = JSON.parse(timerData);
-          return parsed.isRunning && !parsed.isInterrupted;
-        }
-      } catch (e) {}
-      return false;
+      return activeTimers[taskId]?.isRunning && !activeTimers[taskId]?.isInterrupted;
     };
     
     const blockHasPassed = (block) => {
       if (!isViewingToday) return false;
       if (!block.endTime) return false;
-      if (checkTimerRunning(block)) return false;
+      if (checkTimerRunning(block)) return false; // ✅ לא באיחור אם טיימר רץ
       const [hour, min] = block.endTime.split(':').map(Number);
       return (hour * 60 + (min || 0)) < currentTime.minutes;
     };
@@ -430,7 +462,7 @@ function DailyView() {
       usedPercent: Math.round((completedMinutes / dayHours.totalMinutes) * 100),
       canFitAll: pendingMinutes <= minutesLeftInDay
     };
-  }, [selectedDayData, isViewingToday, currentTime.minutes, selectedDate]);
+  }, [selectedDayData, isViewingToday, currentTime.minutes, selectedDate, activeTimers]);
 
   const handleAddTask = () => {
     setEditingTask(null);
@@ -644,30 +676,41 @@ function DailyView() {
     );
   }
 
+  // ✅ תיקון: שימוש ב-activeTimers state
   const isTimerRunning = (taskId) => {
     if (!taskId) return false;
-    try {
-      const timerData = localStorage.getItem(`timer_v2_${taskId}`);
-      if (timerData) {
-        const parsed = JSON.parse(timerData);
-        return parsed.isRunning && !parsed.isInterrupted;
-      }
-    } catch (e) {}
-    return false;
+    return activeTimers[taskId]?.isRunning && !activeTimers[taskId]?.isInterrupted;
+  };
+  
+  // ✅ תיקון: גם isPaused נחשב כ"עובד עליה"
+  const isTimerActive = (taskId) => {
+    if (!taskId) return false;
+    const timer = activeTimers[taskId];
+    return timer && (timer.isRunning || timer.isPaused);
   };
   
   const isBlockPast = (block) => {
     if (!isViewingToday) return false;
     
     const taskId = block.taskId || block.task?.id || block.id;
-    if (isTimerRunning(taskId)) return false;
+    // ✅ תיקון: לא באיחור אם טיימר רץ או מושהה
+    if (isTimerActive(taskId)) return false;
     
-    const task = block.task;
-    if (!task?.due_time) return false;
+    // ✅ תיקון: בדיקת endTime (זמן סיום) במקום due_time (זמן התחלה)
+    const endTime = block.endTime || block.task?.endTime;
+    if (!endTime) {
+      // fallback ל-due_time + duration
+      const dueTime = block.startTime || block.task?.due_time;
+      if (!dueTime) return false;
+      const [hour, min] = dueTime.split(':').map(Number);
+      const duration = block.duration || block.task?.estimated_duration || 30;
+      const endMinutes = hour * 60 + (min || 0) + duration;
+      return endMinutes < currentTime.minutes;
+    }
     
-    const [hour, min] = task.due_time.split(':').map(Number);
-    const taskDueMinutes = hour * 60 + (min || 0);
-    return taskDueMinutes < currentTime.minutes;
+    const [hour, min] = endTime.split(':').map(Number);
+    const endMinutes = hour * 60 + (min || 0);
+    return endMinutes < currentTime.minutes;
   };
   
   const minutesToTime = (totalMinutes) => {
