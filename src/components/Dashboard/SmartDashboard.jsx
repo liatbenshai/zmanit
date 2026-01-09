@@ -12,10 +12,11 @@ import AdminSettings from '../Admin/AdminSettings';
 import InterruptionsTracker from './InterruptionsTracker';
 import SmartRecommendationsPanel from './SmartRecommendationsPanel';
 import MiniTimer from './MiniTimer';
+import QuickWeekPlanner from './QuickWeekPlanner'; // ✅ תכנון שבועי מהיר
 import BlockerInsights from '../Learning/BlockerInsights';
-import { EmergencyBufferCard } from '../Learning/EmergencyBuffer'; // ✅ חלון בלת"מים
-import { EscapeWindowCard, EscapeWindowInsights } from '../Learning/EscapeWindowDetector'; // ✅ חלונות בריחה
-import RealEndOfDay, { EndOfDayButton } from '../Learning/RealEndOfDay'; // ✅ סיכום סוף יום
+import { EmergencyBufferCard } from '../Learning/EmergencyBuffer';
+import { EscapeWindowCard, EscapeWindowInsights } from '../Learning/EscapeWindowDetector';
+import RealEndOfDay, { EndOfDayButton } from '../Learning/RealEndOfDay';
 import { DeadlineConflictBanner } from '../Notifications/DeadlineConflictModal';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
@@ -451,79 +452,14 @@ function SmartDashboard() {
         <span>הוסף עבודה חדשה</span>
       </motion.button>
 
-      {/* ✅ תכנון השבוע - הוספת משימות */}
+      {/* ✅ תכנון השבוע - עם שיבוץ אוטומטי */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25 }}
-        className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm border border-gray-100 dark:border-gray-700 mb-6"
+        className="mb-6"
       >
-        <h2 className="font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          📅 תכנון השבוע
-          <span className="text-xs font-normal text-gray-400">לחצי על יום להוסיף משימה</span>
-        </h2>
-        
-        <div className="grid grid-cols-7 gap-2">
-          {weekDays.map((day, index) => (
-            <button
-              key={day.dateISO}
-              onClick={() => {
-                setSelectedDateForNewTask(day.dateISO);
-                setEditingTask(null);
-                setShowTaskForm(true);
-              }}
-              className={`
-                relative p-3 rounded-xl text-center transition-all hover:scale-105
-                ${day.isToday 
-                  ? 'bg-blue-100 dark:bg-blue-900/30 border-2 border-blue-500' 
-                  : day.isTomorrow
-                    ? 'bg-purple-50 dark:bg-purple-900/20 border border-purple-300 dark:border-purple-700'
-                    : 'bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 hover:border-blue-400'
-                }
-                ${day.isFull ? 'opacity-60' : ''}
-              `}
-            >
-              {/* שם היום */}
-              <div className={`text-xs font-medium ${day.isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500 dark:text-gray-400'}`}>
-                {day.isToday ? 'היום' : day.isTomorrow ? 'מחר' : day.dayName}
-              </div>
-              
-              {/* מספר התאריך */}
-              <div className={`text-lg font-bold ${day.isToday ? 'text-blue-700 dark:text-blue-300' : 'text-gray-800 dark:text-white'}`}>
-                {day.dayNumber}
-              </div>
-              
-              {/* מספר משימות */}
-              {day.taskCount > 0 ? (
-                <div className={`text-xs ${day.isFull ? 'text-red-500' : 'text-gray-500 dark:text-gray-400'}`}>
-                  {day.taskCount} משימות
-                </div>
-              ) : (
-                <div className="text-xs text-green-500">פנוי</div>
-              )}
-              
-              {/* אייקון פלוס */}
-              <div className="absolute -top-1 -left-1 w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white text-xs opacity-0 group-hover:opacity-100 hover:opacity-100 transition-opacity">
-                +
-              </div>
-              
-              {/* אינדיקטור עומס */}
-              {day.totalMinutes > 0 && (
-                <div className="mt-1 h-1 bg-gray-200 dark:bg-gray-600 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full ${day.isFull ? 'bg-red-500' : 'bg-green-500'}`}
-                    style={{ width: `${Math.min(100, (day.totalMinutes / 465) * 100)}%` }}
-                  />
-                </div>
-              )}
-            </button>
-          ))}
-        </div>
-        
-        {/* טיפ */}
-        <p className="text-xs text-gray-400 text-center mt-3">
-          💡 תכנני את השבוע מראש - זה יעזור לך להיות יותר פרודוקטיבית
-        </p>
+        <QuickWeekPlanner />
       </motion.div>
 
       {/* === שתי עמודות: משימות + התפלגות === */}
