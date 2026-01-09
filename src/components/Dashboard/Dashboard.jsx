@@ -165,6 +165,24 @@ function Dashboard({ onNavigate }) {
     return null;
   }, [todayTasks, currentMinutes]);
 
+  // ✅ חדש: המשימה הראשונה שלא הושלמה (גם אם הזמן עבר)
+  const pendingTask = useMemo(() => {
+    // קודם כל - בדיקה אם יש טיימר רץ על משימה כלשהי
+    for (const task of todayTasks) {
+      try {
+        const timerData = localStorage.getItem(`timer_v2_${task.id}`);
+        if (timerData) {
+          const parsed = JSON.parse(timerData);
+          if (parsed.isRunning || parsed.isPaused) {
+            return task; // מחזיר את המשימה עם הטיימר הפעיל
+          }
+        }
+      } catch (e) {}
+    }
+    // אחרת - המשימה הראשונה שלא הושלמה
+    return todayTasks[0] || null;
+  }, [todayTasks]);
+
   // זמן שנותר במשימה הנוכחית
   const timeRemaining = currentTask 
     ? currentTask.endMinutes - currentMinutes 
@@ -356,7 +374,7 @@ function Dashboard({ onNavigate }) {
 
         {/* 🔥 טיימר מהיר - התחל לעבוד! */}
         <MiniTimer 
-          task={currentTask || nextTask}
+          task={currentTask || nextTask || pendingTask}
           onComplete={async (task) => {
             await editTask(task.id, { 
               is_completed: true, 

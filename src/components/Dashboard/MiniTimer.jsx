@@ -196,9 +196,10 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
   // ===== אין משימה =====
   if (!task) {
     return (
-      <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl p-4 text-center">
-        <div className="text-gray-400 dark:text-gray-500 text-sm">
-          אין משימות מתוכננות
+      <div className="bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-800 dark:to-gray-900 rounded-xl p-6 text-center">
+        <span className="text-4xl block mb-2">☕</span>
+        <div className="text-gray-500 dark:text-gray-400">
+          אין משימות להיום
         </div>
       </div>
     );
@@ -210,27 +211,35 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
       <motion.div
         initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className="bg-gradient-to-br from-blue-50 to-indigo-50 dark:from-blue-900/30 dark:to-indigo-900/30 rounded-xl p-4 border border-blue-200 dark:border-blue-800"
+        className="bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-blue-900/40 dark:to-indigo-900/40 rounded-xl p-5 border-2 border-blue-300 dark:border-blue-700 shadow-lg"
       >
-        <div className="flex items-center justify-between">
-          <div className="flex-1 min-w-0">
-            <div className="text-xs text-blue-600 dark:text-blue-400 mb-1">מוכנים להתחיל?</div>
-            <div className="font-medium text-gray-900 dark:text-white truncate">
-              {task.title}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              {formatMinutes(estimated)} מתוכנן
-              {timeSpent > 0 && ` • ${formatMinutes(timeSpent)} הושקעו`}
-            </div>
+        {/* כותרת */}
+        <div className="text-center mb-4">
+          <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+            🎯 המשימה הבאה
           </div>
-          
-          <button
-            onClick={startTimer}
-            className="mr-3 w-14 h-14 rounded-full bg-blue-500 hover:bg-blue-600 text-white flex items-center justify-center shadow-lg hover:shadow-xl transition-all transform hover:scale-105"
-          >
-            <span className="text-2xl">▶️</span>
-          </button>
         </div>
+        
+        {/* פרטי משימה */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg p-3 mb-4">
+          <div className="font-bold text-gray-900 dark:text-white text-lg">
+            {task.title}
+          </div>
+          <div className="flex items-center gap-3 mt-2 text-sm text-gray-500 dark:text-gray-400">
+            <span>⏱️ {formatMinutes(estimated)}</span>
+            {task.due_time && <span>🕐 {task.due_time}</span>}
+            {timeSpent > 0 && <span className="text-green-600">✓ {formatMinutes(timeSpent)} הושקעו</span>}
+          </div>
+        </div>
+        
+        {/* כפתור התחל */}
+        <button
+          onClick={startTimer}
+          className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white text-lg font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
+        >
+          <span className="text-2xl">▶️</span>
+          <span>התחל לעבוד!</span>
+        </button>
       </motion.div>
     );
   }
