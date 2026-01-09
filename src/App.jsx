@@ -18,7 +18,7 @@ import MobileNav from './components/Layout/MobileNav';
 import InstallPrompt from './components/PWA/InstallPrompt';
 import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
-import DailySummary from './components/Productivity/DailySummary';
+import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
 import NotificationChecker from './components/Notifications/NotificationChecker';
 import OverdueTaskManager from './components/Notifications/OverdueTaskManager';
 import { DeadlineConflictManager } from './components/Notifications/DeadlineConflictModal';
@@ -79,7 +79,7 @@ function App() {
       {user && <UrgentTaskButton />}
 
       {/* סיכום יומי */}
-      {user && <DailySummary />}
+      {user && <EndOfDayPopup />}
 
       {/* בודק התראות - חדש! */}
       {user && <NotificationChecker />}

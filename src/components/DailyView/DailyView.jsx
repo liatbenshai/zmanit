@@ -4,6 +4,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
 import { smartScheduleWeekV4 } from '../../utils/smartSchedulerV4';
+import { TASK_TYPES } from '../../config/taskTypes';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
 import RescheduleModal from './RescheduleModal';
@@ -19,87 +20,9 @@ import toast from 'react-hot-toast';
 let draggedTaskData = null;
 
 /**
- * סוגי משימות מוגדרים - כולם לפי זמן
+ * סוגי משימות - מיובאים עכשיו מ-config/taskTypes.js
+ * הקוד הישן הוסר למניעת כפילות
  */
-export const TASK_TYPES = {
-  transcription: { 
-    id: 'transcription', 
-    name: 'תמלול', 
-    icon: '🎙️',
-    defaultDuration: 60,
-    category: 'work'
-  },
-  proofreading: { 
-    id: 'proofreading', 
-    name: 'הגהה', 
-    icon: '📝',
-    defaultDuration: 45,
-    category: 'work'
-  },
-  email: { 
-    id: 'email', 
-    name: 'מיילים', 
-    icon: '📧',
-    defaultDuration: 25,
-    category: 'work'
-  },
-  course: { 
-    id: 'course', 
-    name: 'קורס התמלול', 
-    icon: '📚',
-    defaultDuration: 90,
-    category: 'venture'
-  },
-  client_communication: { 
-    id: 'client_communication', 
-    name: 'לקוחות', 
-    icon: '💬',
-    defaultDuration: 30,
-    category: 'work'
-  },
-  management: { 
-    id: 'management', 
-    name: 'ניהול', 
-    icon: '👔',
-    defaultDuration: 45,
-    category: 'work'
-  },
-  family: { 
-    id: 'family', 
-    name: 'משפחה', 
-    icon: '👨‍👩‍👧‍👦',
-    defaultDuration: 60,
-    category: 'family'
-  },
-  kids: { 
-    id: 'kids', 
-    name: 'ילדים', 
-    icon: '🧒',
-    defaultDuration: 30,
-    category: 'family'
-  },
-  personal: { 
-    id: 'personal', 
-    name: 'זמן אישי', 
-    icon: '🧘',
-    defaultDuration: 30,
-    category: 'personal'
-  },
-  unexpected: { 
-    id: 'unexpected', 
-    name: 'בלת"מים', 
-    icon: '⚡',
-    defaultDuration: 30,
-    category: 'work'
-  },
-  other: { 
-    id: 'other', 
-    name: 'אחר', 
-    icon: '📋',
-    defaultDuration: 30,
-    category: 'work'
-  }
-};
 
 /**
  * שעות עבודה קבועות

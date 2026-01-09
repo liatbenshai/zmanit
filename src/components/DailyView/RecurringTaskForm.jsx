@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTasks } from '../../hooks/useTasks';
-import { TASK_TYPES } from '../DailyView/DailyView';
+import { TASK_TYPES } from '../../config/taskTypes';
 import toast from 'react-hot-toast';
 import Input from '../UI/Input';
 import Button from '../UI/Button';

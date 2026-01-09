@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
-import { TASK_TYPES } from '../DailyView/DailyView';
+import { TASK_TYPES } from '../../config/taskTypes';
 
 /**
  * דשבורד אנליטיקס - ניתוח זמנים ויעילות

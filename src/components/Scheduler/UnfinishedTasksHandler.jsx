@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
-import { TASK_TYPES } from '../DailyView/DailyView';
+import { TASK_TYPES } from '../../config/taskTypes';
 import toast from 'react-hot-toast';
 
 /**

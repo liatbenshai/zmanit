@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
-import { TASK_TYPES } from '../DailyView/DailyView';
+import { TASK_TYPES } from '../../config/taskTypes';
 import { timeToMinutes, minutesToTime } from '../../utils/timeOverlap';
 import Modal from '../UI/Modal';
 import QuickAdd from '../QuickAdd/QuickAdd';

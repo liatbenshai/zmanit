@@ -6,7 +6,7 @@ import {
   checkScheduleFeasibility,
   findAllFreeSlots
 } from '../../utils/autoScheduler';
-import { TASK_TYPES } from '../DailyView/DailyView';
+import { TASK_TYPES } from '../../config/taskTypes';
 import { getTodayISO } from '../../utils/dateHelpers';
 import toast from 'react-hot-toast';
 import Input from '../UI/Input';

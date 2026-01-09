@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { supabase } from '../../services/supabase';
-import { TASK_TYPES } from '../DailyView/DailyView';
+import { TASK_TYPES } from '../../config/taskTypes';
 import toast from 'react-hot-toast';
 import Button from '../UI/Button';
 import Input from '../UI/Input';

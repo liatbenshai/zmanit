@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TASK_TYPES } from './DailyView';
+import { TASK_TYPES } from '../../config/taskTypes';
 
 /**
  * שעות העבודה
