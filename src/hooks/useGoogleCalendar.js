@@ -77,13 +77,26 @@ export function useGoogleCalendar() {
       if (savedToken) {
         try {
           const token = JSON.parse(savedToken);
-          if (token.expires_at > Date.now()) {
+          // ✅ תיקון: מרווח ביטחון של 5 דקות לפני תפוגה
+          const bufferTime = 5 * 60 * 1000; // 5 דקות
+          if (token.expires_at > Date.now() + bufferTime) {
             window.gapi.client.setToken(token);
             setIsConnected(true);
             loadCalendars();
             loadUserEmail();
+            
+            // ✅ חדש: הגדרת טיימר לחידוש אוטומטי לפני שפג
+            const timeUntilRefresh = token.expires_at - Date.now() - bufferTime;
+            if (timeUntilRefresh > 0) {
+              setTimeout(() => {
+                console.log('🔄 מחדש טוקן גוגל אוטומטית...');
+                silentRefreshToken(client);
+              }, timeUntilRefresh);
+            }
           } else {
-            localStorage.removeItem(TOKEN_KEY);
+            // טוקן פג או עומד לפוג - ננסה לחדש בשקט
+            console.log('🔄 טוקן פג, מנסה לחדש...');
+            silentRefreshToken(client);
           }
         } catch (e) {
           localStorage.removeItem(TOKEN_KEY);
@@ -140,17 +153,36 @@ export function useGoogleCalendar() {
     });
   };
 
+  // ✅ חדש: חידוש טוקן בשקט (ללא popup)
+  const silentRefreshToken = (client) => {
+    if (!client) return;
+    
+    try {
+      // ננסה לקבל טוקן חדש ללא popup
+      client.requestAccessToken({ prompt: '' });
+    } catch (err) {
+      console.log('⚠️ לא ניתן לחדש בשקט, המשתמש יצטרך להתחבר שוב');
+      // נסמן שלא מחובר - המשתמש יתבקש להתחבר שוב
+      setIsConnected(false);
+      localStorage.removeItem(TOKEN_KEY);
+    }
+  };
+
   // טיפול בתגובת הטוקן
   const handleTokenResponse = (response) => {
     if (response.error) {
       console.error('Error getting token:', response.error);
-      toast.error('שגיאה בהתחברות ליומן גוגל');
+      // ✅ אם זו שגיאה של popup_closed - לא מציגים הודעה
+      if (response.error !== 'popup_closed_by_user') {
+        toast.error('שגיאה בהתחברות ליומן גוגל');
+      }
       return;
     }
 
+    const expiresIn = response.expires_in || 3600;
     const token = {
       access_token: response.access_token,
-      expires_at: Date.now() + (response.expires_in * 1000),
+      expires_at: Date.now() + (expiresIn * 1000),
     };
 
     localStorage.setItem(TOKEN_KEY, JSON.stringify(token));
@@ -158,7 +190,25 @@ export function useGoogleCalendar() {
     setIsConnected(true);
     loadCalendars();
     loadUserEmail();
-    toast.success('התחברת ליומן גוגל! 🎉');
+    
+    // ✅ חדש: הצגת הודעה רק אם זו התחברות ראשונה (לא חידוש)
+    if (!window._googleRefreshing) {
+      toast.success('התחברת ליומן גוגל! 🎉');
+    }
+    window._googleRefreshing = false;
+    
+    // ✅ חדש: תזמון חידוש אוטומטי 5 דקות לפני תפוגה
+    const bufferTime = 5 * 60 * 1000;
+    const timeUntilRefresh = (expiresIn * 1000) - bufferTime;
+    if (timeUntilRefresh > 0) {
+      setTimeout(() => {
+        console.log('🔄 מחדש טוקן גוגל אוטומטית...');
+        window._googleRefreshing = true;
+        if (tokenClient) {
+          tokenClient.requestAccessToken({ prompt: '' });
+        }
+      }, timeUntilRefresh);
+    }
   };
 
   // טעינת יומנים
@@ -223,6 +273,10 @@ export function useGoogleCalendar() {
     setIsSyncing(true);
 
     try {
+      // ✅ תיקון: קריאת היומן הנבחר ישירות מ-localStorage (לא מ-state)
+      // כי state עשוי להיות מיושן אם המשתמש שינה בחלון אחר
+      const currentCalendarId = localStorage.getItem(CALENDAR_ID_KEY) || 'primary';
+      
       // 1. קבלת אירועים מגוגל
       const start = new Date(date);
       start.setHours(0, 0, 0, 0);
@@ -230,7 +284,7 @@ export function useGoogleCalendar() {
       end.setDate(end.getDate() + 1);
 
       const response = await window.gapi.client.calendar.events.list({
-        calendarId: selectedCalendarId,
+        calendarId: currentCalendarId,
         timeMin: start.toISOString(),
         timeMax: end.toISOString(),
         singleEvents: true,
@@ -320,7 +374,7 @@ export function useGoogleCalendar() {
       setIsSyncing(false);
       return { imported: 0, updated: 0 };
     }
-  }, [isConnected, selectedCalendarId]);
+  }, [isConnected]);  // ✅ הסרנו selectedCalendarId כי קוראים מ-localStorage
 
   // =====================================
   // ייצוא משימה ליומן
@@ -361,7 +415,7 @@ export function useGoogleCalendar() {
       };
 
       const response = await window.gapi.client.calendar.events.insert({
-        calendarId: selectedCalendarId,
+        calendarId: localStorage.getItem(CALENDAR_ID_KEY) || 'primary',
         resource: event,
       });
 
@@ -380,7 +434,7 @@ export function useGoogleCalendar() {
       toast.error('שגיאה בייצוא ליומן גוגל');
       return null;
     }
-  }, [isConnected, selectedCalendarId]);
+  }, [isConnected]);  // ✅ הסרנו selectedCalendarId כי קוראים מ-localStorage
 
   // ייצוא מרובה
   const exportTasks = useCallback(async (tasks) => {
