@@ -9,11 +9,14 @@ import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import DailySummary from '../Analytics/DailySummary';
 import WeeklyReview from '../Analytics/WeeklyReview';
 import AdminSettings from '../Admin/AdminSettings';
-import InterruptionsTracker from './InterruptionsTracker'; // ✅ חדש
-import SmartRecommendationsPanel from './SmartRecommendationsPanel'; // ✅ המלצות חכמות
-import MiniTimer from './MiniTimer'; // ✅ טיימר מהיר
-import BlockerInsights from '../Learning/BlockerInsights'; // ✅ תובנות חסמים
-import { DeadlineConflictBanner } from '../Notifications/DeadlineConflictModal'; // ✅ התראות דדליין
+import InterruptionsTracker from './InterruptionsTracker';
+import SmartRecommendationsPanel from './SmartRecommendationsPanel';
+import MiniTimer from './MiniTimer';
+import BlockerInsights from '../Learning/BlockerInsights';
+import { EmergencyBufferCard } from '../Learning/EmergencyBuffer'; // ✅ חלון בלת"מים
+import { EscapeWindowCard, EscapeWindowInsights } from '../Learning/EscapeWindowDetector'; // ✅ חלונות בריחה
+import RealEndOfDay, { EndOfDayButton } from '../Learning/RealEndOfDay'; // ✅ סיכום סוף יום
+import { DeadlineConflictBanner } from '../Notifications/DeadlineConflictModal';
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
@@ -52,8 +55,10 @@ function SmartDashboard() {
   const [showDailySummary, setShowDailySummary] = useState(false);
   const [showWeeklySummary, setShowWeeklySummary] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showInterruptions, setShowInterruptions] = useState(false); // ✅ חדש
-  const [showBlockerInsights, setShowBlockerInsights] = useState(false); // ✅ תובנות חסמים
+  const [showInterruptions, setShowInterruptions] = useState(false);
+  const [showBlockerInsights, setShowBlockerInsights] = useState(false);
+  const [showEscapeInsights, setShowEscapeInsights] = useState(false); // ✅ חלונות בריחה
+  const [showEndOfDay, setShowEndOfDay] = useState(false); // ✅ סיכום סוף יום
 
   // תאריכים
   const today = new Date();
@@ -718,6 +723,20 @@ function SmartDashboard() {
           <span className="text-xl">🔍</span>
           <span>הדפוסים שלי</span>
         </button>
+        {/* ✅ כפתור חלונות בריחה */}
+        <EscapeWindowCard onClick={() => setShowEscapeInsights(true)} />
+        {/* ✅ כפתור סיכום סוף יום */}
+        <EndOfDayButton onClick={() => setShowEndOfDay(true)} tasks={tasks} />
+      </motion.div>
+
+      {/* ✅ כרטיס חלון בלת"מים */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.2 }}
+        className="mb-6"
+      >
+        <EmergencyBufferCard />
       </motion.div>
 
       {/* ✅ פאנל המלצות חכמות */}
@@ -845,6 +864,19 @@ function SmartDashboard() {
       <BlockerInsights
         isOpen={showBlockerInsights}
         onClose={() => setShowBlockerInsights(false)}
+      />
+      
+      {/* ✅ חלונות בריחה */}
+      <EscapeWindowInsights
+        isOpen={showEscapeInsights}
+        onClose={() => setShowEscapeInsights(false)}
+      />
+      
+      {/* ✅ סיכום סוף יום */}
+      <RealEndOfDay
+        isOpen={showEndOfDay}
+        onClose={() => setShowEndOfDay(false)}
+        tasks={tasks}
       />
     </div>
   );

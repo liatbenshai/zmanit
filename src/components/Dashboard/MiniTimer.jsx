@@ -8,6 +8,8 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useFiveMinuteRule } from '../Learning/FiveMinuteRule';
+import PreTaskCheckin from '../Learning/PreTaskCheckin'; // ✅ צ'ק-אין לפני משימה
+import { logTimerStop } from '../Learning/EscapeWindowDetector'; // ✅ רישום עצירות
 import toast from 'react-hot-toast';
 
 /**
@@ -53,6 +55,10 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
     // פונקציה שנקראת כשעוצרים אחרי 5 דקות
     stopTimerInternal();
   });
+  
+  // ✅ צ'ק-אין לפני משימה
+  const [showCheckin, setShowCheckin] = useState(false);
+  const [pendingStart, setPendingStart] = useState(null); // 'regular' או 'fiveMinute'
   
   // Refs
   const intervalRef = useRef(null);
@@ -175,7 +181,19 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
   }, []);
   
   // ✅ פונקציה פנימית לעצירה (נקראת גם מ-5 דקות)
-  const stopTimerInternal = useCallback(async () => {
+  const stopTimerInternal = useCallback(async (completed = false) => {
+    // ✅ רישום עצירה באמצע ל-EscapeWindowDetector
+    if (!completed && task && elapsedSecondsRef.current >= 60) {
+      logTimerStop(
+        task.id,
+        task.title,
+        task.task_type,
+        Math.floor(elapsedSecondsRef.current / 60),
+        task.estimated_duration || 30,
+        false
+      );
+    }
+    
     // שמירת הזמן לפני עצירה
     if (elapsedSecondsRef.current >= 60 && task) {
       const minutesToAdd = Math.floor(elapsedSecondsRef.current / 60);
@@ -204,7 +222,7 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
   const stopTimer = stopTimerInternal;
   
   const completeTask = useCallback(async () => {
-    await stopTimerInternal();
+    await stopTimerInternal(true); // ✅ מסמן שהושלם
     
     if (task && onComplete) {
       onComplete(task);
@@ -254,7 +272,15 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
         <div className="space-y-2">
           {/* כפתור התחל רגיל */}
           <button
-            onClick={startTimer}
+            onClick={() => {
+              // הצג צ'ק-אין למשימות של 30+ דקות
+              if (estimated >= 30) {
+                setPendingStart('regular');
+                setShowCheckin(true);
+              } else {
+                startTimer();
+              }
+            }}
             className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white text-lg font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
           >
             <span className="text-2xl">▶️</span>
@@ -264,6 +290,7 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
           {/* ✅ כפתור 5 דקות - להתחלה קלה */}
           <button
             onClick={() => {
+              // 5 דקות = התחלה מהירה, בלי צ'ק-אין
               startFiveMinuteMode();
               startTimer();
             }}
@@ -276,6 +303,25 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
         
         {/* ✅ מודל "רוצה להמשיך?" */}
         <ContinueModal taskTitle={task.title} />
+        
+        {/* ✅ מודל צ'ק-אין לפני משימה */}
+        <PreTaskCheckin
+          isOpen={showCheckin}
+          onClose={() => {
+            setShowCheckin(false);
+            setPendingStart(null);
+          }}
+          onStart={() => {
+            setShowCheckin(false);
+            if (pendingStart === 'fiveMinute') {
+              startFiveMinuteMode();
+            }
+            startTimer();
+            setPendingStart(null);
+          }}
+          taskTitle={task.title}
+          taskDuration={estimated}
+        />
       </motion.div>
     );
   }
