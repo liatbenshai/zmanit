@@ -11,6 +11,7 @@ import WeeklyReview from '../Analytics/WeeklyReview';
 import AdminSettings from '../Admin/AdminSettings';
 import InterruptionsTracker from './InterruptionsTracker'; // ✅ חדש
 import SmartRecommendationsPanel from './SmartRecommendationsPanel'; // ✅ המלצות חכמות
+import MiniTimer from './MiniTimer'; // ✅ טיימר מהיר
 import { DeadlineConflictBanner } from '../Notifications/DeadlineConflictModal'; // ✅ התראות דדליין
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
@@ -413,19 +414,19 @@ function SmartDashboard() {
         </motion.div>
       </div>
 
-      {/* === משימה בוערת (אם יש) === */}
-      {stats.nextTask && (
-        <motion.div
-          initial={{ opacity: 0, x: -20 }}
-          animate={{ opacity: 1, x: 0 }}
-          className="mb-6"
-        >
-          <FocusTaskCard 
-            task={stats.nextTask} 
-            onComplete={() => handleComplete(stats.nextTask.id)}
-          />
-        </motion.div>
-      )}
+      {/* === 🔥 טיימר מהיר - התחל לעבוד! === */}
+      <motion.div
+        initial={{ opacity: 0, x: -20 }}
+        animate={{ opacity: 1, x: 0 }}
+        className="mb-6"
+      >
+        <MiniTimer 
+          task={stats.nextTask} 
+          onComplete={async (task) => {
+            await handleComplete(task.id);
+          }}
+        />
+      </motion.div>
 
       {/* ✅ כפתור הוספת עבודה חדשה */}
       <motion.button
