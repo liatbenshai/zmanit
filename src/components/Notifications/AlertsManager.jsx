@@ -48,7 +48,31 @@ function saveState(state) {
 }
 
 /**
- * ✅ בדיקה אם יש טיימר רץ על משימה ספציפית
+ * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה ספציפית
+ * תומך בשני סוגי טיימרים:
+ * - MiniTimer: משתמש ב-isPaused
+ * - TaskTimerWithInterruptions: משתמש ב-isInterrupted
+ */
+function isTimerActive(taskId) {
+  if (!taskId) return false;
+  try {
+    const key = `timer_v2_${taskId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      // פעיל = רץ, או מושהה (isPaused), או בהפרעה (isInterrupted)
+      if (data.isRunning === true) return true;
+      if (data.isPaused === true) return true;
+      if (data.isInterrupted === true && data.startTime) return true;
+      // אם יש startTime ואין סימון שהטיימר נעצר לגמרי
+      if (data.startTime && (data.isRunning !== false || data.isPaused || data.isInterrupted)) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+/**
+ * ✅ בדיקה אם יש טיימר רץ (לא מושהה/מופרע) על משימה ספציפית
  */
 function isTimerRunning(taskId) {
   if (!taskId) return false;
@@ -57,14 +81,17 @@ function isTimerRunning(taskId) {
     const saved = localStorage.getItem(key);
     if (saved) {
       const data = JSON.parse(saved);
-      return data.isRunning === true && data.isInterrupted !== true;
+      // רץ = isRunning=true ולא מושהה ולא מופרע
+      return data.isRunning === true && 
+             data.isPaused !== true && 
+             data.isInterrupted !== true;
     }
   } catch (e) {}
   return false;
 }
 
 /**
- * ✅ בדיקה אם יש טיימר רץ על משימה כלשהי
+ * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה כלשהי
  */
 function getActiveTaskId() {
   try {
@@ -74,7 +101,11 @@ function getActiveTaskId() {
         const saved = localStorage.getItem(key);
         if (saved) {
           const data = JSON.parse(saved);
-          if (data.isRunning === true && data.isInterrupted !== true) {
+          // פעיל = רץ, או מושהה, או בהפרעה
+          const isActive = data.isRunning === true || 
+                           data.isPaused === true || 
+                           (data.isInterrupted === true && data.startTime);
+          if (isActive) {
             return key.replace('timer_v2_', '');
           }
         }
@@ -259,52 +290,55 @@ function AlertsManager({ onTaskClick }) {
       const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
       const alertKey = `task_${task.id}_${today}`;
       
-      // ✅ אם הטיימר רץ על המשימה הזו - בדיקת חריגה מזמן
-      if (isTimerRunning(task.id)) {
+      // ✅ אם הטיימר פעיל (רץ או מושהה) על המשימה הזו - בדיקת חריגה מזמן
+      if (isTimerActive(task.id)) {
         const estimated = task.estimated_duration || 0;
         if (estimated > 0) {
-          const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
-          const remaining = estimated - elapsed;
-          
-          // ✅ הזמן נגמר! - התראה מיוחדת עם אפשרויות
-          if (remaining <= 0 && remaining > -5) {
-            const timeUpKey = `timeup_${task.id}_${today}`;
-            if (!alertsState[timeUpKey]) {
-              alertsList.push({
-                id: `timeup-${task.id}`,
-                type: 'timeup',
-                priority: -2, // הכי דחוף!
-                icon: '🔔',
-                title: 'הזמן נגמר!',
-                message: `${taskType.icon} ${task.title}`,
-                task,
-                color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 animate-pulse',
-                dismissKey: timeUpKey,
-                showTimeUpActions: true
-              });
+          // רק אם הטיימר רץ (לא מושהה) - בדוק חריגה
+          if (isTimerRunning(task.id)) {
+            const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
+            const remaining = estimated - elapsed;
+            
+            // ✅ הזמן נגמר! - התראה מיוחדת עם אפשרויות
+            if (remaining <= 0 && remaining > -5) {
+              const timeUpKey = `timeup_${task.id}_${today}`;
+              if (!alertsState[timeUpKey]) {
+                alertsList.push({
+                  id: `timeup-${task.id}`,
+                  type: 'timeup',
+                  priority: -2, // הכי דחוף!
+                  icon: '🔔',
+                  title: 'הזמן נגמר!',
+                  message: `${taskType.icon} ${task.title}`,
+                  task,
+                  color: 'bg-purple-100 dark:bg-purple-900/30 border-purple-400 dark:border-purple-600 animate-pulse',
+                  dismissKey: timeUpKey,
+                  showTimeUpActions: true
+                });
+              }
             }
-          }
-          
-          // חריגה מהזמן
-          if (remaining < -5) {
-            const overtimeKey = `overtime_${task.id}_${today}`;
-            if (!alertsState[overtimeKey]) {
-              alertsList.push({
-                id: `overtime-${task.id}`,
-                type: 'overtime',
-                priority: -1,
-                icon: '⚠️',
-                title: `חריגה של ${Math.abs(Math.round(remaining))} דקות`,
-                message: `${taskType.icon} ${task.title}`,
-                task,
-                color: 'bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600',
-                dismissKey: overtimeKey
-              });
+            
+            // חריגה מהזמן
+            if (remaining < -5) {
+              const overtimeKey = `overtime_${task.id}_${today}`;
+              if (!alertsState[overtimeKey]) {
+                alertsList.push({
+                  id: `overtime-${task.id}`,
+                  type: 'overtime',
+                  priority: -1,
+                  icon: '⚠️',
+                  title: `חריגה של ${Math.abs(Math.round(remaining))} דקות`,
+                  message: `${taskType.icon} ${task.title}`,
+                  task,
+                  color: 'bg-red-100 dark:bg-red-900/30 border-red-400 dark:border-red-600',
+                  dismissKey: overtimeKey
+                });
+              }
             }
           }
         }
         
-        return; // אם עובדים על המשימה - לא צריך התראות נוספות עליה
+        return; // אם הטיימר פעיל (גם מושהה!) - לא צריך התראות נוספות עליה
       }
       
       // ✅ אם יש טיימר רץ על משימה אחרת - לא מציגים התראות כלל!

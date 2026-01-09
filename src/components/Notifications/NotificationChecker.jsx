@@ -14,16 +14,25 @@ function toLocalISODate(date) {
 }
 
 /**
- * ✅ בדיקה אם יש טיימר רץ על משימה ספציפית
+ * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה ספציפית
+ * תומך בשני סוגי טיימרים:
+ * - MiniTimer: משתמש ב-isPaused
+ * - TaskTimerWithInterruptions: משתמש ב-isInterrupted
  */
-function isTimerRunning(taskId) {
+function isTimerActive(taskId) {
   if (!taskId) return false;
   try {
     const key = `timer_v2_${taskId}`;
     const saved = localStorage.getItem(key);
     if (saved) {
       const data = JSON.parse(saved);
-      return data.isRunning === true && data.isInterrupted !== true;
+      // פעיל = רץ, או מושהה (isPaused), או בהפרעה (isInterrupted)
+      // כל עוד יש startTime - המשימה פעילה
+      if (data.isRunning === true) return true;
+      if (data.isPaused === true) return true;
+      if (data.isInterrupted === true && data.startTime) return true;
+      // אם יש startTime ואין סימון שהטיימר נעצר לגמרי
+      if (data.startTime && (data.isRunning !== false || data.isPaused || data.isInterrupted)) return true;
     }
   } catch (e) {
     console.error('שגיאה בבדיקת טיימר:', e);
@@ -32,7 +41,28 @@ function isTimerRunning(taskId) {
 }
 
 /**
- * ✅ בדיקה אם יש טיימר רץ על משימה כלשהי
+ * ✅ בדיקה אם יש טיימר רץ (לא מושהה/מופרע) על משימה ספציפית
+ */
+function isTimerRunning(taskId) {
+  if (!taskId) return false;
+  try {
+    const key = `timer_v2_${taskId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      // רץ = isRunning=true ולא מושהה ולא מופרע
+      return data.isRunning === true && 
+             data.isPaused !== true && 
+             data.isInterrupted !== true;
+    }
+  } catch (e) {
+    console.error('שגיאה בבדיקת טיימר:', e);
+  }
+  return false;
+}
+
+/**
+ * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה כלשהי
  */
 function getActiveTaskId() {
   try {
@@ -42,7 +72,11 @@ function getActiveTaskId() {
         const saved = localStorage.getItem(key);
         if (saved) {
           const data = JSON.parse(saved);
-          if (data.isRunning === true && data.isInterrupted !== true) {
+          // פעיל = רץ, או מושהה, או בהפרעה
+          const isActive = data.isRunning === true || 
+                           data.isPaused === true || 
+                           (data.isInterrupted === true && data.startTime);
+          if (isActive) {
             return key.replace('timer_v2_', '');
           }
         }
@@ -207,51 +241,54 @@ function NotificationChecker() {
       }
 
       // =============================================
-      // סוג 1: התראות על טיימר רץ - זמן עומד להיגמר
+      // סוג 1: התראות על טיימר פעיל (רץ או מושהה)
       // =============================================
-      if (isTimerRunning(task.id)) {
-        const estimated = task.estimated_duration || 0;
-        if (estimated <= 0) return; // אין הערכת זמן
-        
-        const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
-        const remaining = estimated - elapsed;
-        
-        // התראה 5 דקות לפני סיום הזמן
-        if (remaining > 0 && remaining <= 5 && remaining > 2) {
-          if (canNotify(task.id, 'endingSoon', 5)) {
-            sendNotification(`⏳ ${task.title}`, {
-              body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
-              tag: `task-ending-${task.id}`
-            });
-            markNotified(task.id, 'endingSoon');
+      if (isTimerActive(task.id)) {
+        // רק אם הטיימר רץ (לא מושהה) - שלח התראות על זמן
+        if (isTimerRunning(task.id)) {
+          const estimated = task.estimated_duration || 0;
+          if (estimated > 0) {
+            const elapsed = getElapsedMinutes(task.id, task.time_spent || 0);
+            const remaining = estimated - elapsed;
+            
+            // התראה 5 דקות לפני סיום הזמן
+            if (remaining > 0 && remaining <= 5 && remaining > 2) {
+              if (canNotify(task.id, 'endingSoon', 5)) {
+                sendNotification(`⏳ ${task.title}`, {
+                  body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
+                  tag: `task-ending-${task.id}`
+                });
+                markNotified(task.id, 'endingSoon');
+              }
+            }
+            
+            // ✅ התראה כשהזמן נגמר - פעם אחת בלבד!
+            if (remaining <= 0 && remaining > -2) {
+              if (!timeUpNotifiedRef.current.has(task.id)) {
+                sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
+                  body: 'הזמן המוקצב הסתיים. מה עושים? 🤔',
+                  tag: `task-timeup-${task.id}`,
+                  requireInteraction: true // נשאר עד שלוחצים
+                });
+                timeUpNotifiedRef.current.add(task.id);
+              }
+            }
+            
+            // התראה על חריגה - כל 15 דקות (לא כל 10)
+            if (remaining < -5) {
+              if (canNotify(task.id, 'overtime', 15)) {
+                const overtimeMinutes = Math.abs(Math.round(remaining));
+                sendNotification(`⚠️ חריגה: ${task.title}`, {
+                  body: `חרגת ב-${overtimeMinutes} דקות מהזמן המוקצב. אולי להעביר משימות?`,
+                  tag: `task-overtime-${task.id}`
+                });
+                markNotified(task.id, 'overtime');
+              }
+            }
           }
         }
         
-        // ✅ התראה כשהזמן נגמר - פעם אחת בלבד!
-        if (remaining <= 0 && remaining > -2) {
-          if (!timeUpNotifiedRef.current.has(task.id)) {
-            sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
-              body: 'הזמן המוקצב הסתיים. מה עושים? 🤔',
-              tag: `task-timeup-${task.id}`,
-              requireInteraction: true // נשאר עד שלוחצים
-            });
-            timeUpNotifiedRef.current.add(task.id);
-          }
-        }
-        
-        // התראה על חריגה - כל 15 דקות (לא כל 10)
-        if (remaining < -5) {
-          if (canNotify(task.id, 'overtime', 15)) {
-            const overtimeMinutes = Math.abs(Math.round(remaining));
-            sendNotification(`⚠️ חריגה: ${task.title}`, {
-              body: `חרגת ב-${overtimeMinutes} דקות מהזמן המוקצב. אולי להעביר משימות?`,
-              tag: `task-overtime-${task.id}`
-            });
-            markNotified(task.id, 'overtime');
-          }
-        }
-        
-        return; // אם הטיימר רץ על המשימה הזו, לא צריך התראות נוספות
+        return; // אם הטיימר פעיל (גם מושהה!) - לא צריך התראות נוספות
       }
 
       // =============================================

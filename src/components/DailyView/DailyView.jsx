@@ -204,7 +204,8 @@ function DailyView() {
           const timerData = localStorage.getItem(`timer_v2_${task.id}`);
           if (timerData) {
             const parsed = JSON.parse(timerData);
-            if (parsed.isRunning || parsed.isPaused) {
+            // ✅ תיקון: גם isInterrupted נחשב כטיימר פעיל
+            if (parsed.isRunning || parsed.isPaused || (parsed.isInterrupted && parsed.startTime)) {
               timers[task.id] = parsed;
             }
           }
@@ -682,11 +683,12 @@ function DailyView() {
     return activeTimers[taskId]?.isRunning && !activeTimers[taskId]?.isInterrupted;
   };
   
-  // ✅ תיקון: גם isPaused נחשב כ"עובד עליה"
+  // ✅ תיקון: גם isPaused וגם isInterrupted נחשבים כ"עובד עליה"
   const isTimerActive = (taskId) => {
     if (!taskId) return false;
     const timer = activeTimers[taskId];
-    return timer && (timer.isRunning || timer.isPaused);
+    if (!timer) return false;
+    return timer.isRunning || timer.isPaused || (timer.isInterrupted && timer.startTime);
   };
   
   const isBlockPast = (block) => {

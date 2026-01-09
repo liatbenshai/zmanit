@@ -7,6 +7,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
+import { useFiveMinuteRule } from '../Learning/FiveMinuteRule';
 import toast from 'react-hot-toast';
 
 /**
@@ -39,6 +40,19 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [startTime, setStartTime] = useState(null);
+  
+  // ✅ כלל 5 הדקות
+  const {
+    isFiveMinuteMode,
+    showContinueModal,
+    startFiveMinuteMode,
+    handleContinue: fiveMinuteContinue,
+    handleStop: fiveMinuteStop,
+    ContinueModal
+  } = useFiveMinuteRule(task?.id, () => {
+    // פונקציה שנקראת כשעוצרים אחרי 5 דקות
+    stopTimerInternal();
+  });
   
   // Refs
   const intervalRef = useRef(null);
@@ -160,7 +174,8 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
     toast.success('▶️ ממשיכים!', { duration: 1500 });
   }, []);
   
-  const stopTimer = useCallback(async () => {
+  // ✅ פונקציה פנימית לעצירה (נקראת גם מ-5 דקות)
+  const stopTimerInternal = useCallback(async () => {
     // שמירת הזמן לפני עצירה
     if (elapsedSecondsRef.current >= 60 && task) {
       const minutesToAdd = Math.floor(elapsedSecondsRef.current / 60);
@@ -185,13 +200,16 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
     }
   }, [task, editTask, timerStorageKey]);
   
+  // עצירה רגילה
+  const stopTimer = stopTimerInternal;
+  
   const completeTask = useCallback(async () => {
-    await stopTimer();
+    await stopTimerInternal();
     
     if (task && onComplete) {
       onComplete(task);
     }
-  }, [task, onComplete, stopTimer]);
+  }, [task, onComplete, stopTimerInternal]);
   
   // ===== אין משימה =====
   if (!task) {
@@ -232,14 +250,32 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
           </div>
         </div>
         
-        {/* כפתור התחל */}
-        <button
-          onClick={startTimer}
-          className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white text-lg font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
-        >
-          <span className="text-2xl">▶️</span>
-          <span>התחל לעבוד!</span>
-        </button>
+        {/* כפתורי התחלה */}
+        <div className="space-y-2">
+          {/* כפתור התחל רגיל */}
+          <button
+            onClick={startTimer}
+            className="w-full py-4 rounded-xl bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white text-lg font-bold shadow-lg hover:shadow-xl transition-all transform hover:scale-[1.02] flex items-center justify-center gap-3"
+          >
+            <span className="text-2xl">▶️</span>
+            <span>התחל לעבוד!</span>
+          </button>
+          
+          {/* ✅ כפתור 5 דקות - להתחלה קלה */}
+          <button
+            onClick={() => {
+              startFiveMinuteMode();
+              startTimer();
+            }}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-400 to-orange-500 hover:from-amber-500 hover:to-orange-600 text-white font-medium shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
+          >
+            <span>5️⃣</span>
+            <span>רק 5 דקות! (כלל ההתחלה הקלה)</span>
+          </button>
+        </div>
+        
+        {/* ✅ מודל "רוצה להמשיך?" */}
+        <ContinueModal taskTitle={task.title} />
       </motion.div>
     );
   }

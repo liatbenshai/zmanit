@@ -6,6 +6,7 @@ import TaskTimerWithInterruptions from '../Tasks/TaskTimerWithInterruptions';
 import { getTaskType, getAllTaskTypes } from '../../config/taskTypes';
 import { recordTaskCompletion } from '../../utils/taskLearning';
 import ConfirmDialog from '../UI/ConfirmDialog';
+import BlockerLogModal from '../Learning/BlockerLogModal'; // ✅ לוג חסמים
 
 // קבלת TASK_TYPES מ-config (לתאימות לאחור)
 const TASK_TYPES = getAllTaskTypes();
@@ -209,6 +210,8 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
   const [showFeedback, setShowFeedback] = useState(false);
   const [virtualCompleted, setVirtualCompleted] = useState(false);
   const [showMoveMenu, setShowMoveMenu] = useState(false);
+  const [showBlockerModal, setShowBlockerModal] = useState(false); // ✅ לוג חסמים
+  const [pendingMove, setPendingMove] = useState(null); // ✅ פעולה ממתינה
 
   const currentTask = task;
   const isVirtual = isVirtualBlock(currentTask.id);
@@ -274,13 +277,21 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
     return mins > 0 ? `${hours}:${mins.toString().padStart(2, '0')}` : `${hours} שעות`;
   };
 
-  // ✅ העברה למחר
+  // ✅ העברה למחר - עם שאלת חסמים
   const handleMoveToTomorrow = async () => {
     if (isVirtual) {
       toast.error('לא ניתן להעביר בלוק קבוע');
       return;
     }
     
+    // הצגת מודל חסמים לפני ההעברה
+    setPendingMove({ type: 'tomorrow' });
+    setShowBlockerModal(true);
+    setShowMoveMenu(false);
+  };
+  
+  // ✅ ביצוע ההעברה בפועל (אחרי מודל החסמים)
+  const executeMoveToTomorrow = async () => {
     try {
       await editTask(currentTask.id, {
         due_date: getTomorrowISO(),
@@ -291,13 +302,31 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
     } catch (err) {
       toast.error('שגיאה בהעברת המשימה');
     }
-    setShowMoveMenu(false);
+  };
+  
+  // ✅ סגירת מודל חסמים וביצוע הפעולה
+  const handleBlockerModalClose = () => {
+    setShowBlockerModal(false);
+    if (pendingMove?.type === 'tomorrow') {
+      executeMoveToTomorrow();
+    } else if (pendingMove?.type === 'date') {
+      executeMoveToDate(pendingMove.days);
+    }
+    setPendingMove(null);
   };
 
-  // ✅ העברה לתאריך ספציפי
-  const handleMoveToDate = async (daysFromNow) => {
+  // ✅ העברה לתאריך ספציפי - עם שאלת חסמים
+  const handleMoveToDate = (daysFromNow) => {
     if (isVirtual) return;
     
+    // הצגת מודל חסמים לפני ההעברה
+    setPendingMove({ type: 'date', days: daysFromNow });
+    setShowBlockerModal(true);
+    setShowMoveMenu(false);
+  };
+  
+  // ✅ ביצוע העברה לתאריך בפועל
+  const executeMoveToDate = async (daysFromNow) => {
     const targetDate = new Date();
     targetDate.setDate(targetDate.getDate() + daysFromNow);
     const year = targetDate.getFullYear();
@@ -315,7 +344,6 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
     } catch (err) {
       toast.error('שגיאה בהעברת המשימה');
     }
-    setShowMoveMenu(false);
   };
 
   const handleToggleComplete = async (e) => {
@@ -695,6 +723,14 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
         cancelText="ביטול"
         type="danger"
         loading={deleting}
+      />
+      
+      {/* ✅ מודל לוג חסמים - מה עצר אותך? */}
+      <BlockerLogModal
+        isOpen={showBlockerModal}
+        onClose={handleBlockerModalClose}
+        task={currentTask}
+        onSkip={handleBlockerModalClose}
       />
     </>
   );

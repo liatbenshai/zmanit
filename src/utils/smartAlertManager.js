@@ -159,6 +159,9 @@ export class SmartAlertManager {
     const todayISO = toLocalISODate(now);
     const alerts = [];
     
+    // ✅ בדיקת טיימר פעיל מ-localStorage
+    const activeTaskFromStorage = getActiveTaskIdFromStorage();
+    
     // סינון בלוקים של היום
     const todayBlocks = scheduledBlocks.filter(b => b.dayDate === todayISO && !b.isCompleted);
     
@@ -167,18 +170,32 @@ export class SmartAlertManager {
       
       // משימה מתחילה בעוד 5 דקות
       if (timeDiff > 0 && timeDiff <= 5 && !this.wasAlertSent(block.taskId, ALERT_TYPES.TASK_STARTING_SOON)) {
-        alerts.push(this.createTaskStartingSoonAlert(block));
+        // ✅ לא מתריעים אם יש טיימר פעיל
+        if (!activeTaskFromStorage) {
+          alerts.push(this.createTaskStartingSoonAlert(block));
+        }
       }
       
       // משימה הייתה צריכה להתחיל אבל לא התחילה
-      if (timeDiff < 0 && timeDiff >= -15 && this.activeTaskId !== block.taskId) {
-        if (!this.wasAlertSent(block.taskId, ALERT_TYPES.TASK_OVERDUE)) {
-          alerts.push(this.createTaskOverdueAlert(block));
+      // ✅ בודקים גם localStorage וגם this.activeTaskId
+      if (timeDiff < 0 && timeDiff >= -15) {
+        const isActiveOnThisTask = this.activeTaskId === block.taskId || 
+                                    activeTaskFromStorage === block.taskId ||
+                                    isTimerActive(block.taskId);
+        
+        if (!isActiveOnThisTask && !activeTaskFromStorage) {
+          if (!this.wasAlertSent(block.taskId, ALERT_TYPES.TASK_OVERDUE)) {
+            alerts.push(this.createTaskOverdueAlert(block));
+          }
         }
       }
       
       // משימה צריכה להסתיים - צריך לעבור למשימה הבאה
-      if (this.activeTaskId === block.taskId) {
+      const isActiveOnThisTask = this.activeTaskId === block.taskId || 
+                                  activeTaskFromStorage === block.taskId ||
+                                  isTimerActive(block.taskId);
+      
+      if (isActiveOnThisTask) {
         const timeToEnd = block.endMinute - currentMinutes;
         
         // 5 דקות לסיום
@@ -510,6 +527,55 @@ function toLocalISODate(date) {
   const month = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${year}-${month}-${day}`;
+}
+
+/**
+ * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה ספציפית
+ * תומך בשני סוגי טיימרים:
+ * - MiniTimer: משתמש ב-isPaused
+ * - TaskTimerWithInterruptions: משתמש ב-isInterrupted
+ */
+function isTimerActive(taskId) {
+  if (!taskId) return false;
+  try {
+    const key = `timer_v2_${taskId}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      const data = JSON.parse(saved);
+      // פעיל = רץ, או מושהה (isPaused), או בהפרעה (isInterrupted)
+      if (data.isRunning === true) return true;
+      if (data.isPaused === true) return true;
+      if (data.isInterrupted === true && data.startTime) return true;
+      // אם יש startTime ואין סימון שהטיימר נעצר לגמרי
+      if (data.startTime && (data.isRunning !== false || data.isPaused || data.isInterrupted)) return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
+/**
+ * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה כלשהי
+ */
+function getActiveTaskIdFromStorage() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('timer_v2_')) {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const data = JSON.parse(saved);
+          // פעיל = רץ, או מושהה, או בהפרעה
+          const isActive = data.isRunning === true || 
+                           data.isPaused === true || 
+                           (data.isInterrupted === true && data.startTime);
+          if (isActive) {
+            return key.replace('timer_v2_', '');
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return null;
 }
 
 // ============================================

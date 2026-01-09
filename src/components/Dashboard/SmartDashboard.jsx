@@ -12,6 +12,7 @@ import AdminSettings from '../Admin/AdminSettings';
 import InterruptionsTracker from './InterruptionsTracker'; // ✅ חדש
 import SmartRecommendationsPanel from './SmartRecommendationsPanel'; // ✅ המלצות חכמות
 import MiniTimer from './MiniTimer'; // ✅ טיימר מהיר
+import BlockerInsights from '../Learning/BlockerInsights'; // ✅ תובנות חסמים
 import { DeadlineConflictBanner } from '../Notifications/DeadlineConflictModal'; // ✅ התראות דדליין
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
@@ -52,6 +53,7 @@ function SmartDashboard() {
   const [showWeeklySummary, setShowWeeklySummary] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showInterruptions, setShowInterruptions] = useState(false); // ✅ חדש
+  const [showBlockerInsights, setShowBlockerInsights] = useState(false); // ✅ תובנות חסמים
 
   // תאריכים
   const today = new Date();
@@ -708,6 +710,14 @@ function SmartDashboard() {
           <span className="text-xl">⏸️</span>
           <span>ניתוח הפרעות</span>
         </button>
+        {/* ✅ כפתור תובנות דחיינות */}
+        <button
+          onClick={() => setShowBlockerInsights(true)}
+          className="flex items-center justify-center gap-2 p-4 bg-gradient-to-l from-indigo-500 to-purple-600 text-white rounded-xl font-medium hover:from-indigo-600 hover:to-purple-700 transition-all shadow-sm"
+        >
+          <span className="text-xl">🔍</span>
+          <span>הדפוסים שלי</span>
+        </button>
       </motion.div>
 
       {/* ✅ פאנל המלצות חכמות */}
@@ -830,6 +840,12 @@ function SmartDashboard() {
           </Modal>
         )}
       </AnimatePresence>
+      
+      {/* ✅ תובנות דחיינות */}
+      <BlockerInsights
+        isOpen={showBlockerInsights}
+        onClose={() => setShowBlockerInsights(false)}
+      />
     </div>
   );
 }
