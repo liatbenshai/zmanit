@@ -60,10 +60,20 @@ function getRemainingMinutesToday(scheduleType = 'work') {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const dayOfWeek = now.getDay();
   
-  // שישי-שבת
+  // ✅ תיקון: שישי-שבת - חישוב דינמי של זמן בית
   if (dayOfWeek === 5 || dayOfWeek === 6) {
     if (scheduleType === 'home') {
-      return 8 * 60; // גמיש - 8 שעות
+      // סופ"ש: 08:00 - 22:00
+      const weekendStart = 8 * 60;   // 08:00
+      const weekendEnd = 22 * 60;    // 22:00
+      
+      if (currentMinutes < weekendStart) {
+        return weekendEnd - weekendStart; // כל היום
+      }
+      if (currentMinutes >= weekendEnd) {
+        return 0;
+      }
+      return weekendEnd - currentMinutes; // מה שנשאר
     }
     return 0; // אין שעות עבודה בסופ"ש
   }
@@ -94,9 +104,16 @@ function isHomeTask(task) {
   if (category && HOME_CATEGORIES.includes(category)) {
     return true;
   }
-  // בדיקה לפי סוג המשימה אם אין קטגוריה
+  // ✅ תיקון: רשימה מלאה של סוגי משימות בית/משפחה
   const taskType = task.task_type || '';
-  if (['family', 'home', 'personal', 'shopping', 'errands'].includes(taskType)) {
+  const homeTaskTypes = [
+    'family', 'home', 'personal', 'shopping', 'errands',
+    // משפחה
+    'shaked', 'dor', 'ava', 'yaron',
+    // בית
+    'cleaning', 'cooking', 'laundry'
+  ];
+  if (homeTaskTypes.includes(taskType)) {
     return true;
   }
   return false;
@@ -160,7 +177,7 @@ export function calculateAutoReschedule(tasks, editTask) {
   const tomorrow = toLocalISODate(getNextWorkday(now));
   const dayOfWeek = now.getDay();
   
-  // בשישי-שבת - אין התראות על משימות עבודה
+  // בשישי-שבת - כל המשימות נחשבות כמשימות בית
   const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
   
   // סינון משימות - רק משימות "רגילות", לא פרויקטים גדולים, לא הורים עם אינטרוולים
@@ -172,9 +189,9 @@ export function calculateAutoReschedule(tasks, editTask) {
     (t.due_date === today || t.start_date === today)
   );
   
-  // ✅ חדש: מפרידים לפי סוג
-  const todayWorkTasks = todayTasks.filter(t => !isHomeTask(t));
-  const todayHomeTasks = todayTasks.filter(t => isHomeTask(t));
+  // ✅ תיקון: בסופ"ש כל המשימות הן משימות בית
+  const todayWorkTasks = isWeekend ? [] : todayTasks.filter(t => !isHomeTask(t));
+  const todayHomeTasks = isWeekend ? todayTasks : todayTasks.filter(t => isHomeTask(t));
   
   const tomorrowTasks = tasks.filter(t => 
     !t.is_completed && 
@@ -185,9 +202,12 @@ export function calculateAutoReschedule(tasks, editTask) {
   
   const tomorrowWorkTasks = tomorrowTasks.filter(t => !isHomeTask(t));
   
-  // ✅ חדש: חישוב זמן פנוי לפי סוג
+  // ✅ תיקון: חישוב זמן פנוי - בסופ"ש רק זמן בית
   const remainingWorkToday = isWeekend ? 0 : getRemainingMinutesToday('work');
   const remainingHomeToday = getRemainingMinutesToday('home');
+  
+  // ✅ תיקון: בסופ"ש משתמשים בזמן הבית לחישוב
+  const effectiveRemainingTime = isWeekend ? remainingHomeToday : remainingWorkToday;
   
   // ✅ תיקון מלא: לוגיקה חדשה להעברת משימות למחר
   // 1. חישוב סך כל הזמן הדרוש
@@ -195,16 +215,19 @@ export function calculateAutoReschedule(tasks, editTask) {
   // 3. מיון מהפחות דחוף לדחוף
   // 4. העברה למחר עד שמכסים את הזמן החסר
   
-  // חישוב סך הזמן הדרוש לכל משימות העבודה
+  // ✅ תיקון: בסופ"ש מחשבים את משימות הבית, בימים רגילים את משימות העבודה
+  const relevantTasks = isWeekend ? todayHomeTasks : todayWorkTasks;
+  
+  // חישוב סך הזמן הדרוש
   let totalTimeNeeded = 0;
-  todayWorkTasks.forEach(task => {
+  relevantTasks.forEach(task => {
     if (!isTimerRunning(task.id)) {
       totalTimeNeeded += getRemainingTaskTime(task);
     }
   });
   
   // כמה זמן חסר?
-  const timeOverflow = Math.max(0, totalTimeNeeded - remainingWorkToday);
+  const timeOverflow = Math.max(0, totalTimeNeeded - effectiveRemainingTime);
   
   const tasksToMoveToTomorrow = [];
   const tasksToKeepToday = [];
@@ -222,7 +245,7 @@ export function calculateAutoReschedule(tasks, editTask) {
   const regularTasks = [];
   const intervalsByParent = new Map(); // parent_id -> [tasks sorted by index]
   
-  todayWorkTasks.forEach(task => {
+  relevantTasks.forEach(task => {
     if (task.parent_task_id) {
       const parentId = task.parent_task_id;
       if (!intervalsByParent.has(parentId)) {
@@ -317,12 +340,11 @@ export function calculateAutoReschedule(tasks, editTask) {
     timeNeededToday += getRemainingTaskTime(task);
   });
   
-  // חישוב זמן פנוי שנשאר אחרי המשימות שנשארו
-  const freeTimeToday = remainingWorkToday - timeNeededToday;
+  // ✅ תיקון: שימוש בזמן האפקטיבי (עבודה או בית)
+  const freeTimeToday = effectiveRemainingTime - timeNeededToday;
   
-  // ✅ חדש: חישוב משימות שחורגות מסוף יום העבודה (16:00)
-  // אלה משימות שנשארות להיום אבל זמן הסיום שלהן עובר את 16:00
-  const WORK_END_MINUTES = 16 * 60; // 16:00
+  // ✅ תיקון: חישוב משימות שחורגות מסוף היום - דינמי לפי סוג היום
+  const DAY_END_MINUTES = isWeekend ? 22 * 60 : 16.25 * 60; // 22:00 בסופ"ש, 16:15 בימים רגילים
   const tasksOverflowingEndOfDay = [];
   
   tasksToKeepToday.forEach(task => {
@@ -331,13 +353,13 @@ export function calculateAutoReschedule(tasks, editTask) {
       const startMinutes = h * 60 + (m || 0);
       const endMinutes = startMinutes + getRemainingTaskTime(task);
       
-      // אם המשימה מסתיימת אחרי 16:00 - היא חורגת
-      if (endMinutes > WORK_END_MINUTES) {
+      // אם המשימה מסתיימת אחרי סוף היום - היא חורגת
+      if (endMinutes > DAY_END_MINUTES) {
         tasksOverflowingEndOfDay.push({
           ...task,
           startMinutes,
           endMinutes,
-          overflowMinutes: endMinutes - WORK_END_MINUTES
+          overflowMinutes: endMinutes - DAY_END_MINUTES
         });
       }
     }
@@ -369,13 +391,14 @@ export function calculateAutoReschedule(tasks, editTask) {
   return {
     today,
     tomorrow,
-    remainingWorkToday,
+    remainingWorkToday: effectiveRemainingTime,  // ✅ תיקון: מחזיר זמן אפקטיבי
     timeNeededToday,
     freeTimeToday,
     tasksToMoveToTomorrow,
     tasksToMoveToToday,
     tasksToKeepToday,
-    tasksOverflowingEndOfDay  // ✅ חדש: משימות שחורגות מ-16:00
+    tasksOverflowingEndOfDay,  // ✅ משימות שחורגות מסוף היום
+    isWeekend  // ✅ חדש: האם סופ"ש
   };
 }
 
