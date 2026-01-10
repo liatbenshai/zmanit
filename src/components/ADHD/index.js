@@ -49,6 +49,3 @@ export { default as WeeklyPlanningWizard } from './WeeklyPlanningWizard';
 
 // כפתור "משימה לשבוע" - הוספה מהירה
 export { default as AddWeekTaskButton } from './AddWeekTaskButton';
-
-// כפתור צף לתכנון שבועי
-export { default as WeeklyTaskButton } from './WeeklyTaskButton';
