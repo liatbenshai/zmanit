@@ -368,11 +368,19 @@ export function calculateAutoReschedule(tasks, editTask) {
   // האם אפשר למשוך משימות ממחר?
   const tasksToMoveToToday = [];
   
+  // ✅ תיקון: בסופ"ש לא מציעים להקדים משימות עבודה!
+  // רק משימות בית יכולות להיות מוקדמות לסופ"ש
   if (freeTimeToday > 15) { // לפחות 15 דקות פנויות
     let usedFreeTime = 0;
     
+    // ✅ תיקון: בסופ"ש - רק משימות בית ממחר
+    // בימים רגילים - משימות עבודה ממחר
+    const eligibleTomorrowTasks = isWeekend 
+      ? tomorrowTasks.filter(t => isHomeTask(t))  // סופ"ש: רק משימות בית
+      : tomorrowWorkTasks;  // ימים רגילים: משימות עבודה
+    
     // מיון משימות מחר לפי עדיפות
-    const sortedTomorrowTasks = [...tomorrowTasks].sort((a, b) => {
+    const sortedTomorrowTasks = [...eligibleTomorrowTasks].sort((a, b) => {
       const priorityOrder = { urgent: 0, high: 1, normal: 2 };
       return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
     });
