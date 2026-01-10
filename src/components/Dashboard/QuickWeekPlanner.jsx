@@ -2,6 +2,7 @@
  * QuickWeekPlanner - תכנון שבועי מהיר בדשבורד
  * ============================================
  * מציג סקירת שבוע ומאפשר הוספת משימות דרך SimpleTaskForm הרגיל
+ * ✅ חדש: כפתור לאשף תכנון שבועי אינטראקטיבי
  */
 
 import { useState, useMemo } from 'react';
@@ -11,6 +12,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { smartScheduleWeekV4 } from '../../utils/smartSchedulerV4';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import Modal from '../UI/Modal';
+import WeeklyPlanningWizard from '../ADHD/WeeklyPlanningWizard'; // 🆕 אשף תכנון
 
 const DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
@@ -75,6 +77,7 @@ export default function QuickWeekPlanner() {
   const [weekOffset, setWeekOffset] = useState(0);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [selectedDate, setSelectedDate] = useState(null);
+  const [showPlanningWizard, setShowPlanningWizard] = useState(false); // 🆕 אשף תכנון
   
   // חישוב השבוע לפי offset
   const weekDays = useMemo(() => getWeekDays(weekOffset), [weekOffset]);
@@ -145,7 +148,19 @@ export default function QuickWeekPlanner() {
             <div className="flex items-center gap-3">
               <span className="text-2xl">📅</span>
               <div>
-                <h3 className="font-bold text-lg">תכנון שבועי</h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-lg">תכנון שבועי</h3>
+                  {/* 🆕 כפתור אשף תכנון */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowPlanningWizard(true);
+                    }}
+                    className="px-2 py-1 bg-white/20 hover:bg-white/30 rounded-lg text-xs font-medium transition-colors"
+                  >
+                    ✨ אשף תכנון
+                  </button>
+                </div>
                 <p className="text-white/80 text-sm">
                   {weekPlan?.summary?.totalTasks || 0} משימות
                   {(weekPlan?.summary?.unscheduledCount || 0) > 0 && 
@@ -350,6 +365,21 @@ export default function QuickWeekPlanner() {
           onSuccess={handleCloseForm}
         />
       </Modal>
+
+      {/* 🆕 אשף תכנון שבועי אינטראקטיבי */}
+      {showPlanningWizard && (
+        <WeeklyPlanningWizard
+          existingTasks={tasks}
+          onSave={(newTasks) => {
+            // שמירת המשימות החדשות
+            newTasks.forEach(task => {
+              addTask(task);
+            });
+            setShowPlanningWizard(false);
+          }}
+          onClose={() => setShowPlanningWizard(false)}
+        />
+      )}
     </>
   );
 }
