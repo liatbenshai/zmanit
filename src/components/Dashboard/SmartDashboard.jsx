@@ -22,6 +22,9 @@ import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
 
+// 🧠 קומפוננטות ADHD - הועברו לתצוגה ממוקדת
+// import { AddWeekTaskButton, PanicButton } from '../ADHD';
+
 // ציטוטים מוטיבציוניים
 const MOTIVATIONAL_QUOTES = [
   { text: "הדרך הטובה ביותר לחזות את העתיד היא ליצור אותו", author: "פיטר דרוקר" },

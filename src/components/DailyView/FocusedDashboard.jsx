@@ -10,11 +10,14 @@ import Button from '../UI/Button';
 import toast from 'react-hot-toast';
 import { supabase } from '../../services/supabase';
 
+// 🧠 כפתורי ADHD
+import { AddWeekTaskButton, PanicButton } from '../ADHD';
+
 /**
  * דשבורד ממוקד - תצוגה נקייה למה שחשוב עכשיו
  */
 function FocusedDashboard() {
-  const { tasks, loading, toggleComplete, loadTasks } = useTasks();
+  const { tasks, loading, toggleComplete, loadTasks, addTask } = useTasks();
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -447,6 +450,16 @@ function FocusedDashboard() {
           </p>
         </motion.div>
       )}
+
+      {/* 🧠 כפתורי ADHD */}
+      <AddWeekTaskButton 
+        onAdd={(task) => {
+          // הוספת משימה לשבוע
+          addTask(task);
+          toast.success('✅ נוסף לשבוע!');
+        }}
+      />
+      <PanicButton tasks={tasks} />
 
       {/* מודל טופס */}
       <Modal
