@@ -213,11 +213,17 @@ function NotificationChecker() {
     const notifyOnTime = settings?.notifyOnTime !== false;
     
     // מצא משימות להיום עם שעה מוגדרת
-    const todayTasksWithTime = tasks.filter(task => 
-      !task.is_completed && 
-      task.due_date === today && 
-      task.due_time
-    );
+    // ✅ תיקון: וידוא שהתאריך מנורמל לפורמט אחיד
+    const todayTasksWithTime = tasks.filter(task => {
+      if (task.is_completed) return false;
+      if (!task.due_time) return false;
+      
+      // נרמול התאריך של המשימה
+      const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
+      
+      // ✅ רק משימות של היום!
+      return taskDate === today;
+    });
 
     // ✅ עדכון רשימת המשימות שהושלמו
     tasks.forEach(task => {
@@ -235,8 +241,16 @@ function NotificationChecker() {
         return;
       }
       
-      // ✅ דלג על משימות שאינן להיום
-      if (task.due_date && task.due_date !== today) {
+      // ✅ תיקון: נרמול תאריך המשימה ובדיקה מדויקת
+      const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
+      
+      // ✅ דלג על משימות שאינן להיום (כולל משימות של מחר!)
+      if (taskDate && taskDate !== today) {
+        return;
+      }
+      
+      // ✅ אם אין תאריך - גם לא שולחים התראות
+      if (!taskDate) {
         return;
       }
 

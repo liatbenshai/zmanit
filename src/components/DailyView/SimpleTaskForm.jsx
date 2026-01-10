@@ -7,7 +7,10 @@ import {
   getTaskTypesByCategory,
   calculateWorkTime,
   getInputLabel,
-  getInputPlaceholder 
+  getInputPlaceholder,
+  getSourceLabel,
+  getSourcePlaceholder,
+  hasSourceField
 } from '../../config/taskTypes';
 import toast from 'react-hot-toast';
 import Input from '../UI/Input';
@@ -402,7 +405,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   const [formData, setFormData] = useState({
     title: '',
     taskType: 'transcription',
-    inputValue: '', // משך הקלטה / עמודים / דקות ישירות
+    inputValue: '', // משך משימה משוער (דקות)
+    sourceValue: '', // ✅ חדש: אורך הקלטה / עמודים (למעקב)
     startDate: defaultDate || '', // תאריך התחלה - מתי אפשר להתחיל
     dueDate: defaultDate || '',   // תאריך יעד - דדליין
     dueTime: '',                  // שעה ספציפית
@@ -428,17 +432,12 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   // קבלת סוג המשימה הנוכחי
   const currentTaskType = getTaskType(formData.taskType);
 
-  // חישוב זמן עבודה אוטומטי
+  // חישוב זמן עבודה - פשוט הערך שהוזן
   const calculatedDuration = useMemo(() => {
-    // אם יש override ידני - משתמשים בו
-    if (manualDurationOverride !== null) {
-      return manualDurationOverride;
-    }
-    
     const inputVal = parseFloat(formData.inputValue);
     if (!inputVal || inputVal <= 0) return null;
-    return calculateWorkTime(formData.taskType, inputVal);
-  }, [formData.taskType, formData.inputValue, manualDurationOverride]);
+    return inputVal; // ✅ שינוי: לא מכפיל, לא מחשב - מה שהוזן
+  }, [formData.inputValue]);
 
   // חישוב כמות בלוקים של 45 דקות
   const blocksCount = useMemo(() => {
@@ -453,29 +452,17 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       const taskType = getTaskType(task.task_type);
       setSelectedCategory(taskType.category || 'work');
       
-      // ✅ תיקון: חישוב inputValue נכון בעריכה
-      // אם יש recording_duration או page_count - משתמשים בהם
-      // אחרת - מחשבים הפוך מ-estimated_duration
-      let inputVal = '';
-      if (task.recording_duration) {
-        inputVal = task.recording_duration;
-      } else if (task.page_count) {
-        inputVal = task.page_count;
-      } else if (task.estimated_duration) {
-        // חישוב הפוך - אם זה סוג עם timeRatio, מחלקים בו
-        if (taskType.inputType === 'recording' && taskType.timeRatio) {
-          inputVal = Math.round(task.estimated_duration / taskType.timeRatio);
-        } else if (taskType.inputType === 'pages' && taskType.timePerPage) {
-          inputVal = Math.round(task.estimated_duration / taskType.timePerPage);
-        } else {
-          inputVal = task.estimated_duration;
-        }
-      }
+      // ✅ פשוט יותר: inputValue = estimated_duration
+      const inputVal = task.estimated_duration || '';
+      
+      // sourceValue = recording_duration או page_count
+      const sourceVal = task.recording_duration || task.page_count || '';
       
       setFormData({
         title: task.title || '',
         taskType: task.task_type || 'transcription',
         inputValue: inputVal,
+        sourceValue: sourceVal,
         startDate: task.start_date || '',
         dueDate: task.due_date || '',
         dueTime: task.due_time || '',
@@ -495,6 +482,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         title: '',
         taskType: 'transcription',
         inputValue: '',
+        sourceValue: '',
         startDate: defaultDate || '',
         dueDate: defaultDate || '',
         dueTime: '',
@@ -751,8 +739,11 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       due_time: autoDueTime,  // ✅ שימוש בזמן המחושב
       description: formData.description || null,
       priority: formData.priority,
-      recording_duration: currentTaskType.inputType === 'recording' ? parseFloat(formData.inputValue) : null,
-      page_count: currentTaskType.inputType === 'pages' ? parseFloat(formData.inputValue) : null,
+      // ✅ שינוי: sourceValue נשמר כ-recording_duration או page_count (למעקב)
+      recording_duration: hasSourceField(formData.taskType) && formData.sourceValue 
+        ? parseFloat(formData.sourceValue) 
+        : null,
+      page_count: null, // לא בשימוש יותר - הכל ב-recording_duration
       category: selectedCategory  // ✅ חדש: הוספת הקטגוריה
     };
 
@@ -846,15 +837,33 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         required
       />
 
-      {/* שדה קלט דינמי לפי סוג */}
+      {/* שדה אורך מקור (אופציונלי - רק לתמלול/הגהה/תרגום) */}
+      {hasSourceField(formData.taskType) && (
+        <div>
+          <Input
+            label={`📎 ${getSourceLabel(formData.taskType)} (אופציונלי - למעקב)`}
+            type="number"
+            name="sourceValue"
+            value={formData.sourceValue}
+            onChange={handleChange}
+            placeholder={getSourcePlaceholder(formData.taskType)}
+            min="1"
+          />
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+            💡 למעקב בלבד - לא משפיע על חישוב הזמן
+          </p>
+        </div>
+      )}
+
+      {/* שדה משך משימה משוער */}
       <div>
         <Input
-          label={getInputLabel(formData.taskType)}
+          label="⏱️ משך משימה משוער (דקות)"
           type="number"
           name="inputValue"
           value={formData.inputValue}
           onChange={handleChange}
-          placeholder={getInputPlaceholder(formData.taskType)}
+          placeholder="לדוגמה: 90"
           min="1"
           required
         />
@@ -864,13 +873,10 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
           <div className="mt-2 p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
             <div className="flex items-center justify-between">
               <span className="text-sm text-green-700 dark:text-green-300">
-                ⏱️ זמן עבודה משוער:
+                ⏱️ זמן עבודה:
               </span>
               <span className="font-bold text-green-800 dark:text-green-200">
                 {calculatedDuration} דקות
-                {manualDurationOverride !== null && (
-                  <span className="text-xs mr-1 text-green-600">(מותאם)</span>
-                )}
               </span>
             </div>
             <div className="mt-1 text-xs text-green-600 dark:text-green-400">

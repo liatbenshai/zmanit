@@ -48,8 +48,9 @@ export const BUILT_IN_TASK_TYPES = {
     border: 'border-purple-300 dark:border-purple-700',
     borderColor: '#a855f7',
     color: 'bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200 border-purple-300 dark:border-purple-700',
-    inputType: 'recording',
-    timeRatio: 3,
+    inputType: 'manual_with_source', // ✅ שינוי: הזנה ידנית עם אפשרות לאורך מקור
+    sourceLabel: 'אורך הקלטה (דקות)',
+    sourcePlaceholder: 'לדוגמה: 60',
     defaultDuration: 90,
     preferredHours: { start: 8.5, end: 12 },
     isBuiltIn: true
@@ -68,8 +69,9 @@ export const BUILT_IN_TASK_TYPES = {
     border: 'border-blue-300 dark:border-blue-700',
     borderColor: '#3b82f6',
     color: 'bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200 border-blue-300 dark:border-blue-700',
-    inputType: 'recording',
-    timeRatio: 0.5,
+    inputType: 'manual_with_source', // ✅ שינוי: הזנה ידנית
+    sourceLabel: 'אורך תמלול מקורי (דקות)',
+    sourcePlaceholder: 'לדוגמה: 60',
     defaultDuration: 30,
     preferredHours: { start: 12, end: 16.25 },
     isBuiltIn: true
@@ -88,8 +90,9 @@ export const BUILT_IN_TASK_TYPES = {
     border: 'border-indigo-300 dark:border-indigo-700',
     borderColor: '#6366f1',
     color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-800 dark:text-indigo-200 border-indigo-300 dark:border-indigo-700',
-    inputType: 'pages',
-    timePerPage: 10,
+    inputType: 'manual_with_source', // ✅ שינוי: הזנה ידנית
+    sourceLabel: 'מספר עמודים',
+    sourcePlaceholder: 'לדוגמה: 5',
     defaultDuration: 60,
     preferredHours: { start: 12, end: 16.25 },
     isBuiltIn: true
@@ -490,6 +493,7 @@ export function getTaskTypesByCategory(category) {
 
 /**
  * חישוב זמן עבודה לפי סוג משימה
+ * ✅ שינוי: לא מחשב אוטומטית - מחזיר את הערך שהוזן
  */
 export function calculateWorkTime(typeId, inputValue) {
   const type = getTaskType(typeId);
@@ -498,15 +502,8 @@ export function calculateWorkTime(typeId, inputValue) {
     return type.defaultDuration;
   }
   
-  switch (type.inputType) {
-    case 'recording':
-      return Math.ceil(inputValue * type.timeRatio);
-    case 'pages':
-      return Math.ceil(inputValue * type.timePerPage);
-    case 'direct':
-    default:
-      return inputValue;
-  }
+  // ✅ כל הסוגים עכשיו מחזירים את הערך שהוזן ישירות
+  return inputValue;
 }
 
 /**
@@ -515,32 +512,39 @@ export function calculateWorkTime(typeId, inputValue) {
 export function getInputLabel(typeId) {
   const type = getTaskType(typeId);
   
-  switch (type.inputType) {
-    case 'recording':
-      return 'משך הקלטה (דקות)';
-    case 'pages':
-      return 'מספר עמודים';
-    case 'direct':
-    default:
-      return 'משך משימה (דקות)';
-  }
+  // ✅ תמיד "משך משימה משוער"
+  return 'משך משימה משוער (דקות)';
+}
+
+/**
+ * קבלת תווית שדה המקור (אורך הקלטה/עמודים)
+ */
+export function getSourceLabel(typeId) {
+  const type = getTaskType(typeId);
+  return type.sourceLabel || null;
+}
+
+/**
+ * קבלת placeholder לשדה המקור
+ */
+export function getSourcePlaceholder(typeId) {
+  const type = getTaskType(typeId);
+  return type.sourcePlaceholder || '';
+}
+
+/**
+ * בדיקה אם לסוג יש שדה מקור
+ */
+export function hasSourceField(typeId) {
+  const type = getTaskType(typeId);
+  return type.inputType === 'manual_with_source';
 }
 
 /**
  * קבלת placeholder לשדה הקלט
  */
 export function getInputPlaceholder(typeId) {
-  const type = getTaskType(typeId);
-  
-  switch (type.inputType) {
-    case 'recording':
-      return 'לדוגמה: 30';
-    case 'pages':
-      return 'לדוגמה: 5';
-    case 'direct':
-    default:
-      return 'לדוגמה: 45';
-  }
+  return 'לדוגמה: 45';
 }
 
 /**

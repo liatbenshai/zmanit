@@ -5,6 +5,17 @@ import { TASK_TYPES } from '../../config/taskTypes';
 import toast from 'react-hot-toast';
 
 /**
+ * ✅ תאריך מקומי בפורמט ISO (לא UTC!)
+ */
+function toLocalISODate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * הגדרות
  */
 const CONFIG = {
@@ -179,7 +190,7 @@ function AlertsManager({ onTaskClick }) {
   // בדיקת סיכום בוקר/ערב
   useEffect(() => {
     const hour = currentTime.getHours();
-    const today = currentTime.toISOString().split('T')[0];
+    const today = toLocalISODate(currentTime);
     
     if (hour >= CONFIG.WORK_START_HOUR && hour < CONFIG.WORK_START_HOUR + 1) {
       const morningKey = `morning_${today}`;
@@ -198,8 +209,11 @@ function AlertsManager({ onTaskClick }) {
 
   // חישוב נתוני היום
   const todayStats = useMemo(() => {
-    const today = currentTime.toISOString().split('T')[0];
-    const todayTasks = tasks.filter(t => t.due_date === today);
+    const today = toLocalISODate(currentTime);
+    const todayTasks = tasks.filter(t => {
+      const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+      return taskDate === today;
+    });
     const completed = todayTasks.filter(t => t.is_completed);
     const pending = todayTasks.filter(t => !t.is_completed);
     const totalMinutes = pending.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
@@ -220,18 +234,19 @@ function AlertsManager({ onTaskClick }) {
   const tomorrowDeadlines = useMemo(() => {
     const tomorrow = new Date(currentTime);
     tomorrow.setDate(tomorrow.getDate() + 1);
-    const tomorrowISO = tomorrow.toISOString().split('T')[0];
+    const tomorrowISO = toLocalISODate(tomorrow);
     
-    return tasks.filter(t => 
-      !t.is_completed && 
-      t.due_date === tomorrowISO
-    );
+    return tasks.filter(t => {
+      if (t.is_completed) return false;
+      const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+      return taskDate === tomorrowISO;
+    });
   }, [tasks, currentTime]);
 
   // ✅ חישוב התראות - גרסה מתוקנת!
   const alerts = useMemo(() => {
     const now = currentTime;
-    const today = now.toISOString().split('T')[0];
+    const today = toLocalISODate(now);
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const alertsList = [];
 
@@ -285,7 +300,10 @@ function AlertsManager({ onTaskClick }) {
     // --- התראות על משימות ---
     tasks.forEach(task => {
       if (task.is_completed) return;
-      if (task.due_date !== today) return;
+      
+      // ✅ תיקון: נרמול תאריך והשוואה נכונה
+      const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
+      if (!taskDate || taskDate !== today) return;
 
       const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
       const alertKey = `task_${task.id}_${today}`;
@@ -429,7 +447,7 @@ function AlertsManager({ onTaskClick }) {
 
   // סגירת סיכום בוקר
   const dismissMorningSummary = () => {
-    const today = currentTime.toISOString().split('T')[0];
+    const today = toLocalISODate(currentTime);
     setAlertsState(prev => ({
       ...prev,
       [`morning_${today}`]: { timestamp: Date.now() }
@@ -439,7 +457,7 @@ function AlertsManager({ onTaskClick }) {
 
   // סגירת סיכום ערב
   const dismissEveningSummary = () => {
-    const today = currentTime.toISOString().split('T')[0];
+    const today = toLocalISODate(currentTime);
     setAlertsState(prev => ({
       ...prev,
       [`evening_${today}`]: { timestamp: Date.now() }
@@ -455,12 +473,13 @@ function AlertsManager({ onTaskClick }) {
 
   const handleMoveNextTask = async (alert) => {
     // מוצאים את המשימה הבאה ומעבירים אותה למחר
-    const today = currentTime.toISOString().split('T')[0];
-    const nextTasks = tasks.filter(t => 
-      !t.is_completed && 
-      t.due_date === today && 
-      t.id !== alert.task?.id
-    ).sort((a, b) => {
+    const today = toLocalISODate(currentTime);
+    const nextTasks = tasks.filter(t => {
+      if (t.is_completed) return false;
+      if (t.id === alert.task?.id) return false;
+      const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+      return taskDate === today;
+    }).sort((a, b) => {
       const aTime = timeToMinutes(a.due_time) || 999;
       const bTime = timeToMinutes(b.due_time) || 999;
       return aTime - bTime;
@@ -470,7 +489,7 @@ function AlertsManager({ onTaskClick }) {
       const taskToMove = nextTasks[nextTasks.length - 1]; // המשימה האחרונה
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
-      const tomorrowISO = tomorrow.toISOString().split('T')[0];
+      const tomorrowISO = toLocalISODate(tomorrow);
       
       try {
         await editTask(taskToMove.id, { due_date: tomorrowISO, due_time: null });
