@@ -6,6 +6,17 @@ import { useNotifications } from '../../hooks/useNotifications';
 import toast from 'react-hot-toast';
 
 /**
+ * ✅ תאריך מקומי בפורמט ISO (לא UTC!)
+ */
+function toLocalISODate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * שעות העבודה
  */
 const WORK_HOURS = {
@@ -100,7 +111,7 @@ function SmartNotifications({ onTaskClick }) {
   // ✅ חישוב התראות לתצוגה - גרסה מתוקנת!
   const notifications = useMemo(() => {
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    const today = toLocalISODate(now); // ✅ תיקון: שימוש בתאריך מקומי
     const currentHour = now.getHours();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const alerts = [];
@@ -124,8 +135,11 @@ function SmartNotifications({ onTaskClick }) {
         return;
       }
 
+      // ✅ נרמול תאריך המשימה
+      const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
+
       // משימה שמתחילה בקרוב (תוך 15 דקות) - לפי due_time המקורי
-      if (task.due_date === today && task.due_time) {
+      if (taskDate === today && task.due_time) {
         const taskMinutes = timeToMinutes(task.due_time);
         if (taskMinutes === null) return;
         
@@ -188,7 +202,10 @@ function SmartNotifications({ onTaskClick }) {
     });
 
     // בדיקת זמן פנוי
-    const todayTasks = tasks.filter(t => t.due_date === today && !t.is_completed);
+    const todayTasks = tasks.filter(t => {
+      const tDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+      return tDate === today && !t.is_completed;
+    });
     const scheduledMinutes = todayTasks.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
     const totalWorkMinutes = (WORK_HOURS.end - WORK_HOURS.start) * 60;
     const freeMinutes = totalWorkMinutes - scheduledMinutes;

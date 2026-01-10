@@ -2,6 +2,17 @@
  * עזרים לניהול משימות
  */
 
+/**
+ * ✅ תאריך מקומי בפורמט ISO (לא UTC!)
+ */
+function toLocalISODate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 // שמות הרבעים בעברית
 export const QUADRANT_NAMES = {
   1: 'דחוף וחשוב',
@@ -93,8 +104,9 @@ export function isTaskOverdue(task) {
 export function isTaskDueToday(task) {
   if (!task.due_date) return false;
   
-  const today = new Date().toISOString().split('T')[0];
-  return task.due_date === today;
+  const today = toLocalISODate(new Date()); // ✅ תיקון
+  const taskDate = toLocalISODate(new Date(task.due_date));
+  return taskDate === today;
 }
 
 /**
@@ -105,9 +117,10 @@ export function isTaskDueTomorrow(task) {
   
   const tomorrow = new Date();
   tomorrow.setDate(tomorrow.getDate() + 1);
-  const tomorrowStr = tomorrow.toISOString().split('T')[0];
+  const tomorrowStr = toLocalISODate(tomorrow); // ✅ תיקון
+  const taskDate = toLocalISODate(new Date(task.due_date));
   
-  return task.due_date === tomorrowStr;
+  return taskDate === tomorrowStr;
 }
 
 /**
