@@ -2,7 +2,7 @@
 
 ## מה בפנים?
 
-5 פיצ'רים חדשים שנבנו במיוחד בשבילך:
+**7 פיצ'רים** שנבנו במיוחד בשבילך:
 
 | פיצ'ר | מה עושה | איך עוזר |
 |-------|---------|----------|
@@ -11,6 +11,48 @@
 | **PanicButton** | כפתור "אני אבודה" | עוזר ברגעי משבר |
 | **GamificationSystem** | נקודות, סטריקים, הישגים | מוטיבציה ודופמין |
 | **DailyRituals** | ריטואל בוקר וערב | בונה הרגלים יומיים |
+| **WeeklyPlanningWizard** | 📅 אשף תכנון שבועי | שיבוץ אינטראקטיבי |
+| **energySettings** | הגדרות שעות אנרגיה | תמלול בבוקר, הגהה אחה"צ |
+
+---
+
+## 🔧 תיקון חשוב: שעות אנרגיה
+
+המערכת עכשיו יודעת:
+- **תמלול: 08:30-14:00** (שעות ריכוז גבוה)
+- **הגהה: 14:00-16:15** (אחרי שסיימת תמלולים)
+- **מיילים: סוף היום** (לא דורשים ריכוז)
+
+### ⚙️ תיקון smartScheduler (חובה!)
+
+פתחי את `src/utils/smartScheduler.js` והחליפי את הקונפיג (שורות 36-65) בזה:
+
+```javascript
+export const SMART_SCHEDULE_CONFIG = {
+  dayStart: 8 * 60 + 30,         // 08:30
+  dayEnd: 16 * 60 + 15,          // 16:15
+  
+  // ✅ תמלול עד 14:00
+  morningStart: 8 * 60 + 30,     // 08:30
+  morningEnd: 14 * 60,           // 14:00
+  
+  // ✅ הגהה מ-14:00
+  afternoonStart: 14 * 60,       // 14:00
+  afternoonEnd: 16 * 60 + 15,    // 16:15
+  
+  blockDuration: 45,
+  breakDuration: 5,
+  
+  // ✅ משימות בוקר
+  morningTaskTypes: ['transcription', 'תמלול', 'translation', 'תרגום'],
+  
+  // ✅ משימות אחה"צ
+  afternoonTaskTypes: ['proofreading', 'הגהה', 'email', 'admin', 'client_communication'],
+  
+  get workMinutesPerDay() { return this.dayEnd - this.dayStart; },
+  get maxBlocksPerDay() { return Math.floor(this.workMinutesPerDay / (this.blockDuration + this.breakDuration)); }
+};
+```
 
 ---
 
@@ -21,6 +63,11 @@
 העתיקי את תיקיית `ADHD` לתוך:
 ```
 src/components/ADHD/
+```
+
+העתיקי את `energySettings.js` לתוך:
+```
+src/utils/energySettings.js
 ```
 
 ### שלב 2: עטיפת האפליקציה ב-GamificationProvider
@@ -55,13 +102,15 @@ import {
   MorningRitual,
   EveningRitual,
   useRitualCheck,
-  useGamification
+  useGamification,
+  WeeklyPlanningWizard  // 🆕 אשף תכנון
 } from '../ADHD';
 
 // בתוך הקומפוננטה:
 function SmartDashboard() {
   const [viewMode, setViewMode] = useState('single'); // 'single' או 'full'
   const [showFeedback, setShowFeedback] = useState(null);
+  const [showPlanningWizard, setShowPlanningWizard] = useState(false);  // 🆕
   const { showMorning, showEvening, closeMorning, closeEvening } = useRitualCheck();
   const { addPoints, recordTaskCompletion } = useGamification();
 
@@ -231,6 +280,54 @@ const { showMorning, showEvening } = useRitualCheck(8.5, 16); // 08:30 בוקר,
 
 ### הוספת הישגים:
 הוסיפי ל-`ACHIEVEMENTS` בקובץ `GamificationSystem.jsx`
+
+---
+
+## 📅 אשף תכנון שבועי (WeeklyPlanningWizard)
+
+זה הפיצ'ר החדש שביקשת! מאפשר להכניס את כל המשימות לשבוע והמערכת משבצת בהתייעצות איתך.
+
+### איך זה עובד:
+
+**שלב 1: הכנסת משימות**
+- מכניסה את כל המשימות לשבוע
+- בוחרת סוג, משך, לקוח, דדליין
+
+**שלב 2: הצעת שיבוץ**
+- המערכת משבצת לפי שעות האנרגיה שלך
+- תמלול: 08:30-14:00
+- הגהה: 14:00-16:15
+- מציגה כל הצעה עם ✓ לאישור
+
+**שלב 3: אישור ושינויים**
+- את יכולה לשנות יום/שעה לכל משימה
+- לבטל הצעות שלא מתאימות
+- לאשר ולשמור
+
+### הוספה לדשבורד:
+```jsx
+import { WeeklyPlanningWizard } from '../ADHD';
+
+// בתוך הקומפוננטה:
+const [showWizard, setShowWizard] = useState(false);
+
+// כפתור לפתיחה:
+<button onClick={() => setShowWizard(true)}>
+  📅 תכנון השבוע
+</button>
+
+// הקומפוננטה:
+{showWizard && (
+  <WeeklyPlanningWizard
+    existingTasks={tasks}
+    onSave={(newTasks) => {
+      // שמירת המשימות החדשות
+      handleSaveTasks(newTasks);
+    }}
+    onClose={() => setShowWizard(false)}
+  />
+)}
+```
 
 ---
 

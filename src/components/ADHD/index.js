@@ -7,6 +7,7 @@
  * - כפתור "אני אבודה" (עזרה ברגעי עומס)
  * - גיימיפיקציה (מוטיבציה דרך נקודות והישגים)
  * - ריטואלים יומיים (בניית הרגלים)
+ * - אשף תכנון שבועי (שיבוץ אינטראקטיבי)
  */
 
 // תצוגת משימה אחת - מפחיתה עומס
@@ -32,3 +33,6 @@ export {
   EveningRitual, 
   useRitualCheck 
 } from './DailyRituals';
+
+// אשף תכנון שבועי - שיבוץ אינטראקטיבי
+export { default as WeeklyPlanningWizard } from './WeeklyPlanningWizard';
