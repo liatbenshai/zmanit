@@ -44,17 +44,41 @@ export function useTaskTimeMonitor(tasks) {
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       const today = now.toISOString().split('T')[0];
 
+      // 🔍 לוג לדיבוג
+      console.log('🎯 AutoFocus בודק משימות:', {
+        today,
+        currentTime: `${Math.floor(currentMinutes/60)}:${currentMinutes%60}`,
+        tasksCount: tasks?.length || 0
+      });
+
       // מציאת משימה שהגיע זמנה
       for (const task of tasks) {
+        // 🔍 לוג לכל משימה
+        if (!task.is_completed && task.due_date === today) {
+          console.log('📋 משימה להיום:', {
+            title: task.title,
+            due_time: task.due_time,
+            due_date: task.due_date
+          });
+        }
+
         if (task.is_completed || task.due_date !== today || !task.due_time) continue;
         
         const [h, m] = task.due_time.split(':').map(Number);
         const taskMinutes = h * 60 + (m || 0);
         const diff = currentMinutes - taskMinutes;
         
-        // משימה שהגיע זמנה (0-5 דקות מתחילת הזמן)
+        console.log('⏰ בדיקת זמן:', {
+          title: task.title,
+          taskTime: task.due_time,
+          diff: diff,
+          inWindow: diff >= 0 && diff <= 5
+        });
+        
+        // משימה שהגיע זמנה (0-15 דקות מתחילת הזמן)
         const taskKey = `focus-${task.id}-${today}`;
-        if (diff >= 0 && diff <= 5 && !notifiedTasks.current.has(taskKey)) {
+        if (diff >= 0 && diff <= 15 && !notifiedTasks.current.has(taskKey)) {
+          console.log('🎯 פותח מודאל מיקוד!', task.title);
           notifiedTasks.current.add(taskKey);
           setPendingTask(task);
           setShowFocusModal(true);
@@ -68,7 +92,7 @@ export function useTaskTimeMonitor(tasks) {
       }
     };
 
-    checkInterval.current = setInterval(checkTasks, 30000); // כל 30 שניות
+    checkInterval.current = setInterval(checkTasks, 10000); // כל 10 שניות
     checkTasks(); // בדיקה ראשונית
 
     return () => {
