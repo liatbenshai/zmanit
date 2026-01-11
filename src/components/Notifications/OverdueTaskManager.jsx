@@ -150,6 +150,13 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
   // בדיקת משימות באיחור - כל 30 שניות
   useEffect(() => {
     const checkOverdue = () => {
+      // 🆕 אם יש טיימר פעיל - לא להציק!
+      const activeTimer = localStorage.getItem('zmanit_active_timer');
+      if (activeTimer) {
+        console.log('🔇 OverdueTaskManager: יש טיימר פעיל - לא מפריעים');
+        return;
+      }
+      
       const now = new Date();
       const today = toLocalISODate(now);
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -167,6 +174,9 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
         
         // כבר טופלה היום
         if (handledToday.has(task.id)) return false;
+        
+        // 🆕 אם הטיימר הפעיל הוא על המשימה הזו - לא באיחור
+        if (activeTimer === task.id) return false;
         
         // חישוב איחור
         const taskMinutes = timeToMinutes(task.due_time);
