@@ -471,59 +471,19 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     return `${hours}:${mins.toString().padStart(2, '0')}`;
   };
 
-  // התראה כשהזמן נגמר
-  const [timeUpNotified, setTimeUpNotified] = useState(false);
+  // התראה כשהזמן נגמר - מושבת כי FullScreenFocus מטפל בזה
+  // const [timeUpNotified, setTimeUpNotified] = useState(false);
   
-  useEffect(() => {
-    if (isRunning && estimated > 0 && !timeUpNotified) {
-      if (totalSpent >= estimated) {
-        setTimeUpNotified(true);
-        // צליל התראה
-        try {
-          const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdH2Onp2YjHNiXWZxgIqRko2Gf3dxb3F2fYOIi4uJhoJ9d3Rxc3h9goeKi4mFgHt2c3N3fIGGiYuKh4N+eXZ0dXl+g4eKi4iEf3p2dHV4fYKHiouIhH95dXR2eX6DiIuLiIR/eXV0dXl+g4iLi4mFf3p2dHV4fYKHi4uJhYB7d3R1eH2Ch4uLiYWAe3d0dXh9goeKi4mFgHt3dHV4fYKHi4uIhH95dXR2eX6Ch4uLiYSAe3d0dXh9goeLi4mFgHt3dHV4fYKHi4uJhYB7d3R1eH2Ch4uLiYV/end0dXl+g4iLi4iEf3l1dHZ5foOIi4uIhH95dXR2eX6DiIuLiIR/eXV0dnl+g4iLi4iEf3l1dHZ5foOIi4uIhH95dXR2eX6DiIuLiIR/eXV0dnl+gw==');
-          audio.volume = 0.5;
-          audio.play().catch(() => {});
-        } catch (e) {}
-        
-        // הודעה
-        toast((t) => (
-          <div className="flex flex-col gap-2">
-            <div className="font-bold">⏰ הזמן המתוכנן הסתיים!</div>
-            <div className="text-sm">סיימת את {estimated} הדקות שתכננת</div>
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => {
-                  toast.dismiss(t.id);
-                  if (stopAndSaveRef.current) {
-                    stopAndSaveRef.current();
-                  }
-                }}
-                className="px-3 py-1 bg-green-500 text-white rounded text-sm"
-              >
-                ✅ סיימתי
-              </button>
-              <button
-                onClick={() => toast.dismiss(t.id)}
-                className="px-3 py-1 bg-gray-300 text-gray-700 rounded-lg text-sm"
-              >
-                ממשיכה
-              </button>
-            </div>
-          </div>
-        ), { 
-          duration: 30000,
-          icon: '⏰'
-        });
-      }
-    }
-  }, [isRunning, totalSpent, estimated, timeUpNotified]);
+  // useEffect(() => {
+  //   // הועבר ל-FullScreenFocus
+  // }, [isRunning, totalSpent, estimated, timeUpNotified]);
 
-  // איפוס התראה כשמתחילים מחדש
-  useEffect(() => {
-    if (!isRunning) {
-      setTimeUpNotified(false);
-    }
-  }, [isRunning]);
+  // איפוס התראה כשמתחילים מחדש - מושבת כי FullScreenFocus מטפל בזה
+  // useEffect(() => {
+  //   if (!isRunning) {
+  //     setTimeUpNotified(false);
+  //   }
+  // }, [isRunning]);
 
   if (!currentTask) {
     return (
