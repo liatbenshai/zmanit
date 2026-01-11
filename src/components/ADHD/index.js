@@ -52,3 +52,6 @@ export { default as AddWeekTaskButton } from './AddWeekTaskButton';
 
 // דיאלוג סיום טיימר - שואל מה קרה
 export { default as TimerEndDialog } from './TimerEndDialog';
+
+// מסך מיקוד מלא - נפתח כשלוחצים "התחל"
+export { default as FullScreenFocus } from './FullScreenFocus';

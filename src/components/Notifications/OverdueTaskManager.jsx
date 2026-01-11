@@ -13,6 +13,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
+import { FullScreenFocus } from '../ADHD'; // 🆕 מסך מיקוד
 import toast from 'react-hot-toast';
 
 /**
@@ -52,11 +53,13 @@ function formatMinutes(minutes) {
  * רכיב ראשי: מנהל פופאפים למשימות באיחור
  */
 function OverdueTaskManager({ tasks = [], onStartTask }) {
-  const { editTask } = useTasks();
+  const { editTask, toggleComplete } = useTasks();
   const [currentOverdue, setCurrentOverdue] = useState(null);
   const [handledToday, setHandledToday] = useState(new Set());
   const [rescheduleTime, setRescheduleTime] = useState('');
   const [showRescheduleInput, setShowRescheduleInput] = useState(false);
+  const [showFullScreen, setShowFullScreen] = useState(false); // 🆕 מסך מיקוד
+  const [focusTask, setFocusTask] = useState(null); // 🆕 המשימה למיקוד
   
   // ✅ ניקוי handledToday כשמשימות נמחקות
   useEffect(() => {
@@ -242,7 +245,12 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
   const handleStartNow = useCallback(() => {
     if (!currentOverdue) return;
     
+    // 🆕 פתיחת מסך מיקוד
+    setFocusTask(currentOverdue);
+    setShowFullScreen(true);
+    
     markHandled(currentOverdue.id);
+    setCurrentOverdue(null); // סגירת הפופאפ
     onStartTask?.(currentOverdue);
     toast.success(`💪 מתחילה לעבוד על "${currentOverdue.title}"`);
   }, [currentOverdue, markHandled, onStartTask]);
@@ -351,9 +359,39 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
   
   const overdueInfo = getOverdueInfo();
   
-  if (!currentOverdue || !overdueInfo) return null;
-  
   return (
+    <>
+    {/* 🆕 מסך מיקוד מלא - מוצג תמיד אם פתוח */}
+    <FullScreenFocus
+      isOpen={showFullScreen}
+      task={focusTask}
+      onClose={() => {
+        setShowFullScreen(false);
+        setFocusTask(null);
+      }}
+      onComplete={async () => {
+        if (focusTask) {
+          await toggleComplete(focusTask.id);
+        }
+        setShowFullScreen(false);
+        setFocusTask(null);
+      }}
+      onPause={async (minutes) => {
+        if (minutes > 0 && focusTask) {
+          const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+          await editTask(focusTask.id, { time_spent: newTimeSpent });
+        }
+      }}
+      onTimeUpdate={async (minutes) => {
+        if (minutes > 0 && focusTask) {
+          const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+          await editTask(focusTask.id, { time_spent: newTimeSpent });
+        }
+      }}
+    />
+    
+    {/* פופאפ איחור */}
+    {currentOverdue && overdueInfo && (
     <AnimatePresence>
       <motion.div
         initial={{ opacity: 0 }}
@@ -508,6 +546,8 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
         {/* צליל התראה - Web Audio API */}
       </motion.div>
     </AnimatePresence>
+    )}
+    </>
   );
 }
 

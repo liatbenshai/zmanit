@@ -4,6 +4,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { TASK_TYPES } from '../../config/taskTypes';
 import { formatDuration } from '../../config/workSchedule';
 import TaskTimerWithInterruptions from '../Tasks/TaskTimerWithInterruptions';
+import FullScreenFocus from './FullScreenFocus'; // 🆕 מסך מיקוד מלא
 import toast from 'react-hot-toast';
 
 /**
@@ -485,36 +486,29 @@ function AutoFocusManager() {
         )}
       </AnimatePresence>
 
-      {/* טיימר פעיל - מסך מלא */}
-      <AnimatePresence>
-        {showTimer && activeTask && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-gray-900 z-50 flex flex-col"
-          >
-            <div className="flex-1 flex items-center justify-center p-4">
-              <div className="w-full max-w-lg">
-                <TaskTimerWithInterruptions
-                  task={activeTask}
-                  onComplete={onTimerComplete}
-                  onUpdate={(updates) => editTask(activeTask.id, updates)}
-                />
-              </div>
-            </div>
-            
-            <div className="p-4 text-center">
-              <button
-                onClick={() => setShowTimer(false)}
-                className="text-gray-400 hover:text-white"
-              >
-                מזער טיימר
-              </button>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* 🆕 מסך מיקוד מלא */}
+      <FullScreenFocus
+        isOpen={showTimer && activeTask}
+        task={activeTask}
+        onClose={() => setShowTimer(false)}
+        onComplete={async () => {
+          await onTimerComplete();
+          setShowTimer(false);
+          setActiveTask(null);
+        }}
+        onPause={async (minutes) => {
+          if (minutes > 0 && activeTask) {
+            const newTimeSpent = (activeTask.time_spent || 0) + minutes;
+            await editTask(activeTask.id, { time_spent: newTimeSpent });
+          }
+        }}
+        onTimeUpdate={async (minutes) => {
+          if (minutes > 0 && activeTask) {
+            const newTimeSpent = (activeTask.time_spent || 0) + minutes;
+            await editTask(activeTask.id, { time_spent: newTimeSpent });
+          }
+        }}
+      />
     </>
   );
 }

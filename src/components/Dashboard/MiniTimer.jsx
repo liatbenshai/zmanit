@@ -10,6 +10,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { useFiveMinuteRule } from '../Learning/FiveMinuteRule';
 import PreTaskCheckin from '../Learning/PreTaskCheckin'; // ✅ צ'ק-אין לפני משימה
 import { logTimerStop } from '../Learning/EscapeWindowDetector'; // ✅ רישום עצירות
+import { FullScreenFocus } from '../ADHD'; // 🆕 מסך מיקוד מלא
 import toast from 'react-hot-toast';
 
 /**
@@ -42,6 +43,7 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [startTime, setStartTime] = useState(null);
+  const [showFullScreen, setShowFullScreen] = useState(false); // 🆕 מסך מיקוד
   
   // ✅ כלל 5 הדקות
   const {
@@ -164,7 +166,7 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
   }, [isRunning, isPaused, task?.id]);
   
   // ===== פעולות =====
-  const startTimer = useCallback(() => {
+  const startTimer = useCallback((openFullScreen = true) => {
     const now = new Date();
     setStartTime(now);
     setIsRunning(true);
@@ -174,6 +176,10 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
     if (task?.id) {
       localStorage.setItem('zmanit_active_timer', task.id);
       console.log('🟢 MiniTimer התחיל - נשמר:', task.id);
+    }
+    // 🆕 פתיחת מסך מיקוד
+    if (openFullScreen) {
+      setShowFullScreen(true);
     }
     toast.success('▶️ התחלנו לעבוד!', { duration: 2000 });
   }, [task?.id]);
@@ -454,6 +460,29 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
           לפרטים מלאים →
         </button>
       )}
+      
+      {/* 🆕 מסך מיקוד מלא */}
+      <FullScreenFocus
+        isOpen={showFullScreen}
+        task={task}
+        onClose={() => setShowFullScreen(false)}
+        onComplete={async () => {
+          await completeTask();
+          setShowFullScreen(false);
+        }}
+        onPause={async (minutes) => {
+          if (minutes > 0 && task) {
+            const newTimeSpent = (task.time_spent || 0) + minutes;
+            await editTask(task.id, { time_spent: newTimeSpent });
+          }
+        }}
+        onTimeUpdate={async (minutes) => {
+          if (minutes > 0 && task) {
+            const newTimeSpent = (task.time_spent || 0) + minutes;
+            await editTask(task.id, { time_spent: newTimeSpent });
+          }
+        }}
+      />
     </motion.div>
   );
 }
