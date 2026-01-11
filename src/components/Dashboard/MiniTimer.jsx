@@ -467,19 +467,35 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
         task={task}
         onClose={() => setShowFullScreen(false)}
         onComplete={async () => {
-          await completeTask();
+          // 🔧 תיקון: לא קוראים ל-completeTask כי הזמן כבר נשמר דרך onTimeUpdate
+          // רק מסמנים כהושלם ומאפסים
+          localStorage.removeItem('zmanit_active_timer');
           setShowFullScreen(false);
+          setIsRunning(false);
+          setIsPaused(false);
+          setElapsedSeconds(0);
+          
+          if (timerStorageKey) {
+            localStorage.removeItem(timerStorageKey);
+          }
+          
+          // סימון כהושלם
+          if (task && onComplete) {
+            onComplete(task);
+          }
         }}
         onPause={async (minutes) => {
           if (minutes > 0 && task) {
             const newTimeSpent = (task.time_spent || 0) + minutes;
             await editTask(task.id, { time_spent: newTimeSpent });
+            console.log('💾 FullScreenFocus onPause - נשמרו:', minutes, 'דקות');
           }
         }}
         onTimeUpdate={async (minutes) => {
           if (minutes > 0 && task) {
             const newTimeSpent = (task.time_spent || 0) + minutes;
             await editTask(task.id, { time_spent: newTimeSpent });
+            console.log('💾 FullScreenFocus onTimeUpdate - נשמרו:', minutes, 'דקות');
           }
         }}
       />

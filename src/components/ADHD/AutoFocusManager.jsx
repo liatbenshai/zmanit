@@ -376,7 +376,7 @@ export function WhyNotStartedModal({ task, onSelectReason, onDismiss }) {
  * שים את זה ב-App.jsx או בלייאאוט הראשי
  */
 function AutoFocusManager() {
-  const { tasks, editTask, addTask } = useTasks();
+  const { tasks, editTask, addTask, toggleComplete } = useTasks();
   const {
     pendingTask,
     showFocusModal,
@@ -455,7 +455,11 @@ function AutoFocusManager() {
   };
 
   // סיום טיימר
-  const onTimerComplete = () => {
+  const onTimerComplete = async () => {
+    // 🔧 תיקון: סימון המשימה כהושלמה
+    if (activeTask) {
+      await toggleComplete(activeTask.id);
+    }
     setShowTimer(false);
     setActiveTask(null);
     toast.success('🎉 כל הכבוד!');

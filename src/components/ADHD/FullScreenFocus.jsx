@@ -136,12 +136,18 @@ export default function FullScreenFocus({
     : null;
 
   // השהיה
-  const handlePause = () => {
+  const handlePause = async () => {
     setIsRunning(false);
     setIsPaused(true);
     localStorage.removeItem('zmanit_active_timer');
+    
+    const minutesWorked = Math.floor(elapsedRef.current / 60);
+    if (onPause && minutesWorked > 0) {
+      await onPause(minutesWorked);
+      console.log('💾 FullScreenFocus handlePause - נשמרו:', minutesWorked, 'דקות');
+    }
+    
     toast('⏸️ מושהה');
-    onPause?.(Math.floor(elapsedRef.current / 60));
   };
 
   // המשך
@@ -153,11 +159,20 @@ export default function FullScreenFocus({
   };
 
   // סיום
-  const handleComplete = () => {
+  const handleComplete = async () => {
     localStorage.removeItem('zmanit_active_timer');
     const minutesWorked = Math.floor(elapsedRef.current / 60);
-    onTimeUpdate?.(minutesWorked);
-    onComplete?.();
+    
+    // 🔧 תיקון: await לשמירת הזמן לפני סימון כהושלם
+    if (onTimeUpdate) {
+      await onTimeUpdate(minutesWorked);
+      console.log('💾 FullScreenFocus handleComplete - נשמרו:', minutesWorked, 'דקות');
+    }
+    
+    if (onComplete) {
+      await onComplete();
+    }
+    
     toast.success('✅ כל הכבוד!');
   };
 
