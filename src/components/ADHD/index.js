@@ -49,3 +49,6 @@ export { default as WeeklyPlanningWizard } from './WeeklyPlanningWizard';
 
 // כפתור "משימה לשבוע" - הוספה מהירה
 export { default as AddWeekTaskButton } from './AddWeekTaskButton';
+
+// דיאלוג סיום טיימר - שואל מה קרה
+export { default as TimerEndDialog } from './TimerEndDialog';

@@ -11,13 +11,13 @@ import toast from 'react-hot-toast';
 import { supabase } from '../../services/supabase';
 
 // 🧠 כפתורי ADHD
-import { AddWeekTaskButton, PanicButton } from '../ADHD';
+import { AddWeekTaskButton, PanicButton, TimerEndDialog } from '../ADHD';
 
 /**
  * דשבורד ממוקד - תצוגה נקייה למה שחשוב עכשיו
  */
 function FocusedDashboard() {
-  const { tasks, loading, toggleComplete, loadTasks, addTask } = useTasks();
+  const { tasks, loading, toggleComplete, loadTasks, addTask, editTask } = useTasks();
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -26,6 +26,11 @@ function FocusedDashboard() {
   const [soundEnabled, setSoundEnabled] = useState(true);
   const notifiedTasks = useRef(new Set());
   const audioRef = useRef(null);
+  
+  // 🆕 State לדיאלוג סיום משימה
+  const [showEndDialog, setShowEndDialog] = useState(false);
+  const [taskToEnd, setTaskToEnd] = useState(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
 
   // יצירת אלמנט אודיו להתראות
   useEffect(() => {
@@ -226,16 +231,54 @@ function FocusedDashboard() {
     };
   }, [todayTasks]);
 
-  // השלמת משימה
+  // השלמת משימה - פותח דיאלוג במקום לסמן מיד
   const handleComplete = async (task) => {
+    setTaskToEnd(task);
+    setElapsedTime(task.time_spent || 0);
+    setShowEndDialog(true);
+  };
+  
+  // סיום מלא של משימה
+  const handleFullComplete = async () => {
+    if (!taskToEnd) return;
     try {
-      await toggleComplete(task.id);
-      if (!task.is_completed) {
-        toast.success('✅ כל הכבוד!');
-      }
+      await toggleComplete(taskToEnd.id);
+      toast.success('✅ כל הכבוד! המשימה הושלמה');
+      setShowEndDialog(false);
+      setTaskToEnd(null);
+      setActiveTaskId(null);
     } catch (err) {
       toast.error('שגיאה בעדכון');
     }
+  };
+  
+  // הארכת זמן
+  const handleExtend = async (minutes) => {
+    if (!taskToEnd) return;
+    // פשוט סוגרים את הדיאלוג - הטיימר ימשיך
+    toast(`⏰ עוד ${minutes} דקות!`);
+    setShowEndDialog(false);
+    setTaskToEnd(null);
+  };
+  
+  // התקדמות חלקית
+  const handlePartial = async (percent) => {
+    if (!taskToEnd) return;
+    // שמירת ההתקדמות
+    const newProgress = Math.min(100, (taskToEnd.progress || 0) + percent);
+    await editTask(taskToEnd.id, { progress: newProgress });
+    toast.success(`📊 התקדמות נשמרה: ${newProgress}%`);
+    setShowEndDialog(false);
+    setTaskToEnd(null);
+    setActiveTaskId(null);
+  };
+  
+  // נתקעתי
+  const handleStuck = async () => {
+    toast('😵 לא נורא! נמשיך אחר כך', { icon: '💪' });
+    setShowEndDialog(false);
+    setTaskToEnd(null);
+    setActiveTaskId(null);
   };
 
   // פתיחת טופס
@@ -474,6 +517,21 @@ function FocusedDashboard() {
           defaultDate={new Date().toISOString().split('T')[0]}
         />
       </Modal>
+      
+      {/* 🏁 דיאלוג סיום משימה */}
+      <TimerEndDialog
+        isOpen={showEndDialog}
+        task={taskToEnd}
+        elapsedTime={elapsedTime}
+        onComplete={handleFullComplete}
+        onExtend={handleExtend}
+        onPartial={handlePartial}
+        onStuck={handleStuck}
+        onDismiss={() => {
+          setShowEndDialog(false);
+          setTaskToEnd(null);
+        }}
+      />
     </div>
   );
 }
