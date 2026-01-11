@@ -40,6 +40,7 @@ export function useTaskTimeMonitor(tasks) {
   // 🆕 בדיקה אם יש טיימר פעיל
   const checkIfWorking = () => {
     const activeTimer = localStorage.getItem('zmanit_active_timer');
+    console.log('🔍 בדיקת טיימר פעיל:', activeTimer);
     return !!activeTimer;
   };
 
@@ -47,10 +48,12 @@ export function useTaskTimeMonitor(tasks) {
   useEffect(() => {
     const checkTasks = () => {
       // 🆕 אם עובדים על משימה - לא להציק!
-      if (checkIfWorking()) {
+      const isWorking = checkIfWorking();
+      if (isWorking) {
         console.log('🔇 AutoFocus: יש טיימר פעיל - לא מפריעים');
         return;
       }
+      console.log('✅ AutoFocus: אין טיימר פעיל - בודק משימות');
       
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();

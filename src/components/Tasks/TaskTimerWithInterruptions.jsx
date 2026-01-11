@@ -98,6 +98,9 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
               setIsRunning(true);
               setTotalInterruptionSeconds(data.totalInterruptionSeconds || 0);
               setInterruptions(data.interruptions || []);
+              // 🆕 שמירת מצב טיימר פעיל גם בשחזור
+              localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
+              console.log('🔄 טיימר שוחזר! נשמר:', currentTask?.id);
               toast.success(`⏰ טיימר חודש! עברו ${Math.floor(elapsed / 60)} דקות`);
             }
           }
@@ -129,6 +132,18 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   }, [saveToStorage]);
 
   // טיימר ראשי - עבודה
+  // 🆕 שמירת מצב טיימר פעיל ב-localStorage
+  useEffect(() => {
+    if (isRunning && currentTask?.id) {
+      localStorage.setItem('zmanit_active_timer', currentTask.id);
+      console.log('🟢 טיימר רץ - נשמר:', currentTask.id);
+    } else if (!isRunning && !isPaused) {
+      localStorage.removeItem('zmanit_active_timer');
+      console.log('🔴 טיימר לא רץ - נמחק');
+    }
+  }, [isRunning, currentTask?.id, isPaused]);
+
+  // טיימר ראשי
   useEffect(() => {
     if (isRunning && !isInterrupted) {
       intervalRef.current = setInterval(() => {
@@ -187,7 +202,9 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     setIsPaused(false);
     setElapsedSeconds(0);
     // 🆕 שמירת מצב טיימר פעיל
-    localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
+    const timerId = currentTask?.id || 'active';
+    localStorage.setItem('zmanit_active_timer', timerId);
+    console.log('🟢 טיימר התחיל! נשמר:', timerId);
     toast.success('▶ התחלנו לעבוד!');
   };
 
@@ -426,6 +443,7 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     if (e) e.stopPropagation();
     // 🆕 מחיקת מצב טיימר
     localStorage.removeItem('zmanit_active_timer');
+    console.log('🔴 טיימר נעצר! נמחק מ-localStorage');
     const result = await saveProgress(true);
     if (result?.success) {
       toast.success(`💾 נשמר! ${result.minutesToAdd} דקות נוספו`);
