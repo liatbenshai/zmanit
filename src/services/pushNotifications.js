@@ -44,6 +44,13 @@ export function sendLocalNotification(title, options = {}) {
     console.warn('אין הרשאה להתראות');
     return null;
   }
+  
+  // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
+  const activeTimer = localStorage.getItem('zmanit_active_timer');
+  if (activeTimer) {
+    console.log('🔇 pushNotifications: יש טיימר פעיל - לא שולח התראה');
+    return null;
+  }
 
   const defaultOptions = {
     icon: '/icon-192.png',

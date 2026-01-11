@@ -469,6 +469,13 @@ export class SmartAlertManager {
   }
   
   sendSystemNotification(alert) {
+    // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
+    const activeTimer = localStorage.getItem('zmanit_active_timer');
+    if (activeTimer) {
+      console.log('🔇 smartAlertManager: יש טיימר פעיל - לא שולח התראה');
+      return;
+    }
+    
     if ('Notification' in window && Notification.permission === 'granted') {
       const notification = new Notification(alert.title, {
         body: alert.message,

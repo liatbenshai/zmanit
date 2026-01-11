@@ -144,6 +144,12 @@ function FocusedDashboard() {
   // בדיקת התראות
   useEffect(() => {
     const checkNotifications = () => {
+      // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
+      const activeTimer = localStorage.getItem('zmanit_active_timer');
+      if (activeTimer) {
+        return;
+      }
+      
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       

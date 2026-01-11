@@ -52,6 +52,13 @@ async function requestNotificationPermission() {
 function sendLocalNotification(title, options = {}) {
   if (!isNotificationSupported()) return null;
   if (Notification.permission !== 'granted') return null;
+  
+  // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
+  const activeTimer = localStorage.getItem('zmanit_active_timer');
+  if (activeTimer) {
+    console.log('🔇 NotificationContext: יש טיימר פעיל - לא שולח התראה');
+    return null;
+  }
 
   try {
     const notification = new Notification(title, {
