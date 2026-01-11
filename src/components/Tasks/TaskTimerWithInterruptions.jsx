@@ -186,6 +186,8 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     setIsRunning(true);
     setIsPaused(false);
     setElapsedSeconds(0);
+    // 🆕 שמירת מצב טיימר פעיל
+    localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
     toast.success('▶ התחלנו לעבוד!');
   };
 
@@ -194,6 +196,8 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     if (e) e.stopPropagation();
     setIsRunning(false);
     setIsPaused(true);
+    // 🆕 מחיקת מצב טיימר (מושהה = לא עובדים)
+    localStorage.removeItem('zmanit_active_timer');
     
     // ✅ שמירת הזמן שעבד עד עכשיו
     if (elapsedSeconds >= 60) {
@@ -216,6 +220,8 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     if (e) e.stopPropagation();
     setIsRunning(true);
     setIsPaused(false);
+    // 🆕 שמירת מצב טיימר פעיל
+    localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
     toast.success('▶ ממשיכים!');
   };
 
@@ -418,6 +424,8 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   
   const stopAndSave = async (e) => {
     if (e) e.stopPropagation();
+    // 🆕 מחיקת מצב טיימר
+    localStorage.removeItem('zmanit_active_timer');
     const result = await saveProgress(true);
     if (result?.success) {
       toast.success(`💾 נשמר! ${result.minutesToAdd} דקות נוספו`);

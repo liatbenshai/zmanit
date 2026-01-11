@@ -37,9 +37,21 @@ export function useTaskTimeMonitor(tasks) {
   const notifiedTasks = useRef(new Set());
   const checkInterval = useRef(null);
 
-  // בדיקה כל 30 שניות
+  // 🆕 בדיקה אם יש טיימר פעיל
+  const checkIfWorking = () => {
+    const activeTimer = localStorage.getItem('zmanit_active_timer');
+    return !!activeTimer;
+  };
+
+  // בדיקה כל 10 שניות
   useEffect(() => {
     const checkTasks = () => {
+      // 🆕 אם עובדים על משימה - לא להציק!
+      if (checkIfWorking()) {
+        console.log('🔇 AutoFocus: יש טיימר פעיל - לא מפריעים');
+        return;
+      }
+      
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       const today = now.toISOString().split('T')[0];
@@ -64,20 +76,29 @@ export function useTaskTimeMonitor(tasks) {
 
         if (task.is_completed || task.due_date !== today || !task.due_time) continue;
         
-        const [h, m] = task.due_time.split(':').map(Number);
-        const taskMinutes = h * 60 + (m || 0);
+        // תיקון: due_time יכול להיות "09:45" או "09:45:00"
+        const timeParts = task.due_time.split(':');
+        const h = parseInt(timeParts[0], 10);
+        const m = parseInt(timeParts[1], 10) || 0;
+        const taskMinutes = h * 60 + m;
         const diff = currentMinutes - taskMinutes;
+        
+        // ✅ תנאי מתוקן:
+        // diff >= -2: המשימה מתחילה בעוד 2 דקות או שכבר התחילה
+        // diff <= 30: לא עברו יותר מ-30 דקות מההתחלה
+        const inWindow = diff >= -2 && diff <= 30;
         
         console.log('⏰ בדיקת זמן:', {
           title: task.title,
           taskTime: task.due_time,
-          diff: diff,
-          inWindow: diff >= 0 && diff <= 5
+          currentMinutes,
+          taskMinutes,
+          diff,
+          inWindow
         });
         
-        // משימה שהגיע זמנה (0-15 דקות מתחילת הזמן)
         const taskKey = `focus-${task.id}-${today}`;
-        if (diff >= 0 && diff <= 15 && !notifiedTasks.current.has(taskKey)) {
+        if (inWindow && !notifiedTasks.current.has(taskKey)) {
           console.log('🎯 פותח מודאל מיקוד!', task.title);
           notifiedTasks.current.add(taskKey);
           setPendingTask(task);
