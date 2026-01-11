@@ -247,6 +247,7 @@ function FocusedDashboard() {
       setShowEndDialog(false);
       setTaskToEnd(null);
       setActiveTaskId(null);
+      loadTasks(); // 🆕 רענון
     } catch (err) {
       toast.error('שגיאה בעדכון');
     }
@@ -271,6 +272,7 @@ function FocusedDashboard() {
     setShowEndDialog(false);
     setTaskToEnd(null);
     setActiveTaskId(null);
+    loadTasks(); // 🆕 רענון
   };
   
   // נתקעתי
