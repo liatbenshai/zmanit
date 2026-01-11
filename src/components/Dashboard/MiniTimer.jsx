@@ -92,6 +92,11 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
           setStartTime(savedTime);
           setIsRunning(true);
           setIsPaused(false);
+          // 🆕 שמירת מצב טיימר גם בשחזור
+          if (task?.id) {
+            localStorage.setItem('zmanit_active_timer', task.id);
+            console.log('🔄 MiniTimer שוחזר - נשמר:', task.id);
+          }
         } else if (data.isPaused) {
           setElapsedSeconds(data.elapsedSeconds);
           setIsPaused(true);
@@ -143,6 +148,21 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
     };
   }, [isRunning, isPaused]);
   
+  // 🆕 שמירת מצב טיימר פעיל לAutoFocusManager
+  useEffect(() => {
+    if (isRunning && task?.id) {
+      localStorage.setItem('zmanit_active_timer', task.id);
+      console.log('🟢 MiniTimer useEffect - נשמר:', task.id);
+    } else if (!isRunning && !isPaused) {
+      // רק אם הטיימר לא רץ ולא מושהה - נמחק
+      const current = localStorage.getItem('zmanit_active_timer');
+      if (current === task?.id) {
+        localStorage.removeItem('zmanit_active_timer');
+        console.log('🔴 MiniTimer useEffect - נמחק');
+      }
+    }
+  }, [isRunning, isPaused, task?.id]);
+  
   // ===== פעולות =====
   const startTimer = useCallback(() => {
     const now = new Date();
@@ -150,12 +170,20 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
     setIsRunning(true);
     setIsPaused(false);
     setElapsedSeconds(0);
+    // 🆕 שמירת מצב טיימר פעיל
+    if (task?.id) {
+      localStorage.setItem('zmanit_active_timer', task.id);
+      console.log('🟢 MiniTimer התחיל - נשמר:', task.id);
+    }
     toast.success('▶️ התחלנו לעבוד!', { duration: 2000 });
-  }, []);
+  }, [task?.id]);
   
   const pauseTimer = useCallback(async () => {
     setIsRunning(false);
     setIsPaused(true);
+    // 🆕 מחיקת מצב טיימר (מושהה = לא עובדים)
+    localStorage.removeItem('zmanit_active_timer');
+    console.log('🟡 MiniTimer מושהה - נמחק');
     
     // שמירת הזמן
     if (elapsedSecondsRef.current >= 60 && task) {
@@ -177,11 +205,20 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
   const resumeTimer = useCallback(() => {
     setIsRunning(true);
     setIsPaused(false);
+    // 🆕 שמירת מצב טיימר כשממשיכים
+    if (task?.id) {
+      localStorage.setItem('zmanit_active_timer', task.id);
+      console.log('🟢 MiniTimer ממשיך - נשמר:', task.id);
+    }
     toast.success('▶️ ממשיכים!', { duration: 1500 });
-  }, []);
+  }, [task?.id]);
   
   // ✅ פונקציה פנימית לעצירה (נקראת גם מ-5 דקות)
   const stopTimerInternal = useCallback(async (completed = false) => {
+    // 🆕 מחיקת מצב טיימר
+    localStorage.removeItem('zmanit_active_timer');
+    console.log('🔴 MiniTimer נעצר - נמחק');
+    
     // ✅ רישום עצירה באמצע ל-EscapeWindowDetector
     if (!completed && task && elapsedSecondsRef.current >= 60) {
       logTimerStop(
