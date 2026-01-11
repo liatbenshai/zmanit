@@ -416,7 +416,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
 
   const [loading, setLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('work');
-  const [showTimeField, setShowTimeField] = useState(false);
+  const [showTimeField, setShowTimeField] = useState(true); // ✅ שדה שעה מופיע תמיד
   
   // ✅ חדש: דיאלוג בחירת שיבוץ
   const [showScheduleDialog, setShowScheduleDialog] = useState(false);
