@@ -57,6 +57,9 @@ export default function FullScreenFocus({
   }, [isOpen, task?.id]);
 
   // טיימר
+  const [showTimeUpDialog, setShowTimeUpDialog] = useState(false); // 🆕 דיאלוג סיום זמן
+  const timeUpTriggeredRef = useRef(false); // למניעת התראה כפולה
+
   useEffect(() => {
     if (isRunning && !isPaused) {
       intervalRef.current = setInterval(() => {
@@ -77,6 +80,50 @@ export default function FullScreenFocus({
       }
     };
   }, [isRunning, isPaused]);
+
+  // 🆕 בדיקה אם הזמן המוקצב נגמר
+  useEffect(() => {
+    const totalMinutes = timeSpent + Math.floor(elapsedSeconds / 60);
+    
+    if (totalMinutes >= estimated && !timeUpTriggeredRef.current && isRunning) {
+      timeUpTriggeredRef.current = true;
+      
+      // צליל התראה
+      playTimeUpSound();
+      
+      // רטט (מובייל)
+      if ('vibrate' in navigator) {
+        navigator.vibrate([500, 200, 500, 200, 500]);
+      }
+      
+      // פתיחת דיאלוג
+      setShowTimeUpDialog(true);
+    }
+  }, [elapsedSeconds, timeSpent, estimated, isRunning]);
+
+  // 🆕 צליל סיום זמן
+  const playTimeUpSound = () => {
+    try {
+      const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      // צליל מנצח
+      const notes = [523, 659, 784, 1047]; // C5, E5, G5, C6
+      notes.forEach((freq, i) => {
+        const osc = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        osc.connect(gain);
+        gain.connect(audioContext.destination);
+        osc.frequency.value = freq;
+        osc.type = 'sine';
+        gain.gain.setValueAtTime(0.3, audioContext.currentTime + i * 0.15);
+        gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + i * 0.15 + 0.3);
+        osc.start(audioContext.currentTime + i * 0.15);
+        osc.stop(audioContext.currentTime + i * 0.15 + 0.3);
+      });
+    } catch (e) {
+      console.log('Audio not available');
+    }
+  };
 
   // חישוב אחוז התקדמות
   const totalMinutesWorked = timeSpent + Math.floor(elapsedSeconds / 60);
@@ -272,6 +319,65 @@ export default function FullScreenFocus({
             {progressPercent >= 100 && '🎉 עברת את הזמן המתוכנן! כל הכבוד!'}
           </p>
         </div>
+        
+        {/* 🆕 דיאלוג סיום זמן */}
+        <AnimatePresence>
+          {showTimeUpDialog && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 flex items-center justify-center p-4"
+            >
+              <motion.div
+                initial={{ scale: 0.8, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-md w-full text-center"
+                dir="rtl"
+              >
+                <div className="text-6xl mb-4">⏰</div>
+                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+                  הזמן המוקצב נגמר!
+                </h2>
+                <p className="text-gray-600 dark:text-gray-400 mb-6">
+                  עבדת {formatDuration(totalMinutesWorked)} על "{task?.title}"
+                </p>
+                
+                <div className="space-y-3">
+                  <button
+                    onClick={() => {
+                      setShowTimeUpDialog(false);
+                      handleComplete();
+                    }}
+                    className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl text-lg transition-colors"
+                  >
+                    ✅ סיימתי את המשימה!
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowTimeUpDialog(false);
+                      toast('⏰ ממשיכה לעבוד...', { icon: '💪' });
+                    }}
+                    className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-lg transition-colors"
+                  >
+                    🔄 צריכה עוד זמן
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowTimeUpDialog(false);
+                      handlePause();
+                    }}
+                    className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
+                  >
+                    ⏸️ הפסקה
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     </AnimatePresence>
   );
