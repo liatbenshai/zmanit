@@ -134,14 +134,17 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   // טיימר ראשי - עבודה
   // 🆕 שמירת מצב טיימר פעיל ב-localStorage
   useEffect(() => {
-    if (isRunning && currentTask?.id) {
-      localStorage.setItem('zmanit_active_timer', currentTask.id);
-      console.log('🟢 טיימר רץ - נשמר:', currentTask.id);
+    const taskId = currentTask?.id || task?.id;
+    console.log('🔍 useEffect טיימר:', { isRunning, isPaused, taskId, currentTaskId: currentTask?.id, propTaskId: task?.id });
+    
+    if (isRunning && taskId) {
+      localStorage.setItem('zmanit_active_timer', taskId);
+      console.log('🟢 טיימר רץ - נשמר:', taskId);
     } else if (!isRunning && !isPaused) {
       localStorage.removeItem('zmanit_active_timer');
       console.log('🔴 טיימר לא רץ - נמחק');
     }
-  }, [isRunning, currentTask?.id, isPaused]);
+  }, [isRunning, currentTask?.id, task?.id, isPaused]);
 
   // טיימר ראשי
   useEffect(() => {
