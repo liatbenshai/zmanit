@@ -3,7 +3,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
-import { useSchedule } from '../../hooks/useSchedule'; // ✅ חדש: שיבוץ מרכזי
+import { useSchedule } from '../../hooks/useSchedule'; // ✅ לקבלת currentTime
+import { smartScheduleWeekV4 } from '../../utils/smartSchedulerV4'; // ✅ חישוב מקומי
 import { TASK_TYPES } from '../../config/taskTypes';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
@@ -183,10 +184,8 @@ function DailyView() {
   const { user } = useAuth();
   const { tasks, loading, error, loadTasks, editTask, toggleComplete, addTask, dataVersion } = useTasks();
   
-  // ✅ שימוש ב-useSchedule לחישוב מרכזי
+  // ✅ שימוש ב-useSchedule רק לקבלת currentTime
   const { 
-    weekPlan, 
-    getDaySchedule, 
     currentTime,
     forceRefresh 
   } = useSchedule();
@@ -355,8 +354,13 @@ function DailyView() {
     setSelectedDate(new Date());
   };
 
-  // ✅ שימוש ב-useSchedule במקום חישוב מקומי
-  // weekPlan מגיע מ-useSchedule שמחשב פעם אחת לכל האפליקציה
+  // ✅ חישוב weekPlan מקומי - תלוי ב-selectedDate של DailyView
+  const weekPlan = useMemo(() => {
+    if (!tasks || tasks.length === 0) return null;
+    const weekStart = getWeekStart(selectedDate);
+    console.log('📆 DailyView: מחשב weekPlan, dataVersion:', dataVersion);
+    return smartScheduleWeekV4(weekStart, tasks);
+  }, [tasks, selectedDate, dataVersion]);
   
   const selectedDayData = useMemo(() => {
     if (!weekPlan) return { blocks: [], tasks: [] };
