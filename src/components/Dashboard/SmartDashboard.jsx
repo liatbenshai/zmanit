@@ -314,12 +314,37 @@ function SmartDashboard() {
           יום {todayName}, {today.toLocaleDateString('he-IL')}
         </p>
         
-        {/* ציטוט יומי */}
+        {/* ציטוט יומי - מעוצב */}
         {dailyQuote && (
-          <div className="mt-4 bg-gradient-to-l from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
-            <p className="text-gray-700 dark:text-gray-300 italic">"{dailyQuote.text}"</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">— {dailyQuote.author}</p>
-          </div>
+          <motion.div 
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.2 }}
+            className="mt-5 relative overflow-hidden"
+          >
+            {/* כרטיס הציטוט */}
+            <div className="relative bg-gradient-to-l from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-5 shadow-lg">
+              {/* עיגולים דקורטיביים */}
+              <div className="absolute top-0 right-0 w-24 h-24 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+              <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+              
+              {/* אייקון ציטוט */}
+              <div className="absolute top-3 right-3 text-white/20 text-5xl font-serif">"</div>
+              
+              {/* תוכן */}
+              <div className="relative z-10">
+                <p className="text-white text-lg font-medium leading-relaxed pr-6">
+                  {dailyQuote.text}
+                </p>
+                <div className="mt-3 flex items-center gap-2">
+                  <div className="w-8 h-0.5 bg-white/40 rounded-full"></div>
+                  <p className="text-white/80 text-sm font-light">
+                    {dailyQuote.author}
+                  </p>
+                </div>
+              </div>
+            </div>
+          </motion.div>
         )}
       </motion.div>
 
