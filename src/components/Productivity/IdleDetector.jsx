@@ -235,134 +235,134 @@ function IdleDetector() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
             onClick={handleSnooze}
           />
           
-          {/* חלון ההתראה */}
+          {/* חלון ההתראה - מרכז המסך */}
           <motion.div
-            initial={{ opacity: 0, scale: 0.8, y: 50 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 50 }}
+            initial={{ opacity: 0, scale: 0.8 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.8 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
             className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50
-                       w-[90%] max-w-md bg-white dark:bg-gray-800 rounded-3xl shadow-2xl
+                       w-[95%] max-w-2xl bg-white dark:bg-gray-800 rounded-3xl shadow-2xl
                        overflow-hidden"
             dir="rtl"
           >
-            {/* כותרת עם אווטאר */}
-            <div className="relative bg-gradient-to-l from-purple-600 via-pink-500 to-orange-400 p-6">
-              {/* עיגולים דקורטיביים */}
-              <div className="absolute top-0 left-0 w-32 h-32 bg-white/10 rounded-full -translate-x-1/2 -translate-y-1/2"></div>
-              <div className="absolute bottom-0 right-0 w-24 h-24 bg-white/10 rounded-full translate-x-1/3 translate-y-1/3"></div>
-              
-              <div className="relative flex items-center gap-4">
-                {/* אווטאר מנהלת המשרד */}
-                <div className="relative">
-                  <motion.div
-                    animate={{ 
-                      scale: [1, 1.05, 1],
-                      rotate: [0, 2, -2, 0]
-                    }}
-                    transition={{ 
-                      duration: 2,
-                      repeat: Infinity,
-                      repeatType: "reverse"
-                    }}
-                    className="w-20 h-20 rounded-full overflow-hidden border-4 border-white shadow-lg"
-                  >
+            {/* תוכן ראשי - אווטאר בצד */}
+            <div className="flex">
+              {/* צד ימין - אווטאר גדול */}
+              <div className="relative bg-gradient-to-b from-purple-600 via-pink-500 to-orange-400 p-6 flex flex-col items-center justify-center min-w-[200px]">
+                {/* עיגולים דקורטיביים */}
+                <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
+                <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
+                
+                {/* אווטאר גדול */}
+                <motion.div
+                  animate={{ 
+                    scale: [1, 1.03, 1],
+                  }}
+                  transition={{ 
+                    duration: 2,
+                    repeat: Infinity,
+                    repeatType: "reverse"
+                  }}
+                  className="relative"
+                >
+                  <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl">
                     <img 
                       src="/images/office-manager.jpg" 
                       alt="מנהלת המשרד"
                       className="w-full h-full object-cover object-top"
                     />
-                  </motion.div>
-                  {/* בועת דיבור קטנה */}
+                  </div>
+                  {/* בועת דיבור */}
                   <motion.div
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.3 }}
-                    className="absolute -top-1 -right-1 bg-white rounded-full p-1.5 shadow-md"
+                    className="absolute -top-2 -left-2 bg-white rounded-full p-2 shadow-lg"
                   >
-                    <span className="text-lg">👋</span>
+                    <span className="text-2xl">👋</span>
                   </motion.div>
-                </div>
+                </motion.div>
 
-                {/* טקסט */}
-                <div className="flex-1 text-white">
-                  <h2 className="text-xl font-bold mb-1">היי ליאת!</h2>
-                  <p className="text-white/90 text-sm leading-relaxed">
+                {/* הודעה */}
+                <div className="mt-4 text-center text-white">
+                  <h2 className="text-xl font-bold">היי ליאת!</h2>
+                  <p className="text-white/80 text-sm mt-1 leading-relaxed max-w-[180px]">
                     {currentMessage}
                   </p>
                 </div>
+
+                {/* מידע על המשימה המושהית */}
+                {alertType === 'paused' && pausedTaskName && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                    className="mt-3 bg-white/20 backdrop-blur-sm rounded-xl p-2 w-full"
+                  >
+                    <p className="text-white/70 text-xs">משימה מושהית:</p>
+                    <p className="text-white text-sm font-medium truncate">{pausedTaskName}</p>
+                  </motion.div>
+                )}
               </div>
 
-              {/* מידע על המשימה המושהית */}
-              {alertType === 'paused' && pausedTaskName && (
-                <motion.div
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.2 }}
-                  className="mt-4 bg-white/20 backdrop-blur-sm rounded-xl p-3"
-                >
-                  <p className="text-white/80 text-xs mb-1">משימה מושהית:</p>
-                  <p className="text-white font-medium truncate">{pausedTaskName}</p>
-                </motion.div>
-              )}
-            </div>
-
-            {/* אפשרויות */}
-            <div className="p-4 space-y-2">
-              {/* כפתור ראשי */}
-              {IDLE_REASONS.filter(r => r.primary).map(reason => (
-                <motion.button
-                  key={reason.id}
-                  whileHover={{ scale: 1.02 }}
-                  whileTap={{ scale: 0.98 }}
-                  onClick={() => handleResponse(reason)}
-                  className="w-full p-4 rounded-xl bg-gradient-to-l from-green-500 to-emerald-500 
-                           text-white font-bold text-lg shadow-lg shadow-green-500/30
-                           flex items-center justify-center gap-3"
-                >
-                  <span className="text-2xl">{reason.icon}</span>
-                  <span>{reason.label}</span>
-                </motion.button>
-              ))}
-
-              {/* שאר האפשרויות */}
-              <div className="grid grid-cols-2 gap-2 mt-3">
-                {IDLE_REASONS.filter(r => !r.primary).map(reason => (
+              {/* צד שמאל - אפשרויות */}
+              <div className="flex-1 p-5">
+                <h3 className="text-gray-500 dark:text-gray-400 text-sm mb-3">מה קרה?</h3>
+                
+                {/* כפתור ראשי */}
+                {IDLE_REASONS.filter(r => r.primary).map(reason => (
                   <motion.button
                     key={reason.id}
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => handleResponse(reason)}
-                    className={`
-                      p-3 rounded-xl flex items-center gap-2 transition-all text-sm
-                      ${reason.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : ''}
-                      ${reason.color === 'yellow' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' : ''}
-                      ${reason.color === 'red' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' : ''}
-                      ${reason.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : ''}
-                      ${reason.color === 'indigo' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : ''}
-                    `}
+                    className="w-full p-4 rounded-xl bg-gradient-to-l from-green-500 to-emerald-500 
+                             text-white font-bold text-lg shadow-lg shadow-green-500/30
+                             flex items-center justify-center gap-3 mb-4"
                   >
-                    <span className="text-xl">{reason.icon}</span>
-                    <span className="font-medium">{reason.label}</span>
+                    <span className="text-2xl">{reason.icon}</span>
+                    <span>{reason.label}</span>
                   </motion.button>
                 ))}
-              </div>
-            </div>
 
-            {/* כפתור דחייה */}
-            <div className="px-4 pb-4">
-              <button
-                onClick={handleSnooze}
-                className="w-full p-3 text-gray-400 dark:text-gray-500 text-sm 
-                         hover:text-gray-600 dark:hover:text-gray-300 
-                         hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all"
-              >
-                ⏰ הזכירי לי בעוד 5 דקות
-              </button>
+                {/* שאר האפשרויות */}
+                <div className="grid grid-cols-2 gap-2">
+                  {IDLE_REASONS.filter(r => !r.primary).map(reason => (
+                    <motion.button
+                      key={reason.id}
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={() => handleResponse(reason)}
+                      className={`
+                        p-3 rounded-xl flex items-center gap-2 transition-all text-sm
+                        ${reason.color === 'blue' ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300' : ''}
+                        ${reason.color === 'yellow' ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300' : ''}
+                        ${reason.color === 'red' ? 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300' : ''}
+                        ${reason.color === 'purple' ? 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300' : ''}
+                        ${reason.color === 'indigo' ? 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300' : ''}
+                      `}
+                    >
+                      <span className="text-xl">{reason.icon}</span>
+                      <span className="font-medium">{reason.label}</span>
+                    </motion.button>
+                  ))}
+                </div>
+
+                {/* כפתור דחייה */}
+                <button
+                  onClick={handleSnooze}
+                  className="w-full mt-4 p-3 text-gray-400 dark:text-gray-500 text-sm 
+                           hover:text-gray-600 dark:hover:text-gray-300 
+                           hover:bg-gray-100 dark:hover:bg-gray-700 rounded-xl transition-all"
+                >
+                  ⏰ הזכירי לי בעוד 5 דקות
+                </button>
+              </div>
             </div>
           </motion.div>
         </>
