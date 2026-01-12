@@ -18,9 +18,11 @@ import { EmergencyBufferCard } from '../Learning/EmergencyBuffer';
 import { EscapeWindowCard, EscapeWindowInsights } from '../Learning/EscapeWindowDetector';
 import RealEndOfDay, { EndOfDayButton } from '../Learning/RealEndOfDay';
 import { DeadlineConflictBanner } from '../Notifications/DeadlineConflictModal';
+import FullScreenFocus from '../ADHD/FullScreenFocus'; // ✅ תצוגה ממוקדת
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
+import { supabase } from '../../services/supabase'; // ✅ לתיעוד הפרעות
 
 // 🧠 קומפוננטות ADHD - הועברו לתצוגה ממוקדת
 // import { AddWeekTaskButton, PanicButton } from '../ADHD';
@@ -64,6 +66,10 @@ function SmartDashboard() {
   const [showBlockerInsights, setShowBlockerInsights] = useState(false);
   const [showEscapeInsights, setShowEscapeInsights] = useState(false); // ✅ חלונות בריחה
   const [showEndOfDay, setShowEndOfDay] = useState(false); // ✅ סיכום סוף יום
+  
+  // ✅ תצוגה ממוקדת
+  const [focusTask, setFocusTask] = useState(null);
+  const [showFocus, setShowFocus] = useState(false);
 
   // תאריכים
   const today = new Date();
@@ -313,6 +319,52 @@ function SmartDashboard() {
     }
   };
 
+  // ✅ התחלת עבודה על משימה - פתיחת תצוגה ממוקדת
+  const handleStartTask = (task) => {
+    setFocusTask(task);
+    setShowFocus(true);
+  };
+
+  // ✅ עדכון זמן עבודה
+  const handleTimeUpdate = async (minutes) => {
+    if (!focusTask) return;
+    try {
+      const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+      await editTask(focusTask.id, { time_spent: newTimeSpent });
+    } catch (err) {
+      console.error('שגיאה בעדכון זמן:', err);
+    }
+  };
+
+  // ✅ סיום משימה מתצוגה ממוקדת
+  const handleFocusComplete = async () => {
+    if (!focusTask) return;
+    try {
+      await toggleComplete(focusTask.id);
+      setShowFocus(false);
+      setFocusTask(null);
+      toast.success('✅ כל הכבוד!');
+    } catch (err) {
+      toast.error('שגיאה');
+    }
+  };
+
+  // ✅ תיעוד הפרעה
+  const handleLogInterruption = async (interruption) => {
+    if (!user) return;
+    try {
+      await supabase.from('interruptions').insert({
+        user_id: user.id,
+        type: interruption.type,
+        description: interruption.description,
+        task_id: interruption.task_id,
+        started_at: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('שגיאה בתיעוד הפרעה:', err);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -530,6 +582,7 @@ function SmartDashboard() {
                     setEditingTask(task);
                     setShowTaskForm(true);
                   }}
+                  onStart={() => handleStartTask(task)}
                 />
               ))}
               {stats.todayTasks.length > 6 && (
@@ -841,6 +894,24 @@ function SmartDashboard() {
         onClose={() => setShowEndOfDay(false)}
         tasks={tasks}
       />
+
+      {/* ✅ תצוגה ממוקדת */}
+      <FullScreenFocus
+        isOpen={showFocus}
+        task={focusTask}
+        onClose={() => {
+          setShowFocus(false);
+          // לא מנקים את focusTask כדי שהטיימר ימשיך ברקע
+        }}
+        onComplete={handleFocusComplete}
+        onPause={handleTimeUpdate}
+        onTimeUpdate={handleTimeUpdate}
+        onAddTask={async (newTask) => {
+          await addTask(newTask);
+          loadTasks();
+        }}
+        onLogInterruption={handleLogInterruption}
+      />
     </div>
   );
 }
@@ -953,58 +1024,126 @@ function FocusTaskCard({ task, onComplete }) {
 }
 
 /**
- * שורת משימה
+ * שורת משימה משודרגת עם כפתור התחל
  */
-function TaskRow({ task, index, onComplete, onEdit }) {
+function TaskRow({ task, index, onComplete, onEdit, onStart }) {
   const taskType = getTaskType(task.task_type);
+  const isOverdue = task.due_date && task.due_date < new Date().toISOString().split('T')[0];
+  const hasTime = task.due_time;
+  
+  // בדיקה אם יש טיימר פעיל למשימה זו
+  const [hasActiveTimer, setHasActiveTimer] = useState(false);
+  
+  useEffect(() => {
+    const checkTimer = () => {
+      try {
+        const timerData = localStorage.getItem(`timer_v2_${task.id}`);
+        if (timerData) {
+          const parsed = JSON.parse(timerData);
+          setHasActiveTimer(parsed.isRunning || parsed.isPaused || parsed.isInterrupted);
+        } else {
+          setHasActiveTimer(false);
+        }
+      } catch (e) {
+        setHasActiveTimer(false);
+      }
+    };
+    checkTimer();
+    const interval = setInterval(checkTimer, 3000);
+    return () => clearInterval(interval);
+  }, [task.id]);
 
   return (
     <motion.div
       initial={{ opacity: 0, x: -20 }}
       animate={{ opacity: 1, x: 0 }}
       transition={{ delay: index * 0.05 }}
-      className="flex items-center gap-3 p-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors group"
+      className={`flex items-center gap-3 p-3 rounded-xl transition-all group ${
+        isOverdue 
+          ? 'bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800' 
+          : hasActiveTimer
+            ? 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800'
+            : 'bg-gray-50 dark:bg-gray-800/50 hover:bg-gray-100 dark:hover:bg-gray-700/50'
+      }`}
     >
+      {/* כפתור השלמה */}
       <button
         onClick={onComplete}
-        className="w-5 h-5 rounded-full border-2 border-gray-300 dark:border-gray-600 hover:border-green-500 hover:bg-green-500 flex-shrink-0 transition-all flex items-center justify-center"
+        className={`w-6 h-6 rounded-full border-2 flex-shrink-0 transition-all flex items-center justify-center ${
+          isOverdue 
+            ? 'border-red-400 hover:border-red-500 hover:bg-red-500' 
+            : 'border-gray-300 dark:border-gray-600 hover:border-green-500 hover:bg-green-500'
+        }`}
       >
         <span className="text-white text-xs opacity-0 group-hover:opacity-100">✓</span>
       </button>
 
-      <span className="text-lg">{taskType.icon}</span>
+      {/* אייקון סוג */}
+      <span className="text-xl">{taskType.icon}</span>
 
+      {/* תוכן המשימה */}
       <div className="flex-1 min-w-0">
-        <span className="font-medium text-gray-900 dark:text-white truncate text-sm block">
-          {task.title}
-        </span>
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          {task.due_time && (
+        <div className="flex items-center gap-2">
+          <span className={`font-medium truncate text-sm ${
+            isOverdue ? 'text-red-700 dark:text-red-300' : 'text-gray-900 dark:text-white'
+          }`}>
+            {task.title}
+          </span>
+          {task.priority === 'urgent' && (
+            <span className="text-xs px-1.5 py-0.5 bg-red-500 text-white rounded font-medium">
+              דחוף
+            </span>
+          )}
+          {isOverdue && (
+            <span className="text-xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400 rounded">
+              באיחור
+            </span>
+          )}
+          {hasActiveTimer && (
+            <span className="text-xs px-1.5 py-0.5 bg-green-500 text-white rounded animate-pulse">
+              ▶️ פעיל
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-3 text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+          {hasTime && (
             <span className="flex items-center gap-0.5">
               🕐 {task.due_time}
             </span>
           )}
           {task.estimated_duration && (
-            <span>{task.estimated_duration} דק'</span>
+            <span className="flex items-center gap-0.5">
+              ⏱️ {task.estimated_duration} דק'
+            </span>
           )}
           {task.client_name && (
-            <span className="text-blue-500">👤 {task.client_name}</span>
+            <span className="text-blue-500 dark:text-blue-400">
+              👤 {task.client_name}
+            </span>
           )}
         </div>
       </div>
 
-      {task.priority === 'urgent' && (
-        <span className="text-xs px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 rounded">
-          דחוף
-        </span>
-      )}
-
-      <button
-        onClick={onEdit}
-        className="p-1 text-gray-400 hover:text-gray-600 opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        ✏️
-      </button>
+      {/* כפתורי פעולה */}
+      <div className="flex items-center gap-1">
+        {/* כפתור התחל */}
+        {onStart && !hasActiveTimer && (
+          <button
+            onClick={onStart}
+            className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
+          >
+            ▶️ התחל
+          </button>
+        )}
+        
+        {/* כפתור עריכה */}
+        <button
+          onClick={onEdit}
+          className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-700 rounded-lg opacity-0 group-hover:opacity-100 transition-all"
+        >
+          ✏️
+        </button>
+      </div>
     </motion.div>
   );
 }

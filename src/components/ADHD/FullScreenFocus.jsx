@@ -30,7 +30,8 @@ export default function FullScreenFocus({
   onComplete,
   onPause,
   onTimeUpdate,
-  onAddTask // 🆕 להוספת בלת"ם
+  onAddTask, // 🆕 להוספת בלת"ם
+  onLogInterruption // 🆕 לתיעוד הפרעה
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
@@ -38,8 +39,23 @@ export default function FullScreenFocus({
   const [startTime, setStartTime] = useState(null);
   const [showInterruptionModal, setShowInterruptionModal] = useState(false); // 🆕 פופאפ בלת"ם
   const [interruptionTitle, setInterruptionTitle] = useState(''); // 🆕 כותרת בלת"ם
+  const [showLogInterruptionModal, setShowLogInterruptionModal] = useState(false); // 🆕 תיעוד הפרעה
+  const [interruptionType, setInterruptionType] = useState('distraction'); // 🆕 סוג הפרעה
+  const [interruptionNote, setInterruptionNote] = useState(''); // 🆕 הערה להפרעה
   const intervalRef = useRef(null);
   const elapsedRef = useRef(0);
+
+  // 🆕 סוגי הפרעות
+  const INTERRUPTION_TYPES = {
+    client_call: { name: 'שיחת לקוח', icon: '📞' },
+    phone_call: { name: 'שיחת טלפון', icon: '📱' },
+    meeting: { name: 'פגישה לא מתוכננת', icon: '👥' },
+    distraction: { name: 'הסחת דעת', icon: '🎯' },
+    break: { name: 'הפסקה', icon: '☕' },
+    technical: { name: 'בעיה טכנית', icon: '🔧' },
+    colleague: { name: 'עמית לעבודה', icon: '🧑‍💼' },
+    other: { name: 'אחר', icon: '❓' }
+  };
 
   const taskType = task ? (TASK_TYPES[task.task_type] || TASK_TYPES.other) : TASK_TYPES.other;
   const estimated = task?.estimated_duration || 30;
@@ -326,14 +342,106 @@ export default function FullScreenFocus({
             )}
           </div>
           
-          {/* 🆕 כפתור בלת"ם */}
-          <button
-            onClick={() => setShowInterruptionModal(true)}
-            className="mt-4 px-6 py-3 bg-red-500/80 hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
-          >
-            🚨 בלת"ם - משימה דחופה
-          </button>
+          {/* 🆕 כפתורי הפרעות */}
+          <div className="flex gap-3 mt-4">
+            <button
+              onClick={() => setShowLogInterruptionModal(true)}
+              className="flex-1 px-4 py-3 bg-orange-500/80 hover:bg-orange-600 text-white font-medium rounded-xl transition-colors"
+            >
+              ⏸️ הפרעה - תעד והמשך
+            </button>
+            <button
+              onClick={() => setShowInterruptionModal(true)}
+              className="flex-1 px-4 py-3 bg-red-500/80 hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
+            >
+              🚨 בלת"ם - משימה דחופה
+            </button>
+          </div>
         </div>
+
+        {/* 🆕 פופאפ תיעוד הפרעה */}
+        <AnimatePresence>
+          {showLogInterruptionModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
+              onClick={() => setShowLogInterruptionModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-md w-full"
+                dir="rtl"
+              >
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                  ⏸️ תיעוד הפרעה
+                </h3>
+                
+                {/* בחירת סוג הפרעה */}
+                <div className="grid grid-cols-4 gap-2 mb-4">
+                  {Object.entries(INTERRUPTION_TYPES).map(([key, { name, icon }]) => (
+                    <button
+                      key={key}
+                      onClick={() => setInterruptionType(key)}
+                      className={`p-2 rounded-lg text-center transition-all ${
+                        interruptionType === key
+                          ? 'bg-orange-500 text-white'
+                          : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600'
+                      }`}
+                    >
+                      <span className="text-xl block">{icon}</span>
+                      <span className="text-xs">{name}</span>
+                    </button>
+                  ))}
+                </div>
+                
+                {/* הערה */}
+                <input
+                  type="text"
+                  value={interruptionNote}
+                  onChange={(e) => setInterruptionNote(e.target.value)}
+                  placeholder="הערה (אופציונלי)"
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-xl mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      if (onLogInterruption) {
+                        await onLogInterruption({
+                          type: interruptionType,
+                          description: interruptionNote.trim() || INTERRUPTION_TYPES[interruptionType].name,
+                          task_id: task?.id,
+                          duration: 0 // יעודכן בסיום
+                        });
+                      }
+                      toast.success('הפרעה תועדה ✓');
+                      setInterruptionNote('');
+                      setShowLogInterruptionModal(false);
+                    }}
+                    className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors"
+                  >
+                    {INTERRUPTION_TYPES[interruptionType].icon} תעד וחזור לעבודה
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowLogInterruptionModal(false);
+                      setInterruptionNote('');
+                    }}
+                    className="px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl transition-colors"
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* 🆕 פופאפ בלת"ם */}
         <AnimatePresence>
