@@ -2,52 +2,72 @@
 
 ## מה חדש
 
-### 1. דשבורד משופר ✅
-- **ניווט ברור** - 4 כפתורים גדולים לכל העמודים: יומי, שבועי, ממוקד, תובנות
-- **סיכום משימות** - רשימת משימות להיום עם פס התקדמות
-- **המלצות חכמות** - התראות על משימות באיחור, יום עמוס, וכו'
-- **תצוגת שבוע** - 7 ימים עם מספר משימות לכל יום
-- **כפתור התחל** - על כל משימה לפתיחת מצב מיקוד
+### 1. התראת "חזרי לעבודה" עם אווטאר מנהלת המשרד 🎉
+כשאת לא עובדת על כלום יותר מ-15 דקות, או משהה משימה יותר מ-10 דקות, מנהלת המשרד מופיעה עם תזכורת ידידותית!
 
-### 2. תצוגה ממוקדת ✅
-- לחיצה על "▶️" פותחת מסך מיקוד מלא
+**הודעות מותאמות:**
+- "ליאת, כבר X דקות בלי משימה פעילה... הכל בסדר?"
+- "היי ליאת! שמתי לב שאת לא עובדת על כלום. מה קורה?"
+- "המשימה בהשהייה כבר X דקות... רוצה לחזור אליה?"
+
+**אפשרויות תשובה:**
+- 💪 חוזרת לעבודה! (ירוק)
+- 📞 הייתה הפרעה
+- ☕ הפסקה מתוכננת
+- 🫣 התפזרתי...
+- 🤔 חושבת/מתכננת
+- 👥 הייתי בפגישה
+- ⏰ הזכירי לי בעוד 5 דקות
+
+### 2. דשבורד משופר ✅
+- **ציטוט מוטיבציה יומי** - משפט השראה בכל יום
+- **ניווט ברור** - 4 כפתורים: יומי, שבועי, ממוקד, תובנות
+- **סיכום משימות** - רשימת משימות להיום עם פס התקדמות
+- **המלצות חכמות** - התראות על משימות באיחור, יום עמוס
+- **תצוגת שבוע** - 7 ימים עם מספר משימות לכל יום
+
+### 3. תצוגה ממוקדת (עמוד /focus) ✅
+- תצוגה פשוטה של משימות היום
+- טיימרים לכל משימה
+- כפתור התחלת עבודה במצב מיקוד מלא
+
+### 4. מצב מיקוד מלא ✅
+- לחיצה על "▶️" פותחת מסך מיקוד
 - טיימר גדול וברור
 - כפתור "⏸️ הפרעה" לתיעוד הפרעות
 - כפתור "🚨 בלת"ם" להוספת משימה דחופה
-
-### 3. תיעוד הפרעות ✅
-- 8 סוגי הפרעות: שיחת לקוח, טלפון, פגישה, הסחת דעת, הפסקה, בעיה טכנית, עמית לעבודה, אחר
-- נשמר ב-Supabase
-
-### 4. סנכרון בין תצוגות ✅
-- כל התצוגות מסונכרנות
-- כפתור 🔄 ב-Header לסנכרון ידני
 
 ---
 
 ## קבצים ב-ZIP
 
 ```
+public/
+└── images/
+    └── office-manager.jpg        # ✅ חדש - תמונת מנהלת המשרד
+
 src/
-├── App.jsx                          # עודכן
+├── App.jsx                       # עודכן - route ל-/focus
 ├── context/
-│   └── TaskContext.jsx              # עודכן - dataVersion
+│   └── TaskContext.jsx           # עודכן
 ├── hooks/
-│   └── useSchedule.js               # חדש
+│   └── useSchedule.js            # קיים
 ├── components/
 │   ├── Dashboard/
-│   │   └── SmartDashboard.jsx       # חדש - דשבורד משופר
+│   │   └── SmartDashboard.jsx    # עודכן - ציטוט + עיצוב
 │   ├── DailyView/
-│   │   ├── DailyView.jsx            # עודכן
-│   │   └── DailyTaskCard.jsx        # עודכן - כפתור התחל
+│   │   ├── DailyView.jsx         # עודכן
+│   │   └── DailyTaskCard.jsx     # עודכן
 │   ├── Planning/
-│   │   └── WeeklyPlannerPro.jsx     # עודכן
+│   │   └── WeeklyPlannerPro.jsx  # עודכן
 │   ├── Layout/
-│   │   └── Header.jsx               # עודכן - כפתור סנכרון
+│   │   └── Header.jsx            # עודכן
 │   ├── ADHD/
-│   │   └── FullScreenFocus.jsx      # עודכן - הפרעות
+│   │   └── FullScreenFocus.jsx   # עודכן
+│   ├── Productivity/
+│   │   └── IdleDetector.jsx      # ✅ חדש - עם אווטאר!
 │   └── Notifications/
-│       └── UnifiedNotificationManager.jsx  # חדש
+│       └── UnifiedNotificationManager.jsx  # קיים
 ```
 
 ---
@@ -60,23 +80,12 @@ src/
 
 ---
 
-## טבלת Supabase (אם צריך)
+## הגדרות התראה
 
-```sql
-CREATE TABLE IF NOT EXISTS interruptions (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES auth.users(id),
-  type TEXT NOT NULL,
-  description TEXT,
-  task_id UUID REFERENCES tasks(id),
-  started_at TIMESTAMPTZ DEFAULT NOW(),
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE interruptions ENABLE ROW LEVEL SECURITY;
-
-CREATE POLICY "Users can manage their own interruptions"
-  ON interruptions FOR ALL USING (auth.uid() = user_id);
+בקובץ `IdleDetector.jsx`:
+```javascript
+const IDLE_THRESHOLD_MINUTES = 15;  // אחרי כמה דקות בלי עבודה להתריע
+const PAUSE_THRESHOLD_MINUTES = 10; // אחרי כמה דקות השהייה להתריע
 ```
 
 ---

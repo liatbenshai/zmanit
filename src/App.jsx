@@ -2,14 +2,15 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { Toaster } from 'react-hot-toast';
 
-// דפים - 5 עמודים בלבד
+// דפים - 6 עמודים
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';           // דשבורד - עמוד הבית
 import DailyViewPage from './pages/DailyViewPage';   // תצוגה יומית
-import WeeklyViewPage from './pages/WeeklyViewPage'; // תצוגה שבועית (חדש)
+import WeeklyViewPage from './pages/WeeklyViewPage'; // תצוגה שבועית
 import TaskInsights from './pages/TaskInsights';     // תובנות ולמידה
 import Settings from './pages/Settings';             // הגדרות
+import FocusedDashboard from './components/DailyView/FocusedDashboard'; // ✅ תצוגה ממוקדת
 
 // רכיבים
 import ProtectedRoute from './components/Auth/ProtectedRoute';
@@ -134,6 +135,13 @@ function App() {
           <Route path="/settings" element={
             <ProtectedRoute>
               <Settings />
+            </ProtectedRoute>
+          } />
+
+          {/* 6. תצוגה ממוקדת */}
+          <Route path="/focus" element={
+            <ProtectedRoute>
+              <FocusedDashboard />
             </ProtectedRoute>
           } />
 

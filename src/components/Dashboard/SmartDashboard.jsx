@@ -24,7 +24,23 @@ import { supabase } from '../../services/supabase';
  * ✅ סיכום משימות להיום
  * ✅ המלצות אישיות
  * ✅ תצוגת שבוע מהירה
+ * ✅ ציטוט מוטיבציה יומי
  */
+
+// ציטוטים מוטיבציוניים
+const MOTIVATIONAL_QUOTES = [
+  { text: "הדרך הטובה ביותר לחזות את העתיד היא ליצור אותו", author: "פיטר דרוקר" },
+  { text: "כל משימה גדולה מתחילה בצעד קטן", author: "לאו דזה" },
+  { text: "ההצלחה היא סכום של מאמצים קטנים, שחוזרים על עצמם יום אחר יום", author: "רוברט קולייר" },
+  { text: "אל תמתיני להזדמנות. צרי אותה", author: "ג'ורג' ברנרד שו" },
+  { text: "העתיד שייך לאלה שמאמינים ביופי החלומות שלהם", author: "אלינור רוזוולט" },
+  { text: "הדרך היחידה לעשות עבודה נהדרת היא לאהוב את מה שאת עושה", author: "סטיב ג'ובס" },
+  { text: "קודם את משנה את ההרגלים שלך, ואז ההרגלים משנים אותך", author: "ג'ים רון" },
+  { text: "התחילי מהמקום בו את נמצאת. השתמשי במה שיש לך. עשי מה שאת יכולה", author: "ארתור אש" },
+  { text: "אין זמן טוב יותר מעכשיו", author: "ישן" },
+  { text: "המסע של אלף מיל מתחיל בצעד אחד", author: "לאו דזה" },
+];
+
 function SmartDashboard() {
   const navigate = useNavigate();
   const { tasks, loading, toggleComplete, loadTasks, editTask, addTask, dataVersion } = useTasks();
@@ -39,6 +55,16 @@ function SmartDashboard() {
   const [showInterruptions, setShowInterruptions] = useState(false);
   const [focusTask, setFocusTask] = useState(null);
   const [showFocus, setShowFocus] = useState(false);
+  
+  // ציטוט יומי
+  const [dailyQuote, setDailyQuote] = useState(null);
+  
+  // טעינת ציטוט יומי
+  useEffect(() => {
+    const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+    const quoteIndex = dayOfYear % MOTIVATIONAL_QUOTES.length;
+    setDailyQuote(MOTIVATIONAL_QUOTES[quoteIndex]);
+  }, []);
 
   // תאריכים
   const today = new Date();
@@ -287,6 +313,14 @@ function SmartDashboard() {
         <p className="text-gray-500 dark:text-gray-400">
           יום {todayName}, {today.toLocaleDateString('he-IL')}
         </p>
+        
+        {/* ציטוט יומי */}
+        {dailyQuote && (
+          <div className="mt-4 bg-gradient-to-l from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 rounded-xl p-4 border border-blue-100 dark:border-blue-800">
+            <p className="text-gray-700 dark:text-gray-300 italic">"{dailyQuote.text}"</p>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">— {dailyQuote.author}</p>
+          </div>
+        )}
       </motion.div>
 
       {/* === ניווט מהיר === */}
