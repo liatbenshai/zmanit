@@ -62,8 +62,9 @@ function SmartRecommendationsPanel({ tasks, onUpdateTask, onAddTask, onRefresh }
         }
         
         case 'reschedule': {
-          // שיבוץ מחדש - העברה למחר
-          if (rec.taskId && onUpdateTask) {
+          // 🔧 תיקון: בדיקה אם זה המלצה כללית או ספציפית
+          if (rec.taskId) {
+            // המלצה על משימה ספציפית
             const tomorrow = new Date();
             tomorrow.setDate(tomorrow.getDate() + 1);
             await onUpdateTask(rec.taskId, { 
@@ -72,6 +73,30 @@ function SmartRecommendationsPanel({ tasks, onUpdateTask, onAddTask, onRefresh }
             toast.success('המשימה הועברה למחר');
             dismissRecommendation(rec.id);
             if (onRefresh) onRefresh();
+          } else {
+            // 🔧 המלצה כללית (daily-reschedule) - מעבירים את כל המשימות שניתן לדחות
+            const dailyReschedule = suggestDailyReschedule(tasks);
+            if (dailyReschedule.suggestions && dailyReschedule.suggestions.length > 0) {
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              const tomorrowISO = tomorrow.toISOString().split('T')[0];
+              
+              let movedCount = 0;
+              for (const suggestion of dailyReschedule.suggestions) {
+                if (suggestion.canDefer && suggestion.task?.id) {
+                  await onUpdateTask(suggestion.task.id, { due_date: tomorrowISO });
+                  movedCount++;
+                }
+              }
+              
+              if (movedCount > 0) {
+                toast.success(`${movedCount} משימות הועברו למחר!`);
+                dismissRecommendation(rec.id);
+                if (onRefresh) onRefresh();
+              } else {
+                toast('אין משימות שאפשר להעביר', { icon: '🤷' });
+              }
+            }
           }
           break;
         }

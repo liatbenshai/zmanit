@@ -512,6 +512,7 @@ function AutoFocusManager() {
             await editTask(activeTask.id, { time_spent: newTimeSpent });
           }
         }}
+        onAddTask={addTask}
       />
     </>
   );

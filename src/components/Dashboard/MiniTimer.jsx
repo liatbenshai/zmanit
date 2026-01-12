@@ -36,7 +36,7 @@ function formatMinutes(minutes) {
  * MiniTimer Component
  */
 export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
-  const { editTask, updateTaskTime } = useTasks();
+  const { editTask, updateTaskTime, addTask } = useTasks();
   
   // State
   const [isRunning, setIsRunning] = useState(false);
@@ -440,6 +440,15 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
           >
             ⏹️
           </button>
+          
+          {/* 🆕 חזרה למיקוד מלא */}
+          <button
+            onClick={() => setShowFullScreen(true)}
+            className="px-3 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
+            title="חזרה למסך מיקוד מלא"
+          >
+            🎯
+          </button>
         </div>
         
         {/* סיום משימה */}
@@ -498,6 +507,7 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
             console.log('💾 FullScreenFocus onTimeUpdate - נשמרו:', minutes, 'דקות');
           }
         }}
+        onAddTask={addTask}
       />
     </motion.div>
   );

@@ -29,12 +29,15 @@ export default function FullScreenFocus({
   onClose, 
   onComplete,
   onPause,
-  onTimeUpdate 
+  onTimeUpdate,
+  onAddTask // 🆕 להוספת בלת"ם
 }) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [isRunning, setIsRunning] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [startTime, setStartTime] = useState(null);
+  const [showInterruptionModal, setShowInterruptionModal] = useState(false); // 🆕 פופאפ בלת"ם
+  const [interruptionTitle, setInterruptionTitle] = useState(''); // 🆕 כותרת בלת"ם
   const intervalRef = useRef(null);
   const elapsedRef = useRef(0);
 
@@ -322,7 +325,83 @@ export default function FullScreenFocus({
               </>
             )}
           </div>
+          
+          {/* 🆕 כפתור בלת"ם */}
+          <button
+            onClick={() => setShowInterruptionModal(true)}
+            className="mt-4 px-6 py-3 bg-red-500/80 hover:bg-red-600 text-white font-medium rounded-xl transition-colors"
+          >
+            🚨 בלת"ם - משימה דחופה
+          </button>
         </div>
+
+        {/* 🆕 פופאפ בלת"ם */}
+        <AnimatePresence>
+          {showInterruptionModal && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
+              onClick={() => setShowInterruptionModal(false)}
+            >
+              <motion.div
+                initial={{ scale: 0.9, y: 20 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.9, y: 20 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-md w-full"
+                dir="rtl"
+              >
+                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
+                  🚨 הוספת בלת"ם
+                </h3>
+                
+                <input
+                  type="text"
+                  value={interruptionTitle}
+                  onChange={(e) => setInterruptionTitle(e.target.value)}
+                  placeholder="מה צריך לעשות?"
+                  className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-xl mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                  autoFocus
+                />
+                
+                <div className="flex gap-3">
+                  <button
+                    onClick={async () => {
+                      if (interruptionTitle.trim() && onAddTask) {
+                        const today = new Date().toISOString().split('T')[0];
+                        await onAddTask({
+                          title: `🚨 ${interruptionTitle.trim()}`,
+                          quadrant: 1, // דחוף וחשוב
+                          due_date: today,
+                          priority: 'urgent',
+                          estimated_duration: 15
+                        });
+                        toast.success('בלת"ם נוסף!');
+                        setInterruptionTitle('');
+                        setShowInterruptionModal(false);
+                      }
+                    }}
+                    className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-colors"
+                  >
+                    הוסף וחזור לעבודה
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      setShowInterruptionModal(false);
+                      setInterruptionTitle('');
+                    }}
+                    className="px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl transition-colors"
+                  >
+                    ביטול
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
         {/* הודעת מוטיבציה */}
         <div className="text-center pb-8">

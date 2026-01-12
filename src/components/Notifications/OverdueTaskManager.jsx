@@ -53,7 +53,7 @@ function formatMinutes(minutes) {
  * רכיב ראשי: מנהל פופאפים למשימות באיחור
  */
 function OverdueTaskManager({ tasks = [], onStartTask }) {
-  const { editTask, toggleComplete } = useTasks();
+  const { editTask, toggleComplete, addTask } = useTasks();
   const [currentOverdue, setCurrentOverdue] = useState(null);
   const [handledToday, setHandledToday] = useState(new Set());
   const [rescheduleTime, setRescheduleTime] = useState('');
@@ -388,6 +388,7 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
           await editTask(focusTask.id, { time_spent: newTimeSpent });
         }
       }}
+      onAddTask={addTask}
     />
     
     {/* פופאפ איחור */}
