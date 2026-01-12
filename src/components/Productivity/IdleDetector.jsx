@@ -15,6 +15,9 @@ const IDLE_THRESHOLD_MINUTES = 5; // אחרי כמה דקות להתריע
 const PAUSE_THRESHOLD_MINUTES = 5; // אחרי כמה דקות השהייה להתריע
 const CHECK_INTERVAL_SECONDS = 30; // כל כמה לבדוק (הקטנתי כי הזמנים קצרים)
 
+// ✅ מצב בדיקה - שנה ל-false אחרי הבדיקה!
+const TEST_MODE = true;
+
 // הודעות מנהלת המשרד
 const MANAGER_MESSAGES = {
   idle: [
@@ -93,6 +96,9 @@ function IdleDetector() {
 
   // בדיקה אם זה שעות עבודה
   const checkWorkHours = useCallback(() => {
+    // ✅ מצב בדיקה - תמיד מחזיר true
+    if (TEST_MODE) return true;
+    
     const now = new Date();
     const hour = now.getHours();
     const day = now.getDay();
@@ -109,16 +115,26 @@ function IdleDetector() {
   useEffect(() => {
     if (!user) return;
 
-    const interval = setInterval(() => {
+    // פונקציית הבדיקה
+    const checkIdleStatus = () => {
       const inWorkHours = checkWorkHours();
       setIsWorkHours(inWorkHours);
       
+      console.log('🔍 IdleDetector:', { 
+        inWorkHours, 
+        showAlert,
+        lastActivity: lastActivity.toLocaleTimeString(),
+        minutesSinceActivity: Math.floor((new Date() - lastActivity) / 60000)
+      });
+      
       if (!inWorkHours) {
+        console.log('❌ לא בשעות עבודה');
         setShowAlert(false);
         return;
       }
 
       const { hasRunningTimer, hasPausedTimer, pausedTask, pausedSince } = checkTimerStatus();
+      console.log('🔍 Timer status:', { hasRunningTimer, hasPausedTimer });
       
       if (hasRunningTimer) {
         // יש טיימר רץ - איפוס
@@ -128,8 +144,8 @@ function IdleDetector() {
       } else if (hasPausedTimer && pausedSince) {
         // טיימר מושהה - בדיקת זמן
         const minutesPaused = Math.floor((new Date() - pausedSince) / 60000);
+        setIdleMinutes(minutesPaused);
         if (minutesPaused >= PAUSE_THRESHOLD_MINUTES && !showAlert) {
-          setIdleMinutes(minutesPaused);
           setAlertType('paused');
           setPausedTaskName(pausedTask);
           setCurrentMessage(getRandomMessage('paused', minutesPaused));
@@ -142,14 +158,29 @@ function IdleDetector() {
         setIdleMinutes(minutesIdle);
         
         if (minutesIdle >= IDLE_THRESHOLD_MINUTES && !showAlert) {
+          console.log('🚨 מציג התראה! דקות idle:', minutesIdle);
           setAlertType('idle');
           setCurrentMessage(getRandomMessage('idle', minutesIdle));
           setShowAlert(true);
         }
       }
-    }, CHECK_INTERVAL_SECONDS * 1000);
+    };
 
-    setIsWorkHours(checkWorkHours());
+    // ✅ בדיקה ראשונית מיידית
+    checkIdleStatus();
+    
+    // ✅ מצב בדיקה - מציג התראה מיידית!
+    if (TEST_MODE && !showAlert) {
+      console.log('🧪 TEST MODE - מציג התראה מיידית!');
+      setIdleMinutes(5);
+      setAlertType('idle');
+      setCurrentMessage(getRandomMessage('idle', 5));
+      setShowAlert(true);
+    }
+
+    // בדיקה תקופתית
+    const interval = setInterval(checkIdleStatus, CHECK_INTERVAL_SECONDS * 1000);
+
     return () => clearInterval(interval);
   }, [user, lastActivity, showAlert, checkTimerStatus, checkWorkHours, getRandomMessage]);
 
