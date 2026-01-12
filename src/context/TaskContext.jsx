@@ -76,6 +76,58 @@ export function TaskProvider({ children }) {
     }
   }, [user?.id, authLoading]);
 
+  // 🆕 Realtime Subscription - סנכרון אוטומטי בין כל התצוגות
+  useEffect(() => {
+    if (!user?.id) return;
+
+    console.log('📡 מתחבר ל-Realtime...');
+    
+    const channel = supabase
+      .channel('tasks-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // INSERT, UPDATE, DELETE
+          schema: 'public',
+          table: 'tasks',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          console.log('📡 שינוי התקבל:', payload.eventType, payload.new?.title || payload.old?.id);
+          
+          switch (payload.eventType) {
+            case 'INSERT':
+              setTasks(prev => {
+                // בדיקה שהמשימה לא קיימת כבר
+                if (prev.some(t => t.id === payload.new.id)) return prev;
+                return [{ ...payload.new, time_spent: payload.new.time_spent || 0 }, ...prev];
+              });
+              break;
+              
+            case 'UPDATE':
+              setTasks(prev => prev.map(t => 
+                t.id === payload.new.id 
+                  ? { ...payload.new, time_spent: payload.new.time_spent || 0 }
+                  : t
+              ));
+              break;
+              
+            case 'DELETE':
+              setTasks(prev => prev.filter(t => t.id !== payload.old.id));
+              break;
+          }
+        }
+      )
+      .subscribe((status) => {
+        console.log('📡 סטטוס Realtime:', status);
+      });
+
+    return () => {
+      console.log('📡 מתנתק מ-Realtime...');
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
   /**
    * הוספת משימה עם פיצול אוטומטי לאינטרוולים של 45 דקות
    * =====================================================
@@ -193,7 +245,9 @@ export function TaskProvider({ children }) {
       const taskType = updates.taskType ?? updates.task_type ?? null;
       const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
       
-      const updatedTask = await updateTask(taskId, {
+      // 🔧 העברת כל השדות - לא רק חלק
+      const updatePayload = {
+        ...updates, // כל השדות המקוריים
         title: updates.title,
         description: updates.description || null,
         estimated_duration: estimatedDuration ? parseInt(estimatedDuration) : null,
@@ -205,9 +259,18 @@ export function TaskProvider({ children }) {
         task_type: taskType,
         task_parameter: taskParameter ? parseInt(taskParameter) : null,
         priority: updates.priority || 'normal'
+      };
+      
+      // הסרת שדות undefined
+      Object.keys(updatePayload).forEach(key => {
+        if (updatePayload[key] === undefined) {
+          delete updatePayload[key];
+        }
       });
       
-      setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+      const updatedTask = await updateTask(taskId, updatePayload);
+      
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updatedTask } : t));
       return updatedTask;
     } catch (err) {
       console.error('שגיאה בעדכון משימה:', err);

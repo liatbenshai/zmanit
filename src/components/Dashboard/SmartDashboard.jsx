@@ -954,9 +954,19 @@ function TaskRow({ task, index, onComplete, onEdit }) {
         <span className="font-medium text-gray-900 dark:text-white truncate text-sm block">
           {task.title}
         </span>
-        {task.estimated_duration && (
-          <span className="text-xs text-gray-500">{task.estimated_duration} דק'</span>
-        )}
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          {task.due_time && (
+            <span className="flex items-center gap-0.5">
+              🕐 {task.due_time}
+            </span>
+          )}
+          {task.estimated_duration && (
+            <span>{task.estimated_duration} דק'</span>
+          )}
+          {task.client_name && (
+            <span className="text-blue-500">👤 {task.client_name}</span>
+          )}
+        </div>
       </div>
 
       {task.priority === 'urgent' && (

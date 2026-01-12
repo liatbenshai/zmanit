@@ -413,20 +413,35 @@ export function suggestDailyReschedule(tasks) {
   // הצעות
   const suggestions = sortedByQuadrant.map(task => {
     const isUrgent = task.quadrant === 1;
-    const canDefer = task.quadrant !== 1;
-    const suggestedAction = isUrgent 
-      ? 'לסיים היום בכל מחיר'
-      : 'להעביר למחר';
+    
+    // 🔧 תיקון: בדיקה אם המשימה חייבת להסתיים היום
+    const hasDueTime = !!task.due_time;
+    const isHighPriority = task.priority === 'urgent' || task.priority === 'high';
+    const isClientWork = task.client_name || task.task_type === 'client_communication';
+    const hasDeadlineToday = task.deadline === today || task.hard_deadline === today;
+    
+    // משימה שחייבת להסתיים היום - לא מציעים דחייה!
+    const mustFinishToday = isUrgent || hasDueTime || isHighPriority || isClientWork || hasDeadlineToday;
+    
+    const canDefer = !mustFinishToday && task.quadrant >= 3; // רק Q3 ו-Q4 ללא אילוצים
+    
+    const suggestedAction = mustFinishToday 
+      ? 'לסיים היום'
+      : 'אפשר להעביר למחר';
     
     return {
       task,
-      suggestedDate: isUrgent ? today : tomorrow,
+      suggestedDate: mustFinishToday ? today : tomorrow,
       suggestedAction,
       canDefer,
       priority: isUrgent ? 'critical' : (task.quadrant === 2 ? 'high' : 'normal'),
       deferScore: calculateDeferScore(task)
     };
   });
+  
+  // 🔧 סינון: לא להציג המלצות עם משימות שחייבות להסתיים היום
+  const deferableTasks = suggestions.filter(s => s.canDefer);
+  const mustFinishTasks = suggestions.filter(s => !s.canDefer);
   
   // סיכום לפי רבעים
   const byQuadrant = {
@@ -437,16 +452,21 @@ export function suggestDailyReschedule(tasks) {
   };
   
   const totalTime = unfinishedToday.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
+  const urgentCount = mustFinishTasks.length;
   
   return {
     hasUnfinished: true,
     count: unfinishedToday.length,
+    urgentCount,
     byQuadrant,
     totalTime,
-    suggestions,
-    summary: byQuadrant.q1 > 0
-      ? `⚠️ יש ${byQuadrant.q1} משימות דחופות וחשובות שחייבות להסתיים היום!`
-      : `${byQuadrant.q2 + byQuadrant.q3 + byQuadrant.q4} משימות יכולות לעבור למחר`
+    suggestions: deferableTasks.length > 0 ? deferableTasks : [], // רק משימות שאפשר לדחות
+    mustFinish: mustFinishTasks,
+    summary: urgentCount > 0
+      ? `⚠️ ${urgentCount} משימות חייבות להסתיים היום!`
+      : deferableTasks.length > 0
+        ? `${deferableTasks.length} משימות אפשר להעביר למחר`
+        : 'כל המשימות חייבות להסתיים היום'
   };
 }
 

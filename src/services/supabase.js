@@ -519,6 +519,19 @@ export async function updateTask(taskId, updates) {
   if (updates.priority !== undefined) {
     updateData.priority = updates.priority;
   }
+  // 🆕 שדות נוספים
+  if (updates.client_id !== undefined) {
+    updateData.client_id = updates.client_id;
+  }
+  if (updates.notes !== undefined) {
+    updateData.notes = updates.notes;
+  }
+  if (updates.is_fixed !== undefined || updates.is_fixed_time !== undefined) {
+    updateData.is_fixed = updates.is_fixed ?? updates.is_fixed_time ?? false;
+  }
+  if (updates.google_event_id !== undefined) {
+    updateData.google_event_id = updates.google_event_id;
+  }
   
   
   // עדכון עם time_spent
@@ -526,7 +539,7 @@ export async function updateTask(taskId, updates) {
     .from('tasks')
     .update(updateData)
     .eq('id', taskId)
-    .select('id, title, description, quadrant, start_date, due_date, due_time, reminder_minutes, estimated_duration, task_type, is_project, parent_task_id, is_completed, completed_at, created_at, updated_at, user_id, time_spent, priority')
+    .select('*')
     .single();
   
   if (error) {

@@ -143,13 +143,14 @@ function SmartRecommendationsPanel({ tasks, onUpdateTask, onAddTask, onRefresh }
 
     // --- 2. המלצות על משימות שלא הושלמו ---
     const dailyReschedule = suggestDailyReschedule(tasks);
-    if (dailyReschedule.hasUnfinished) {
+    // 🔧 מציגים המלצה רק אם יש משימות שאפשר לדחות
+    if (dailyReschedule.hasUnfinished && dailyReschedule.suggestions && dailyReschedule.suggestions.length > 0) {
       allRecommendations.push({
         id: 'daily-reschedule',
         category: 'tasks',
-        priority: dailyReschedule.urgentCount > 0 ? 'high' : 'medium',
+        priority: 'low', // לא דחוף כי אלה משימות שאפשר לדחות
         icon: '⏳',
-        title: `${dailyReschedule.count} משימות לא הושלמו היום`,
+        title: `${dailyReschedule.suggestions.length} משימות אפשר להעביר`,
         message: dailyReschedule.summary,
         action: 'reschedule',
         details: dailyReschedule.suggestions.slice(0, 3).map(s => 
