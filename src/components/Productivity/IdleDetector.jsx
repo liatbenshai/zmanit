@@ -253,24 +253,23 @@ function IdleDetector() {
             {/* תוכן ראשי - אווטאר בצד */}
             <div className="flex">
               {/* צד ימין - אווטאר גדול */}
-              <div className="relative bg-gradient-to-b from-purple-600 via-pink-500 to-orange-400 p-6 flex flex-col items-center justify-center min-w-[200px]">
+              <div className="relative bg-gradient-to-b from-purple-600 via-pink-500 to-orange-400 flex flex-col items-center justify-start overflow-hidden min-w-[220px]">
                 {/* עיגולים דקורטיביים */}
                 <div className="absolute top-0 right-0 w-20 h-20 bg-white/10 rounded-full -translate-y-1/2 translate-x-1/2"></div>
-                <div className="absolute bottom-0 left-0 w-16 h-16 bg-white/10 rounded-full translate-y-1/2 -translate-x-1/2"></div>
                 
-                {/* אווטאר גדול */}
+                {/* אווטאר גדול - מלבני עם פינות מעוגלות */}
                 <motion.div
                   animate={{ 
-                    scale: [1, 1.03, 1],
+                    scale: [1, 1.02, 1],
                   }}
                   transition={{ 
-                    duration: 2,
+                    duration: 3,
                     repeat: Infinity,
                     repeatType: "reverse"
                   }}
-                  className="relative"
+                  className="relative w-full"
                 >
-                  <div className="w-32 h-32 rounded-full overflow-hidden border-4 border-white shadow-xl">
+                  <div className="w-full h-56 overflow-hidden">
                     <img 
                       src="/images/office-manager.jpg" 
                       alt="מנהלת המשרד"
@@ -282,32 +281,32 @@ function IdleDetector() {
                     initial={{ scale: 0 }}
                     animate={{ scale: 1 }}
                     transition={{ delay: 0.3 }}
-                    className="absolute -top-2 -left-2 bg-white rounded-full p-2 shadow-lg"
+                    className="absolute top-3 left-3 bg-white rounded-full p-2 shadow-lg"
                   >
                     <span className="text-2xl">👋</span>
                   </motion.div>
                 </motion.div>
 
                 {/* הודעה */}
-                <div className="mt-4 text-center text-white">
+                <div className="p-4 text-center text-white">
                   <h2 className="text-xl font-bold">היי ליאת!</h2>
-                  <p className="text-white/80 text-sm mt-1 leading-relaxed max-w-[180px]">
+                  <p className="text-white/90 text-sm mt-2 leading-relaxed">
                     {currentMessage}
                   </p>
+                  
+                  {/* מידע על המשימה המושהית */}
+                  {alertType === 'paused' && pausedTaskName && (
+                    <motion.div
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.2 }}
+                      className="mt-3 bg-white/20 backdrop-blur-sm rounded-xl p-2"
+                    >
+                      <p className="text-white/70 text-xs">משימה מושהית:</p>
+                      <p className="text-white text-sm font-medium truncate">{pausedTaskName}</p>
+                    </motion.div>
+                  )}
                 </div>
-
-                {/* מידע על המשימה המושהית */}
-                {alertType === 'paused' && pausedTaskName && (
-                  <motion.div
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.2 }}
-                    className="mt-3 bg-white/20 backdrop-blur-sm rounded-xl p-2 w-full"
-                  >
-                    <p className="text-white/70 text-xs">משימה מושהית:</p>
-                    <p className="text-white text-sm font-medium truncate">{pausedTaskName}</p>
-                  </motion.div>
-                )}
               </div>
 
               {/* צד שמאל - אפשרויות */}
