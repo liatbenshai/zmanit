@@ -13,10 +13,10 @@ import toast from 'react-hot-toast';
 
 const IDLE_THRESHOLD_MINUTES = 5; // אחרי כמה דקות להתריע
 const PAUSE_THRESHOLD_MINUTES = 5; // אחרי כמה דקות השהייה להתריע
-const CHECK_INTERVAL_SECONDS = 30; // כל כמה לבדוק (הקטנתי כי הזמנים קצרים)
+const CHECK_INTERVAL_SECONDS = 30; // כל כמה לבדוק
 
-// ✅ מצב בדיקה - שנה ל-false אחרי הבדיקה!
-const TEST_MODE = true;
+// מצב בדיקה - כבוי
+const TEST_MODE = false;
 
 // הודעות מנהלת המשרד
 const MANAGER_MESSAGES = {
@@ -96,17 +96,22 @@ function IdleDetector() {
 
   // בדיקה אם זה שעות עבודה
   const checkWorkHours = useCallback(() => {
-    // ✅ מצב בדיקה - תמיד מחזיר true
+    // מצב בדיקה - תמיד מחזיר true
     if (TEST_MODE) return true;
     
     const now = new Date();
     const hour = now.getHours();
+    const minutes = now.getMinutes();
     const day = now.getDay();
     
-    // ימים א'-ה'
+    // ימים א'-ה' (0=ראשון, 5=שישי, 6=שבת)
     const isWorkDay = day >= 0 && day <= 4;
-    // שעות 8:00-18:00
-    const isWorkTime = hour >= 8 && hour < 18;
+    
+    // שעות 08:30-16:15
+    const currentTime = hour * 60 + minutes; // זמן נוכחי בדקות
+    const startTime = 8 * 60 + 30;  // 08:30 = 510 דקות
+    const endTime = 16 * 60 + 15;   // 16:15 = 975 דקות
+    const isWorkTime = currentTime >= startTime && currentTime <= endTime;
     
     return isWorkDay && isWorkTime;
   }, []);
@@ -120,21 +125,12 @@ function IdleDetector() {
       const inWorkHours = checkWorkHours();
       setIsWorkHours(inWorkHours);
       
-      console.log('🔍 IdleDetector:', { 
-        inWorkHours, 
-        showAlert,
-        lastActivity: lastActivity.toLocaleTimeString(),
-        minutesSinceActivity: Math.floor((new Date() - lastActivity) / 60000)
-      });
-      
       if (!inWorkHours) {
-        console.log('❌ לא בשעות עבודה');
         setShowAlert(false);
         return;
       }
 
       const { hasRunningTimer, hasPausedTimer, pausedTask, pausedSince } = checkTimerStatus();
-      console.log('🔍 Timer status:', { hasRunningTimer, hasPausedTimer });
       
       if (hasRunningTimer) {
         // יש טיימר רץ - איפוס
@@ -158,7 +154,6 @@ function IdleDetector() {
         setIdleMinutes(minutesIdle);
         
         if (minutesIdle >= IDLE_THRESHOLD_MINUTES && !showAlert) {
-          console.log('🚨 מציג התראה! דקות idle:', minutesIdle);
           setAlertType('idle');
           setCurrentMessage(getRandomMessage('idle', minutesIdle));
           setShowAlert(true);
@@ -166,17 +161,8 @@ function IdleDetector() {
       }
     };
 
-    // ✅ בדיקה ראשונית מיידית
+    // בדיקה ראשונית מיידית
     checkIdleStatus();
-    
-    // ✅ מצב בדיקה - מציג התראה מיידית!
-    if (TEST_MODE && !showAlert) {
-      console.log('🧪 TEST MODE - מציג התראה מיידית!');
-      setIdleMinutes(5);
-      setAlertType('idle');
-      setCurrentMessage(getRandomMessage('idle', 5));
-      setShowAlert(true);
-    }
 
     // בדיקה תקופתית
     const interval = setInterval(checkIdleStatus, CHECK_INTERVAL_SECONDS * 1000);
