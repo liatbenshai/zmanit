@@ -6,6 +6,7 @@
  * - תמיכה מלאה בנייד (תצוגת יום בודד עם החלקה)
  * - קטגוריות מותאמות אישית
  * - שמירת הצעות נדחות
+ * - ✅ סנכרון עם dataVersion
  */
 
 import { useState, useMemo, useEffect } from 'react';
@@ -57,7 +58,7 @@ const formatDuration = (minutes) => {
 // ============================================
 
 function WeeklyPlannerPro() {
-  const { tasks, loading, loadTasks, toggleComplete, editTask } = useTasks();
+  const { tasks, loading, loadTasks, toggleComplete, editTask, dataVersion } = useTasks(); // ✅ הוספת dataVersion
   const [weekOffset, setWeekOffset] = useState(0);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
@@ -122,11 +123,12 @@ function WeeklyPlannerPro() {
 
   const todayStr = new Date().toISOString().split('T')[0];
 
-  // תכנון שבועי
+  // תכנון שבועי - ✅ תלוי ב-dataVersion לסנכרון
   const plan = useMemo(() => {
     if (!tasks) return null;
+    console.log('📆 WeeklyPlannerPro: מחשב plan, dataVersion:', dataVersion);
     return smartScheduleWeekV4(weekStart, tasks);
-  }, [tasks, weekStart]);
+  }, [tasks, weekStart, dataVersion]);
 
   // יצירת הצעות חכמות עם אפשרויות
   const smartSuggestions = useMemo(() => {

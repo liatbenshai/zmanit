@@ -1,16 +1,20 @@
 import { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../../hooks/useAuth';
+import { useTasks } from '../../hooks/useTasks';
 import { motion } from 'framer-motion';
+import toast from 'react-hot-toast';
 
 /**
  * כותרת עליונה
  */
 function Header() {
   const { user, logout, isAdmin } = useAuth();
+  const { forceRefresh, dataVersion, lastUpdated, loading } = useTasks();
   const location = useLocation();
   const [darkMode, setDarkMode] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // בדיקת מצב כהה בעליה
   useEffect(() => {
@@ -43,6 +47,19 @@ function Header() {
       await logout();
     } catch (err) {
       console.error('שגיאה בהתנתקות:', err);
+    }
+  };
+
+  // ✅ סנכרון ידני
+  const handleSync = async () => {
+    setIsSyncing(true);
+    try {
+      await forceRefresh();
+      toast.success('🔄 הנתונים עודכנו!');
+    } catch (err) {
+      toast.error('שגיאה בסנכרון');
+    } finally {
+      setTimeout(() => setIsSyncing(false), 500);
     }
   };
 
@@ -87,6 +104,21 @@ function Header() {
 
           {/* פעולות */}
           <div className="flex items-center gap-3">
+            {/* ✅ כפתור סנכרון */}
+            <button
+              onClick={handleSync}
+              disabled={isSyncing || loading}
+              className={`p-2 rounded-lg transition-colors ${
+                isSyncing || loading
+                  ? 'text-blue-500 animate-spin'
+                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+              }`}
+              aria-label="סנכרון נתונים"
+              title={`גרסה ${dataVersion} | עדכון אחרון: ${new Date(lastUpdated).toLocaleTimeString('he-IL')}`}
+            >
+              🔄
+            </button>
+
             {/* כפתור מצב כהה */}
             <button
               onClick={toggleDarkMode}

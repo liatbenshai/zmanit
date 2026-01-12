@@ -1,0 +1,432 @@
+/**
+ * מנהל התראות מאוחד - UnifiedNotificationManager
+ * ================================================
+ * 
+ * מתאם בין כל מערכות ההתראה:
+ * 1. NotificationChecker - התראות דפדפן
+ * 2. smartAlertManager - התראות בתוך האפליקציה
+ * 3. OverdueTaskManager - פופאפים למשימות באיחור
+ * 
+ * פותר את בעיית ההתראות הכפולות והלא מתואמות!
+ */
+
+import { useEffect, useRef, useCallback, useState } from 'react';
+import { useTasks } from '../../hooks/useTasks';
+import { useNotifications } from '../../hooks/useNotifications';
+import alertManager, { ALERT_TYPES, ALERT_PRIORITY } from '../../utils/smartAlertManager';
+import toast from 'react-hot-toast';
+
+/**
+ * המרת תאריך לפורמט ISO מקומי
+ */
+function toLocalISODate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
+ * בדיקה אם יש טיימר פעיל על משימה כלשהי
+ */
+function getActiveTaskId() {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('timer_v2_')) {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const data = JSON.parse(saved);
+          const isActive = data.isRunning === true || 
+                           data.isPaused === true || 
+                           (data.isInterrupted === true && data.startTime);
+          if (isActive) {
+            return key.replace('timer_v2_', '');
+          }
+        }
+      }
+    }
+  } catch (e) {}
+  return null;
+}
+
+/**
+ * Hook מאוחד לניהול התראות
+ */
+export function useUnifiedNotifications() {
+  const { tasks } = useTasks();
+  const { permission, sendNotification } = useNotifications();
+  
+  // מצב התראות
+  const [activeAlert, setActiveAlert] = useState(null);
+  const [alertQueue, setAlertQueue] = useState([]);
+  const [isAlertVisible, setIsAlertVisible] = useState(false);
+  
+  // refs למניעת התראות כפולות
+  const lastNotifiedRef = useRef({});
+  const checkIntervalRef = useRef(null);
+  
+  // ✅ אתחול מנהל ההתראות
+  useEffect(() => {
+    console.log('🔔 UnifiedNotificationManager: מאתחל...');
+    
+    alertManager.init({
+      onAlert: (alert) => {
+        console.log('🔔 התראה חדשה:', alert.type, alert.title);
+        
+        // הוספה לתור
+        setAlertQueue(prev => [...prev, alert]);
+      },
+      onPopup: (alert) => {
+        console.log('🔔 פופאפ חדש:', alert.type, alert.title);
+        
+        // הצגת פופאפ
+        if (alert.blockingPopup) {
+          setActiveAlert(alert);
+          setIsAlertVisible(true);
+        } else {
+          // toast רגיל
+          showToastAlert(alert);
+        }
+      }
+    });
+    
+    return () => {
+      alertManager.stopMonitoring();
+    };
+  }, []);
+  
+  // ✅ הצגת התראה כ-toast
+  const showToastAlert = useCallback((alert) => {
+    const toastOptions = {
+      duration: alert.priority === ALERT_PRIORITY.CRITICAL ? 10000 : 5000,
+      icon: getAlertIcon(alert.type)
+    };
+    
+    if (alert.priority === ALERT_PRIORITY.CRITICAL) {
+      toast.error(alert.message, toastOptions);
+    } else if (alert.priority === ALERT_PRIORITY.HIGH) {
+      toast(alert.message, { ...toastOptions, icon: '⚠️' });
+    } else {
+      toast(alert.message, toastOptions);
+    }
+  }, []);
+  
+  // ✅ בדיקה אם ניתן לשלוח התראה (מניעת כפילויות)
+  const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
+    const now = Date.now();
+    const key = `${taskId}-${type}`;
+    const lastNotified = lastNotifiedRef.current[key];
+    
+    if (!lastNotified) return true;
+    
+    const minutesSinceLastNotification = (now - lastNotified) / (1000 * 60);
+    return minutesSinceLastNotification >= minIntervalMinutes;
+  }, []);
+  
+  // ✅ סימון שנשלחה התראה
+  const markNotified = useCallback((taskId, type) => {
+    const key = `${taskId}-${type}`;
+    lastNotifiedRef.current[key] = Date.now();
+  }, []);
+  
+  // ✅ בדיקת משימות ושליחת התראות מתואמות
+  const checkAndNotify = useCallback(() => {
+    if (permission !== 'granted') return;
+    if (!tasks || tasks.length === 0) return;
+    
+    const now = new Date();
+    const today = toLocalISODate(now);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    // בדיקה אם יש טיימר פעיל
+    const activeTaskId = getActiveTaskId();
+    
+    // אם יש טיימר פעיל - לא שולחים התראות על משימות אחרות
+    if (activeTaskId) {
+      // רק התראות על המשימה הפעילה (זמן נגמר וכו')
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      if (activeTask) {
+        checkActiveTaskAlerts(activeTask, currentMinutes);
+      }
+      return;
+    }
+    
+    // בדיקת משימות של היום
+    const todayTasks = tasks.filter(task => {
+      if (task.is_completed) return false;
+      const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
+      return taskDate === today && task.due_time;
+    });
+    
+    todayTasks.forEach(task => {
+      checkTaskAlerts(task, currentMinutes, today);
+    });
+    
+  }, [tasks, permission, canNotify, markNotified, sendNotification]);
+  
+  // ✅ בדיקת התראות למשימה פעילה (עם טיימר)
+  const checkActiveTaskAlerts = useCallback((task, currentMinutes) => {
+    const estimated = task.estimated_duration || 0;
+    const timeSpent = task.time_spent || 0;
+    
+    if (estimated <= 0) return;
+    
+    const remaining = estimated - timeSpent;
+    
+    // 5 דקות לסיום
+    if (remaining > 0 && remaining <= 5 && remaining > 2) {
+      if (canNotify(task.id, 'endingSoon', 5)) {
+        sendNotification(`⏳ ${task.title}`, {
+          body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
+          tag: `task-ending-${task.id}`
+        });
+        markNotified(task.id, 'endingSoon');
+      }
+    }
+    
+    // הזמן נגמר
+    if (remaining <= 0 && remaining > -2) {
+      if (canNotify(task.id, 'timeUp', 60)) { // פעם בשעה
+        sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
+          body: 'הזמן המוקצב הסתיים',
+          tag: `task-timeup-${task.id}`,
+          requireInteraction: true
+        });
+        markNotified(task.id, 'timeUp');
+        
+        // גם toast בתוך האפליקציה
+        toast('🔔 הזמן המוקצב הסתיים!', {
+          duration: 5000,
+          icon: '⏰'
+        });
+      }
+    }
+  }, [canNotify, markNotified, sendNotification]);
+  
+  // ✅ בדיקת התראות למשימה (ללא טיימר)
+  const checkTaskAlerts = useCallback((task, currentMinutes, today) => {
+    if (!task.due_time) return;
+    
+    const [hour, min] = task.due_time.split(':').map(Number);
+    const taskMinutes = hour * 60 + (min || 0);
+    const diff = taskMinutes - currentMinutes;
+    
+    // 5 דקות לפני
+    if (diff > 0 && diff <= 5) {
+      if (canNotify(task.id, 'before', 5)) {
+        sendNotification(`⏰ ${task.title}`, {
+          body: `מתחיל בעוד ${diff} דקות (${task.due_time})`,
+          tag: `task-before-${task.id}`
+        });
+        markNotified(task.id, 'before');
+        
+        toast(`⏰ ${task.title} מתחיל בעוד ${diff} דקות`, {
+          duration: 5000
+        });
+      }
+    }
+    
+    // בדיוק בזמן
+    if (diff >= -1 && diff <= 1) {
+      if (canNotify(task.id, 'onTime', 5)) {
+        sendNotification(`🔔 ${task.title}`, {
+          body: `הגיע הזמן להתחיל!`,
+          tag: `task-ontime-${task.id}`
+        });
+        markNotified(task.id, 'onTime');
+        
+        toast.success(`🔔 הגיע הזמן להתחיל: ${task.title}`, {
+          duration: 8000
+        });
+      }
+    }
+    
+    // באיחור (עד 30 דקות)
+    if (diff < -2 && diff > -30) {
+      // לא מתריעים אם כבר עבדו על המשימה
+      if (task.time_spent && task.time_spent > 0) return;
+      
+      if (canNotify(task.id, 'late', 10)) {
+        const lateMinutes = Math.abs(Math.round(diff));
+        sendNotification(`⏰ ${task.title}`, {
+          body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
+          tag: `task-late-${task.id}`
+        });
+        markNotified(task.id, 'late');
+        
+        toast(`⏰ ${task.title} - באיחור של ${lateMinutes} דקות`, {
+          duration: 5000,
+          icon: '⚠️'
+        });
+      }
+    }
+  }, [canNotify, markNotified, sendNotification]);
+  
+  // ✅ הפעלת בדיקה תקופתית
+  useEffect(() => {
+    if (permission !== 'granted') return;
+    
+    // בדיקה ראשונית
+    checkAndNotify();
+    
+    // בדיקה כל 30 שניות
+    checkIntervalRef.current = setInterval(checkAndNotify, 30 * 1000);
+    
+    return () => {
+      if (checkIntervalRef.current) {
+        clearInterval(checkIntervalRef.current);
+      }
+    };
+  }, [permission, checkAndNotify]);
+  
+  // ✅ סגירת התראה פעילה
+  const dismissAlert = useCallback(() => {
+    setActiveAlert(null);
+    setIsAlertVisible(false);
+    
+    // עבור להתראה הבאה בתור
+    if (alertQueue.length > 0) {
+      const [next, ...rest] = alertQueue;
+      setAlertQueue(rest);
+      if (next.blockingPopup) {
+        setActiveAlert(next);
+        setIsAlertVisible(true);
+      } else {
+        showToastAlert(next);
+      }
+    }
+  }, [alertQueue, showToastAlert]);
+  
+  // ✅ טיפול בפעולה על התראה
+  const handleAlertAction = useCallback((actionId) => {
+    console.log('🔔 פעולה על התראה:', actionId);
+    
+    switch (actionId) {
+      case 'start_now':
+        // שמור את ה-taskId ב-localStorage לפתיחה ב-DailyView
+        if (activeAlert?.taskId) {
+          localStorage.setItem('start_task_id', activeAlert.taskId);
+        }
+        window.location.href = '/daily';
+        break;
+        
+      case 'snooze_5':
+        toast('⏱ נזכיר בעוד 5 דקות', { duration: 2000 });
+        setTimeout(() => {
+          if (activeAlert) {
+            sendNotification(activeAlert.title, {
+              body: activeAlert.message,
+              tag: `snooze-${activeAlert.id}`
+            });
+          }
+        }, 5 * 60 * 1000);
+        break;
+        
+      case 'reschedule':
+        toast('📅 יש להעביר את המשימה בתצוגה היומית', { duration: 3000 });
+        break;
+        
+      case 'skip':
+        toast('⏭ המשימה נדחתה', { duration: 2000 });
+        break;
+        
+      case 'take_break':
+        alertManager.takeBreak();
+        toast('☕ הפסקה טובה!', { duration: 2000 });
+        break;
+        
+      case 'focus_mode':
+        toast('🎯 מצב ריכוז הופעל ל-45 דקות', { duration: 3000 });
+        break;
+        
+      default:
+        break;
+    }
+    
+    dismissAlert();
+  }, [activeAlert, dismissAlert, sendNotification]);
+  
+  return {
+    activeAlert,
+    isAlertVisible,
+    alertQueue,
+    dismissAlert,
+    handleAlertAction,
+    checkAndNotify
+  };
+}
+
+/**
+ * קבלת אייקון לפי סוג התראה
+ */
+function getAlertIcon(type) {
+  switch (type) {
+    case ALERT_TYPES.TASK_STARTING_SOON:
+      return '⏰';
+    case ALERT_TYPES.TASK_OVERDUE:
+      return '🔴';
+    case ALERT_TYPES.TASK_ENDING_SOON:
+      return '⏳';
+    case ALERT_TYPES.BREAK_REMINDER:
+      return '☕';
+    case ALERT_TYPES.PROCRASTINATION_WARNING:
+      return '🎯';
+    default:
+      return '🔔';
+  }
+}
+
+/**
+ * קומפוננטת מנהל התראות מאוחד
+ * יש להוסיף ל-App.jsx במקום NotificationChecker
+ */
+export function UnifiedNotificationManager() {
+  const { activeAlert, isAlertVisible, handleAlertAction, dismissAlert } = useUnifiedNotifications();
+  
+  // פופאפ חוסם להתראות קריטיות
+  if (isAlertVisible && activeAlert?.blockingPopup) {
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6 text-center animate-bounce-in">
+          {/* כותרת */}
+          <div className="text-4xl mb-4">
+            {getAlertIcon(activeAlert.type)}
+          </div>
+          
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            {activeAlert.title}
+          </h2>
+          
+          <p className="text-gray-600 dark:text-gray-300 mb-6">
+            {activeAlert.message}
+          </p>
+          
+          {/* כפתורי פעולה */}
+          <div className="flex flex-col gap-3">
+            {activeAlert.actions?.map((action, index) => (
+              <button
+                key={action.id}
+                onClick={() => handleAlertAction(action.id)}
+                className={`
+                  w-full py-3 px-4 rounded-xl font-medium transition-all
+                  ${action.primary 
+                    ? 'bg-blue-500 hover:bg-blue-600 text-white' 
+                    : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+                  }
+                `}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+  
+  return null;
+}
+
+export default UnifiedNotificationManager;

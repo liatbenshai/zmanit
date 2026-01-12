@@ -45,9 +45,10 @@ const MOTIVATIONAL_QUOTES = [
  * ✅ הוספת משימות לכל השבוע (לא רק להיום)
  * ✅ כפתור הוספת עבודה חדשה
  * ✅ ניתוח הפרעות
+ * ✅ סנכרון עם dataVersion
  */
 function SmartDashboard() {
-  const { tasks, loading, toggleComplete, loadTasks, editTask, addTask } = useTasks();
+  const { tasks, loading, toggleComplete, loadTasks, editTask, addTask, dataVersion } = useTasks(); // ✅ הוספת dataVersion
   const { user } = useAuth();
   
   const [showTaskForm, setShowTaskForm] = useState(false);
@@ -70,7 +71,7 @@ function SmartDashboard() {
   const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
   const todayName = dayNames[today.getDay()];
 
-  // ✅ חישוב ימי השבוע הקרוב
+  // ✅ חישוב ימי השבוע הקרוב - תלוי ב-dataVersion לסנכרון
   const weekDays = useMemo(() => {
     const days = [];
     for (let i = 0; i < 7; i++) {
@@ -102,7 +103,7 @@ function SmartDashboard() {
       });
     }
     return days;
-  }, [today, tasks]);
+  }, [today, tasks, dataVersion]); // ✅ הוספת dataVersion
 
   // טעינת ציטוט יומי (קבוע ליום)
   useEffect(() => {

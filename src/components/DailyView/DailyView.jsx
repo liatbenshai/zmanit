@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
-import { smartScheduleWeekV4 } from '../../utils/smartSchedulerV4';
+import { useSchedule } from '../../hooks/useSchedule'; // ✅ חדש: שיבוץ מרכזי
 import { TASK_TYPES } from '../../config/taskTypes';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
@@ -179,7 +179,16 @@ function GoogleIcon() {
  */
 function DailyView() {
   const { user } = useAuth();
-  const { tasks, loading, error, loadTasks, editTask } = useTasks();
+  const { tasks, loading, error, loadTasks, editTask, dataVersion } = useTasks();
+  
+  // ✅ שימוש ב-useSchedule לחישוב מרכזי
+  const { 
+    weekPlan, 
+    getDaySchedule, 
+    currentTime,
+    forceRefresh 
+  } = useSchedule();
+  
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -279,28 +288,10 @@ function DailyView() {
     syncGoogleForDate();
   }, [selectedDate, isGoogleConnected, isGoogleLoading, user?.id]);
   
-  const [currentTime, setCurrentTime] = useState(() => {
-    const now = new Date();
-    return {
-      minutes: now.getHours() * 60 + now.getMinutes(),
-      dateISO: getDateISO(now)
-    };
-  });
+  // ✅ currentTime מגיע עכשיו מ-useSchedule - לא צריך state מקומי
   
   const [rescheduleInfo, setRescheduleInfo] = useState(null);
   const [isAutoRescheduling, setIsAutoRescheduling] = useState(false);
-  
-  useEffect(() => {
-    const interval = setInterval(() => {
-      const now = new Date();
-      setCurrentTime({
-        minutes: now.getHours() * 60 + now.getMinutes(),
-        dateISO: getDateISO(now)
-      });
-    }, 60 * 1000);
-    
-    return () => clearInterval(interval);
-  }, []);
 
   useEffect(() => {
     if (!tasks || tasks.length === 0) {
@@ -358,20 +349,9 @@ function DailyView() {
     setSelectedDate(new Date());
   };
 
-  // ✅ כאן השינוי העיקרי - משתמש ב-smartScheduleWeekV4!
-  const weekPlan = useMemo(() => {
-    if (!tasks || tasks.length === 0) return null;
-    const weekStart = getWeekStart(selectedDate);
-    
-    const intervals = tasks.filter(t => t.parent_task_id && !t.is_completed);
-    if (intervals.length > 0) {
-      intervals.forEach(t => {
-      });
-    }
-    
-    return smartScheduleWeekV4(weekStart, tasks);
-  }, [tasks, selectedDate]);
-
+  // ✅ שימוש ב-useSchedule במקום חישוב מקומי
+  // weekPlan מגיע מ-useSchedule שמחשב פעם אחת לכל האפליקציה
+  
   const selectedDayData = useMemo(() => {
     if (!weekPlan) return { blocks: [], tasks: [] };
     
@@ -388,7 +368,7 @@ function DailyView() {
       plannedMinutes: dayPlan.plannedMinutes || 0,
       completedMinutes: dayPlan.completedMinutes || 0
     };
-  }, [weekPlan, selectedDate]);
+  }, [weekPlan, selectedDate, dataVersion]); // ✅ תלוי גם ב-dataVersion לסנכרון
 
   const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;
   

@@ -42,6 +42,12 @@ export function TaskProvider({ children }) {
   const updatingTasksRef = useRef(new Map());
   const loadingRef = useRef(false);
   
+  // ✅ חדש: גרסת הנתונים - מתעדכנת בכל שינוי
+  const [dataVersion, setDataVersion] = useState(0);
+  
+  // ✅ חדש: זמן עדכון אחרון
+  const [lastUpdated, setLastUpdated] = useState(Date.now());
+  
   // טעינת משימות
   const loadTasks = useCallback(async () => {
     if (authLoading || !user?.id || loadingRef.current) {
@@ -94,6 +100,10 @@ export function TaskProvider({ children }) {
         },
         (payload) => {
           console.log('📡 שינוי התקבל:', payload.eventType, payload.new?.title || payload.old?.id);
+          
+          // ✅ עדכון גרסת הנתונים - יגרום לכל הקומפוננטות לחשב מחדש
+          setDataVersion(v => v + 1);
+          setLastUpdated(Date.now());
           
           switch (payload.eventType) {
             case 'INSERT':
@@ -526,6 +536,13 @@ export function TaskProvider({ children }) {
     };
   };
 
+  // ✅ פונקציית רענון כפוי - לשימוש כשצריך לוודא סנכרון
+  const forceRefresh = useCallback(() => {
+    setDataVersion(v => v + 1);
+    setLastUpdated(Date.now());
+    loadTasks();
+  }, [loadTasks]);
+
   const value = {
     tasks,
     loading,
@@ -551,7 +568,11 @@ export function TaskProvider({ children }) {
     getIntervals,
     isTaskInterval,
     taskHasIntervals,
-    INTERVAL_DURATION
+    INTERVAL_DURATION,
+    // ✅ חדש: גרסת נתונים וסנכרון
+    dataVersion,
+    lastUpdated,
+    forceRefresh
   };
 
   return (

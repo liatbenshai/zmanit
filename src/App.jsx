@@ -19,8 +19,8 @@ import InstallPrompt from './components/PWA/InstallPrompt';
 import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
-import NotificationChecker from './components/Notifications/NotificationChecker';
-import OverdueTaskManager from './components/Notifications/OverdueTaskManager';
+// ✅ מנהל התראות מאוחד - מחליף את NotificationChecker + OverdueTaskManager
+import UnifiedNotificationManager from './components/Notifications/UnifiedNotificationManager';
 import { DeadlineConflictManager } from './components/Notifications/DeadlineConflictModal';
 import EndOfDaySummary from './components/Learning/EndOfDaySummary';
 import { useTasks } from './hooks/useTasks';
@@ -29,16 +29,7 @@ import { useTasks } from './hooks/useTasks';
 import { AutoFocusManager } from './components/ADHD';
 
 /**
- * ✅ חדש: Wrapper לפופאפ משימות באיחור
- * נדרש כדי להשתמש ב-useTasks בתוך TaskProvider
- */
-function OverdueTaskWrapper() {
-  const { tasks } = useTasks();
-  return <OverdueTaskManager tasks={tasks} />;
-}
-
-/**
- * ✅ חדש: Wrapper לסיכום יומי
+ * ✅ Wrapper לסיכום יומי
  */
 function EndOfDaySummaryWrapper() {
   const { tasks } = useTasks();
@@ -84,11 +75,8 @@ function App() {
       {/* סיכום יומי */}
       {user && <EndOfDayPopup />}
 
-      {/* בודק התראות - חדש! */}
-      {user && <NotificationChecker />}
-      
-      {/* ✅ חדש: פופאפ חוסם למשימות באיחור */}
-      {user && <OverdueTaskWrapper />}
+      {/* ✅ מנהל התראות מאוחד - מטפל בהכל! */}
+      {user && <UnifiedNotificationManager />}
       
       {/* ✅ חדש: סיכום יומי אוטומטי בסוף היום */}
       {user && <EndOfDaySummaryWrapper />}
