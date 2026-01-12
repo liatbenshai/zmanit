@@ -64,31 +64,47 @@ function FocusedDashboard() {
     }
   };
 
-  // משימות להיום
+  // משימות להיום - פילטר אחיד עם דשבורד
   const todayTasks = useMemo(() => {
     const today = new Date().toISOString().split('T')[0];
     return tasks
       .filter(t => {
-        // משימות להיום או ללא תאריך
-        const isToday = t.due_date === today || !t.due_date;
+        if (t.deleted_at) return false;
+        
         // סינון משימות שהושלמו
         if (!showCompleted && t.is_completed) return false;
-        return isToday;
+        
+        // משימות עם תאריך היום
+        if (t.due_date === today) return true;
+        if (t.start_date === today && !t.due_date) return true;
+        
+        // משימות באיחור (due_date בעבר) - רק אם לא הושלמו
+        if (!t.is_completed && t.due_date && t.due_date < today) return true;
+        
+        return false;
       })
       .sort((a, b) => {
         // משימות שהושלמו בסוף
         if (a.is_completed !== b.is_completed) {
           return a.is_completed ? 1 : -1;
         }
+        
+        // משימות באיחור קודם
+        const aOverdue = a.due_date && a.due_date < today;
+        const bOverdue = b.due_date && b.due_date < today;
+        if (aOverdue && !bOverdue) return -1;
+        if (!aOverdue && bOverdue) return 1;
+        
         // לפי שעה
         if (a.due_time && b.due_time) {
           return a.due_time.localeCompare(b.due_time);
         }
         if (a.due_time) return -1;
         if (b.due_time) return 1;
+        
         // לפי עדיפות
-        const priorityOrder = { urgent: 0, high: 1, normal: 2 };
-        return (priorityOrder[a.priority] || 2) - (priorityOrder[b.priority] || 2);
+        const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
+        return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
       });
   }, [tasks, showCompleted]);
 

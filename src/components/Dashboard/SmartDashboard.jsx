@@ -189,13 +189,36 @@ function SmartDashboard() {
     weekStart.setDate(weekStart.getDate() - weekStart.getDay());
     const weekStartISO = weekStart.toISOString().split('T')[0];
 
-    // משימות להיום
+    // משימות להיום - פילטר אחיד
     const todayTasks = tasks.filter(t => {
       if (t.is_completed) return false;
+      if (t.deleted_at) return false;
+      
+      // משימות עם תאריך היום
       if (t.due_date === todayISO) return true;
-      if (t.start_date === todayISO) return true;
-      if (!t.due_date && !t.start_date) return true;
+      if (t.start_date === todayISO && !t.due_date) return true;
+      
+      // משימות באיחור (due_date בעבר)
+      if (t.due_date && t.due_date < todayISO) return true;
+      
       return false;
+    }).sort((a, b) => {
+      // משימות באיחור קודם
+      const aOverdue = a.due_date && a.due_date < todayISO;
+      const bOverdue = b.due_date && b.due_date < todayISO;
+      if (aOverdue && !bOverdue) return -1;
+      if (!aOverdue && bOverdue) return 1;
+      
+      // לפי שעה
+      if (a.due_time && b.due_time) {
+        return a.due_time.localeCompare(b.due_time);
+      }
+      if (a.due_time) return -1;
+      if (b.due_time) return 1;
+      
+      // לפי עדיפות
+      const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
+      return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
     });
 
     // משימות שהושלמו היום
