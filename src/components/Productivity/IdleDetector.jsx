@@ -81,19 +81,61 @@ function IdleDetector() {
       t.due_date === today
     );
     
-    // מיון: דחופות ראשון, אח"כ לפי שעה
-    return todayTasks.sort((a, b) => {
-      // דחוף קודם
-      if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
-      if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
-      
-      // לפי שעה
-      if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
-      if (a.due_time) return -1;
-      if (b.due_time) return 1;
-      
-      return 0;
-    })[0] || null;
+    // משימות באיחור (מימים קודמים)
+    const overdueTasks = tasks.filter(t => 
+      !t.is_completed && 
+      !t.deleted_at &&
+      t.due_date && 
+      t.due_date < today
+    );
+    
+    // משימות שהשעה שלהן כבר עברה היום
+    const lateToday = todayTasks.filter(t => {
+      if (!t.due_time) return false;
+      const [h, m] = t.due_time.split(':').map(Number);
+      const taskMinutes = h * 60 + (m || 0);
+      return taskMinutes < currentMinutes; // השעה כבר עברה
+    });
+    
+    // משימות שעדיין לא הגיע הזמן שלהן
+    const upcomingToday = todayTasks.filter(t => {
+      if (!t.due_time) return true; // משימות בלי שעה
+      const [h, m] = t.due_time.split(':').map(Number);
+      const taskMinutes = h * 60 + (m || 0);
+      return taskMinutes >= currentMinutes;
+    });
+    
+    // פונקציית מיון
+    const sortTasks = (taskList) => {
+      return taskList.sort((a, b) => {
+        // דחוף קודם
+        if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+        if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+        
+        // לפי שעה
+        if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
+        if (a.due_time) return -1;
+        if (b.due_time) return 1;
+        
+        // לפי תאריך (הישן יותר קודם)
+        if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+        
+        return 0;
+      });
+    };
+    
+    // סדר עדיפויות:
+    // 1. משימות באיחור מימים קודמים
+    // 2. משימות שהשעה שלהן עברה היום
+    // 3. משימות דחופות
+    // 4. משימות רגילות לפי שעה
+    
+    const sortedOverdue = sortTasks([...overdueTasks]);
+    const sortedLateToday = sortTasks([...lateToday]);
+    const sortedUpcoming = sortTasks([...upcomingToday]);
+    
+    // מחזיר את המשימה הראשונה לפי העדיפות
+    return sortedOverdue[0] || sortedLateToday[0] || sortedUpcoming[0] || null;
   }, [tasks]);
   const [pausedTaskName, setPausedTaskName] = useState('');
   const [isWorkHours, setIsWorkHours] = useState(true);

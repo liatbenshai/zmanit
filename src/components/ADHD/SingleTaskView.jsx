@@ -34,31 +34,73 @@ function formatDuration(minutes) {
 
 /**
  * מציאת המשימה הבאה לפי עדיפות
+ * סדר עדיפויות: באיחור מימים קודמים > באיחור היום > דחוף > לפי שעה
  */
 function getNextTask(tasks, today) {
+  const now = new Date();
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  
+  // משימות של היום שלא הושלמו
   const todayTasks = tasks.filter(t => {
     if (t.is_completed) return false;
     const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
     return taskDate === today;
   });
+  
+  // משימות באיחור (מימים קודמים)
+  const overdueTasks = tasks.filter(t => {
+    if (t.is_completed) return false;
+    const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+    return taskDate && taskDate < today;
+  });
+  
+  // משימות שהשעה שלהן כבר עברה היום
+  const lateToday = todayTasks.filter(t => {
+    if (!t.due_time) return false;
+    const [h, m] = t.due_time.split(':').map(Number);
+    const taskMinutes = h * 60 + (m || 0);
+    return taskMinutes < currentMinutes;
+  });
+  
+  // משימות שעדיין לא הגיע הזמן שלהן
+  const upcomingToday = todayTasks.filter(t => {
+    if (!t.due_time) return true;
+    const [h, m] = t.due_time.split(':').map(Number);
+    const taskMinutes = h * 60 + (m || 0);
+    return taskMinutes >= currentMinutes;
+  });
 
-  if (todayTasks.length === 0) return null;
+  // פונקציית מיון
+  const sortTasks = (taskList) => {
+    return taskList.sort((a, b) => {
+      // דחוף/urgent קודם
+      if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+      if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+      
+      // לפי רבע אייזנהאואר
+      if ((a.quadrant || 4) !== (b.quadrant || 4)) {
+        return (a.quadrant || 4) - (b.quadrant || 4);
+      }
+      
+      // משימות עם שעה קבועה
+      if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
+      if (a.due_time && !b.due_time) return -1;
+      if (!a.due_time && b.due_time) return 1;
+      
+      // לפי תאריך (הישן קודם)
+      if (a.due_date && b.due_date) return a.due_date.localeCompare(b.due_date);
+      
+      // קצר קודם
+      return (a.estimated_duration || 30) - (b.estimated_duration || 30);
+    });
+  };
 
-  // מיון לפי: 1) שעה קבועה 2) רבע אייזנהאואר 3) משך זמן (קצר קודם)
-  return todayTasks.sort((a, b) => {
-    // משימות עם שעה קבועה קודמות
-    if (a.due_time && !b.due_time) return -1;
-    if (!a.due_time && b.due_time) return 1;
-    if (a.due_time && b.due_time) {
-      return a.due_time.localeCompare(b.due_time);
-    }
-    // לפי רבע אייזנהאואר
-    if ((a.quadrant || 4) !== (b.quadrant || 4)) {
-      return (a.quadrant || 4) - (b.quadrant || 4);
-    }
-    // קצר קודם (קל יותר להתחיל)
-    return (a.estimated_duration || 30) - (b.estimated_duration || 30);
-  })[0];
+  // מחזיר לפי סדר עדיפויות
+  const sortedOverdue = sortTasks([...overdueTasks]);
+  const sortedLateToday = sortTasks([...lateToday]);
+  const sortedUpcoming = sortTasks([...upcomingToday]);
+  
+  return sortedOverdue[0] || sortedLateToday[0] || sortedUpcoming[0] || null;
 }
 
 /**
