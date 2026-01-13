@@ -172,6 +172,9 @@ export default function FullScreenFocus({
     if (onPause && minutesWorked > 0) {
       await onPause(minutesWorked);
       console.log('💾 FullScreenFocus handlePause - נשמרו:', minutesWorked, 'דקות');
+      // 🆕 איפוס אחרי שמירה כדי לא לספור פעמיים
+      elapsedRef.current = 0;
+      setElapsedSeconds(0);
     }
     
     toast('⏸️ מושהה');

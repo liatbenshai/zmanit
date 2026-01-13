@@ -35,8 +35,19 @@ function formatMinutes(minutes) {
 /**
  * MiniTimer Component
  */
-export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
-  const { editTask, updateTaskTime, addTask } = useTasks();
+export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask }) {
+  const { editTask, updateTaskTime, addTask, tasks } = useTasks();
+  
+  // 🆕 משימה מקומית שמתעדכנת
+  const [localTask, setLocalTask] = useState(taskProp);
+  
+  // עדכון כשה-prop משתנה
+  useEffect(() => {
+    setLocalTask(taskProp);
+  }, [taskProp?.id, taskProp?.time_spent]);
+  
+  // שימוש ב-task מקומי
+  const task = localTask;
   
   // State
   const [isRunning, setIsRunning] = useState(false);
@@ -198,6 +209,8 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
       
       try {
         await editTask(task.id, { time_spent: newTimeSpent });
+        // 🆕 עדכון state מקומי
+        setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
         toast.success(`⏸️ ${minutesToAdd} דקות נשמרו`, { duration: 2000 });
         setElapsedSeconds(elapsedSecondsRef.current % 60); // שמירת השאריות
       } catch (e) {
@@ -244,6 +257,8 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
       
       try {
         await editTask(task.id, { time_spent: newTimeSpent });
+        // 🆕 עדכון state מקומי
+        setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
         toast.success(`⏹️ ${minutesToAdd} דקות נשמרו`, { duration: 2000 });
       } catch (e) {
         // ignore
@@ -497,6 +512,8 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
           if (minutes > 0 && task) {
             const newTimeSpent = (task.time_spent || 0) + minutes;
             await editTask(task.id, { time_spent: newTimeSpent });
+            // 🆕 עדכון state מקומי
+            setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
             console.log('💾 FullScreenFocus onPause - נשמרו:', minutes, 'דקות');
           }
         }}
@@ -504,6 +521,8 @@ export default function MiniTimer({ task, onComplete, onNavigateToTask }) {
           if (minutes > 0 && task) {
             const newTimeSpent = (task.time_spent || 0) + minutes;
             await editTask(task.id, { time_spent: newTimeSpent });
+            // 🆕 עדכון state מקומי
+            setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
             console.log('💾 FullScreenFocus onTimeUpdate - נשמרו:', minutes, 'דקות');
           }
         }}
