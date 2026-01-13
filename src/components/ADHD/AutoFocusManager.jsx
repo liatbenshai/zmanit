@@ -504,12 +504,16 @@ function AutoFocusManager() {
           if (minutes > 0 && activeTask) {
             const newTimeSpent = (activeTask.time_spent || 0) + minutes;
             await editTask(activeTask.id, { time_spent: newTimeSpent });
+            // ✅ עדכון activeTask מקומית
+            setActiveTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
           }
         }}
         onTimeUpdate={async (minutes) => {
           if (minutes > 0 && activeTask) {
             const newTimeSpent = (activeTask.time_spent || 0) + minutes;
             await editTask(activeTask.id, { time_spent: newTimeSpent });
+            // ✅ עדכון activeTask מקומית
+            setActiveTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
           }
         }}
         onAddTask={addTask}

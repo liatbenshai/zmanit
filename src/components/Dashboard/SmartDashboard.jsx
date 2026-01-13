@@ -241,6 +241,11 @@ function SmartDashboard() {
     try {
       const newTimeSpent = (focusTask.time_spent || 0) + minutes;
       await editTask(focusTask.id, { time_spent: newTimeSpent });
+      
+      // ✅ עדכון focusTask מקומית כדי שהזמן יישמר
+      setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
+      
+      console.log('💾 SmartDashboard - זמן עודכן:', newTimeSpent, 'דקות');
     } catch (err) {
       console.error('שגיאה בעדכון זמן:', err);
     }
