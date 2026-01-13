@@ -54,6 +54,7 @@ function IdleDetector() {
   const { tasks } = useTasks();
   
   const [showAlert, setShowAlert] = useState(false);
+  const [alertDismissedAt, setAlertDismissedAt] = useState(null); // 🆕 מתי נסגרה ההתראה
   const [alertType, setAlertType] = useState('idle'); // 'idle' or 'paused'
   const [idleMinutes, setIdleMinutes] = useState(0);
   const [lastActivity, setLastActivity] = useState(new Date());
@@ -149,6 +150,14 @@ function IdleDetector() {
         return;
       }
 
+      // 🆕 בדיקת cooldown - לא להציג התראה חדשה תוך 60 שניות מסגירה
+      if (alertDismissedAt) {
+        const secondsSinceDismiss = Math.floor((new Date() - alertDismissedAt) / 1000);
+        if (secondsSinceDismiss < 60) {
+          return; // עדיין ב-cooldown
+        }
+      }
+
       const { hasRunningTimer, hasPausedTimer, pausedTask, pausedSince } = checkTimerStatus();
       
       if (hasRunningTimer) {
@@ -187,7 +196,7 @@ function IdleDetector() {
     const interval = setInterval(checkIdleStatus, CHECK_INTERVAL_SECONDS * 1000);
 
     return () => clearInterval(interval);
-  }, [user, lastActivity, showAlert, checkTimerStatus, checkWorkHours, getRandomMessage]);
+  }, [user, lastActivity, showAlert, alertDismissedAt, checkTimerStatus, checkWorkHours, getRandomMessage]);
 
   // טיפול בתשובה
   const handleResponse = useCallback(async (reason) => {
@@ -218,6 +227,7 @@ function IdleDetector() {
 
     // איפוס
     setShowAlert(false);
+    setAlertDismissedAt(new Date()); // 🆕 שמירת זמן הסגירה
     setLastActivity(new Date());
     setIdleMinutes(0);
   }, [idleMinutes, alertType, user?.id]);
@@ -225,6 +235,7 @@ function IdleDetector() {
   // דחייה זמנית
   const handleSnooze = useCallback(() => {
     setShowAlert(false);
+    setAlertDismissedAt(new Date()); // 🆕 שמירת זמן הסגירה
     setLastActivity(new Date(Date.now() - (IDLE_THRESHOLD_MINUTES - 5) * 60000));
     toast('⏰ אזכיר שוב בעוד 5 דקות', { duration: 2000 });
   }, []);
