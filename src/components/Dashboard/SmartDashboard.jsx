@@ -59,6 +59,38 @@ function SmartDashboard() {
   // ציטוט יומי
   const [dailyQuote, setDailyQuote] = useState(null);
   
+  // סיכום הפרעות היום
+  const [todayInterruptions, setTodayInterruptions] = useState([]);
+  
+  // טעינת הפרעות היום
+  useEffect(() => {
+    const loadTodayInterruptions = async () => {
+      if (!user) return;
+      try {
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        
+        const { data, error } = await supabase
+          .from('interruptions')
+          .select('*')
+          .eq('user_id', user.id)
+          .gte('started_at', todayStart.toISOString())
+          .order('started_at', { ascending: false });
+        
+        if (!error && data) {
+          setTodayInterruptions(data);
+        }
+      } catch (err) {
+        console.error('שגיאה בטעינת הפרעות:', err);
+      }
+    };
+    
+    loadTodayInterruptions();
+    // רענון כל דקה
+    const interval = setInterval(loadTodayInterruptions, 60000);
+    return () => clearInterval(interval);
+  }, [user]);
+  
   // טעינת ציטוט יומי
   useEffect(() => {
     const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
@@ -519,6 +551,53 @@ function SmartDashboard() {
           ))}
         </div>
       </motion.div>
+
+      {/* === סיכום הפרעות היום === */}
+      {todayInterruptions.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="mb-6"
+        >
+          <button
+            onClick={() => setShowInterruptions(true)}
+            className="w-full p-4 bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800 rounded-xl hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-all"
+          >
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">⏸️</span>
+                <div className="text-right">
+                  <div className="font-medium text-orange-800 dark:text-orange-200">
+                    {todayInterruptions.length} הפרעות היום
+                  </div>
+                  <div className="text-sm text-orange-600 dark:text-orange-400">
+                    {(() => {
+                      const types = {};
+                      todayInterruptions.forEach(i => {
+                        types[i.type] = (types[i.type] || 0) + 1;
+                      });
+                      const topType = Object.entries(types).sort((a, b) => b[1] - a[1])[0];
+                      const typeNames = {
+                        phone: 'טלפון',
+                        distraction: 'הסחת דעת',
+                        meeting: 'פגישה',
+                        technical: 'טכני',
+                        colleague: 'עמית',
+                        client_call: 'לקוח',
+                        break: 'הפסקה',
+                        other: 'אחר'
+                      };
+                      return topType ? `רוב ההפרעות: ${typeNames[topType[0]] || topType[0]}` : '';
+                    })()}
+                  </div>
+                </div>
+              </div>
+              <span className="text-orange-400">←</span>
+            </div>
+          </button>
+        </motion.div>
+      )}
 
       {/* === כפתורי פעולה נוספים === */}
       <motion.div
