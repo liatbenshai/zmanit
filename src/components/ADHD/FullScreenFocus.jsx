@@ -388,7 +388,7 @@ export default function FullScreenFocus({
                 dir="rtl"
               >
                 <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-4">
-                  ⏸️ תיעוד הפרעה
+                  ⏸️ הפרעה
                 </h3>
                 
                 {/* בחירת סוג הפרעה */}
@@ -418,7 +418,39 @@ export default function FullScreenFocus({
                   className="w-full p-3 border border-gray-300 dark:border-gray-600 rounded-xl mb-4 bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
                 />
                 
-                <div className="flex gap-3">
+                <div className="space-y-3">
+                  {/* כפתור ראשי - עצור ושמור */}
+                  <button
+                    onClick={async () => {
+                      // 1. שמירת הזמן
+                      const minutesWorked = Math.floor(elapsedRef.current / 60);
+                      if (onPause && minutesWorked > 0) {
+                        await onPause(minutesWorked);
+                      }
+                      
+                      // 2. תיעוד ההפרעה
+                      if (onLogInterruption) {
+                        await onLogInterruption({
+                          type: interruptionType,
+                          description: interruptionNote.trim() || INTERRUPTION_TYPES[interruptionType].name,
+                          task_id: task?.id,
+                          duration: 0
+                        });
+                      }
+                      
+                      // 3. ניקוי
+                      localStorage.removeItem('zmanit_active_timer');
+                      toast.success(`💾 נשמרו ${minutesWorked} דקות. הפרעה תועדה.`);
+                      setInterruptionNote('');
+                      setShowLogInterruptionModal(false);
+                      onClose?.(); // סגירת מסך המיקוד
+                    }}
+                    className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors"
+                  >
+                    ⏹️ עצור ושמור ({Math.floor(elapsedRef.current / 60)} דקות)
+                  </button>
+                  
+                  {/* כפתור משני - רק תעד וחזור */}
                   <button
                     onClick={async () => {
                       if (onLogInterruption) {
@@ -426,16 +458,16 @@ export default function FullScreenFocus({
                           type: interruptionType,
                           description: interruptionNote.trim() || INTERRUPTION_TYPES[interruptionType].name,
                           task_id: task?.id,
-                          duration: 0 // יעודכן בסיום
+                          duration: 0
                         });
                       }
                       toast.success('הפרעה תועדה ✓');
                       setInterruptionNote('');
                       setShowLogInterruptionModal(false);
                     }}
-                    className="flex-1 py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors"
+                    className="w-full py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl transition-colors"
                   >
-                    {INTERRUPTION_TYPES[interruptionType].icon} תעד וחזור לעבודה
+                    📝 רק תעד (המשך לעבוד)
                   </button>
                   
                   <button
@@ -443,7 +475,7 @@ export default function FullScreenFocus({
                       setShowLogInterruptionModal(false);
                       setInterruptionNote('');
                     }}
-                    className="px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl transition-colors"
+                    className="w-full py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 transition-colors"
                   >
                     ביטול
                   </button>
@@ -484,10 +516,18 @@ export default function FullScreenFocus({
                   autoFocus
                 />
                 
-                <div className="flex gap-3">
+                <div className="space-y-3">
+                  {/* כפתור ראשי - עצור ועבור לבלת"מ */}
                   <button
                     onClick={async () => {
                       if (interruptionTitle.trim() && onAddTask) {
+                        // 1. שמירת הזמן של המשימה הנוכחית
+                        const minutesWorked = Math.floor(elapsedRef.current / 60);
+                        if (onPause && minutesWorked > 0) {
+                          await onPause(minutesWorked);
+                        }
+                        
+                        // 2. הוספת הבלת"מ
                         const today = new Date().toISOString().split('T')[0];
                         await onAddTask({
                           title: `🚨 ${interruptionTitle.trim()}`,
@@ -496,14 +536,40 @@ export default function FullScreenFocus({
                           priority: 'urgent',
                           estimated_duration: 15
                         });
-                        toast.success('בלת"ם נוסף!');
+                        
+                        // 3. ניקוי וסגירה
+                        localStorage.removeItem('zmanit_active_timer');
+                        toast.success(`💾 נשמרו ${minutesWorked} דקות. בלת"ם נוסף!`);
+                        setInterruptionTitle('');
+                        setShowInterruptionModal(false);
+                        onClose?.(); // סגירת מסך המיקוד
+                      }
+                    }}
+                    className="w-full py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-colors"
+                  >
+                    🔄 עצור ועבור לבלת"ם
+                  </button>
+                  
+                  {/* כפתור משני - רק הוסף וחזור */}
+                  <button
+                    onClick={async () => {
+                      if (interruptionTitle.trim() && onAddTask) {
+                        const today = new Date().toISOString().split('T')[0];
+                        await onAddTask({
+                          title: `🚨 ${interruptionTitle.trim()}`,
+                          quadrant: 1,
+                          due_date: today,
+                          priority: 'urgent',
+                          estimated_duration: 15
+                        });
+                        toast.success('בלת"ם נוסף - ממשיכים!');
                         setInterruptionTitle('');
                         setShowInterruptionModal(false);
                       }
                     }}
-                    className="flex-1 py-3 bg-red-500 hover:bg-red-600 text-white font-bold rounded-xl transition-colors"
+                    className="w-full py-3 bg-gray-600 hover:bg-gray-700 text-white rounded-xl transition-colors"
                   >
-                    הוסף וחזור לעבודה
+                    📝 רק הוסף לרשימה (המשך לעבוד)
                   </button>
                   
                   <button
@@ -511,7 +577,7 @@ export default function FullScreenFocus({
                       setShowInterruptionModal(false);
                       setInterruptionTitle('');
                     }}
-                    className="px-4 py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl transition-colors"
+                    className="w-full py-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 transition-colors"
                   >
                     ביטול
                   </button>
