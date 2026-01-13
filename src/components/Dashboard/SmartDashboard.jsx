@@ -323,8 +323,10 @@ function SmartDashboard() {
   }, []);
 
   const handleStart = useCallback((task) => {
+    console.log('🚀 handleStart called with task:', task);
     setFocusTask(task);
     setShowFocus(true);
+    console.log('🎯 showFocus set to true');
   }, []);
 
   const handleDefer = useCallback(async (task) => {
