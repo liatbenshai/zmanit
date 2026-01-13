@@ -160,6 +160,14 @@ export default function FullScreenFocus({
     setIsPaused(true);
     localStorage.removeItem('zmanit_active_timer');
     
+    // שמירת מצב השהייה ל-IdleDetector
+    localStorage.setItem('zmanit_focus_paused', JSON.stringify({
+      isPaused: true,
+      pausedAt: new Date().toISOString(),
+      taskId: task.id,
+      taskTitle: task.title
+    }));
+    
     const minutesWorked = Math.floor(elapsedRef.current / 60);
     if (onPause && minutesWorked > 0) {
       await onPause(minutesWorked);
@@ -174,12 +182,14 @@ export default function FullScreenFocus({
     setIsRunning(true);
     setIsPaused(false);
     localStorage.setItem('zmanit_active_timer', task.id);
+    localStorage.removeItem('zmanit_focus_paused'); // מחיקת מצב השהייה
     toast.success('▶️ ממשיכים!');
   };
 
   // סיום
   const handleComplete = async () => {
     localStorage.removeItem('zmanit_active_timer');
+    localStorage.removeItem('zmanit_focus_paused'); // ניקוי מצב השהייה
     const minutesWorked = Math.floor(elapsedRef.current / 60);
     
     // 🔧 תיקון: await לשמירת הזמן לפני סימון כהושלם
