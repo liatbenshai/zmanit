@@ -145,31 +145,53 @@ function SmartDashboard() {
 
   // סטטיסטיקות שבוע
   const weekStats = useMemo(() => {
-    if (!tasks) return { days: [], streak: 0 };
+    if (!tasks) return { days: [], streak: 0, totalCompleted: 0, totalTasks: 0, totalMinutes: 0, mostProductiveDay: null };
     
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
     
     const days = [];
+    let totalCompleted = 0;
+    let totalTasks = 0;
+    let totalMinutes = 0;
+    let maxCompleted = 0;
+    let mostProductiveDay = null;
+    
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
       const dateISO = date.toISOString().split('T')[0];
       
       const dayTasks = tasks.filter(t => t.due_date === dateISO && !t.deleted_at);
+      const completed = dayTasks.filter(t => t.is_completed).length;
+      const minutes = dayTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0);
+      
+      totalCompleted += completed;
+      totalTasks += dayTasks.length;
+      totalMinutes += minutes;
+      
+      if (completed > maxCompleted) {
+        maxCompleted = completed;
+        mostProductiveDay = HEBREW_DAY_NAMES[date.getDay()];
+      }
+      
       days.push({
         day: HEBREW_DAYS[date.getDay()],
+        dayName: HEBREW_DAY_NAMES[date.getDay()],
         date: dateISO,
-        completed: dayTasks.filter(t => t.is_completed).length,
+        dateNum: date.getDate(),
+        completed,
         total: dayTasks.length,
-        isToday: dateISO === todayISO
+        minutes,
+        isToday: dateISO === todayISO,
+        isPast: dateISO < todayISO
       });
     }
     
     // חישוב streak
     let streak = 0;
     const checkDate = new Date(today);
-    while (true) {
+    while (streak < 100) {
       const dateISO = checkDate.toISOString().split('T')[0];
       const dayTasks = tasks.filter(t => t.due_date === dateISO && !t.deleted_at);
       const dayCompleted = dayTasks.filter(t => t.is_completed).length;
@@ -178,16 +200,13 @@ function SmartDashboard() {
         streak++;
         checkDate.setDate(checkDate.getDate() - 1);
       } else if (dateISO === todayISO && dayTasks.length > 0) {
-        // היום עדיין בתהליך
         checkDate.setDate(checkDate.getDate() - 1);
       } else {
         break;
       }
-      
-      if (streak > 100) break; // מניעת לולאה אינסופית
     }
     
-    return { days, streak };
+    return { days, streak, totalCompleted, totalTasks, totalMinutes, mostProductiveDay };
   }, [tasks, today, todayISO]);
 
   // ========================================
@@ -523,6 +542,7 @@ function SmartDashboard() {
                   key={task.id}
                   task={task}
                   onEdit={handleEditTask}
+                  onUpdate={loadTasks}
                   onStartFocus={handleStartFocus}
                 />
               ))}
@@ -556,6 +576,7 @@ function SmartDashboard() {
                   key={task.id}
                   task={task}
                   onEdit={handleEditTask}
+                  onUpdate={loadTasks}
                   onStartFocus={handleStartFocus}
                 />
               ))}
@@ -571,6 +592,7 @@ function SmartDashboard() {
                       key={task.id}
                       task={task}
                       onEdit={handleEditTask}
+                      onUpdate={loadTasks}
                     />
                   ))}
                   {todayCompleted.length > 3 && (
@@ -590,39 +612,107 @@ function SmartDashboard() {
             <h3 className="font-bold text-gray-800 dark:text-white">📊 סקירת השבוע</h3>
             <Link to="/weekly" className="text-indigo-500 text-sm hover:underline">לתכנון שבועי →</Link>
           </div>
+          
+          {/* סיכום שבועי */}
+          <div className="grid grid-cols-3 gap-3 mb-4">
+            <div className="bg-indigo-50 dark:bg-indigo-900/30 rounded-xl p-3 text-center">
+              <div className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">
+                {weekStats.totalCompleted}/{weekStats.totalTasks}
+              </div>
+              <div className="text-xs text-indigo-700 dark:text-indigo-300">משימות השבוע</div>
+            </div>
+            <div className="bg-purple-50 dark:bg-purple-900/30 rounded-xl p-3 text-center">
+              <div className="text-2xl font-bold text-purple-600 dark:text-purple-400">
+                {formatMinutes(weekStats.totalMinutes)}
+              </div>
+              <div className="text-xs text-purple-700 dark:text-purple-300">שעות עבודה</div>
+            </div>
+            <div className="bg-amber-50 dark:bg-amber-900/30 rounded-xl p-3 text-center">
+              <div className="text-2xl font-bold text-amber-600 dark:text-amber-400">
+                {weekStats.mostProductiveDay || '-'}
+              </div>
+              <div className="text-xs text-amber-700 dark:text-amber-300">יום הכי פרודוקטיבי</div>
+            </div>
+          </div>
+          
+          {/* ימי השבוע */}
           <div className="grid grid-cols-7 gap-2">
             {weekStats.days.map((day, i) => {
               const allDone = day.total > 0 && day.completed === day.total;
               const hasIncomplete = day.total > 0 && day.completed < day.total;
-              const isPast = day.date < todayISO;
+              const progress = day.total > 0 ? (day.completed / day.total) * 100 : 0;
               
               return (
                 <div 
                   key={i}
-                  className={`text-center p-3 rounded-xl transition-all ${
+                  className={`text-center p-2 rounded-xl transition-all ${
                     day.isToday 
-                      ? 'bg-indigo-600 text-white shadow-md' 
+                      ? 'bg-indigo-600 text-white shadow-md ring-2 ring-indigo-300' 
                       : allDone
                         ? 'bg-emerald-100 dark:bg-emerald-900/30'
-                        : isPast && hasIncomplete
+                        : day.isPast && hasIncomplete
                           ? 'bg-red-50 dark:bg-red-900/20'
                           : 'bg-gray-50 dark:bg-gray-700'
                   }`}
                 >
-                  <div className={`text-sm font-medium ${day.isToday ? 'text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                  <div className={`text-xs font-medium ${day.isToday ? 'text-white' : 'text-gray-500 dark:text-gray-400'}`}>
                     {day.day}
                   </div>
-                  <div className={`text-lg font-bold mt-1 ${
-                    day.isToday ? 'text-white' : 
-                    allDone ? 'text-emerald-600 dark:text-emerald-400' :
-                    'text-gray-800 dark:text-gray-200'
-                  }`}>
-                    {day.total === 0 ? '-' : allDone ? '✓' : `${day.completed}/${day.total}`}
+                  <div className={`text-xs ${day.isToday ? 'text-indigo-200' : 'text-gray-400'}`}>
+                    {day.dateNum}
                   </div>
+                  
+                  {/* מעגל התקדמות */}
+                  <div className="relative w-10 h-10 mx-auto mt-1">
+                    <svg className="w-10 h-10 transform -rotate-90">
+                      <circle
+                        cx="20" cy="20" r="16"
+                        className={`fill-none stroke-current ${day.isToday ? 'text-indigo-400' : 'text-gray-200 dark:text-gray-600'}`}
+                        strokeWidth="3"
+                      />
+                      {day.total > 0 && (
+                        <circle
+                          cx="20" cy="20" r="16"
+                          className={`fill-none stroke-current ${
+                            day.isToday ? 'text-white' : 
+                            allDone ? 'text-emerald-500' : 
+                            day.isPast ? 'text-red-400' : 'text-indigo-500'
+                          }`}
+                          strokeWidth="3"
+                          strokeDasharray={`${progress} 100`}
+                          strokeLinecap="round"
+                        />
+                      )}
+                    </svg>
+                    <div className={`absolute inset-0 flex items-center justify-center text-xs font-bold ${
+                      day.isToday ? 'text-white' : 
+                      allDone ? 'text-emerald-600' : 
+                      day.total === 0 ? 'text-gray-300' : 'text-gray-700 dark:text-gray-300'
+                    }`}>
+                      {day.total === 0 ? '-' : allDone ? '✓' : day.completed}
+                    </div>
+                  </div>
+                  
+                  {/* שעות עבודה */}
+                  {day.minutes > 0 && (
+                    <div className={`text-[10px] mt-1 ${day.isToday ? 'text-indigo-200' : 'text-gray-400'}`}>
+                      {formatMinutes(day.minutes)}
+                    </div>
+                  )}
                 </div>
               );
             })}
           </div>
+          
+          {/* תובנה מהירה */}
+          {weekStats.totalTasks > 0 && (
+            <div className="mt-4 p-3 bg-gray-50 dark:bg-gray-700 rounded-xl text-sm text-gray-600 dark:text-gray-300">
+              💡 השבוע השלמת <span className="font-bold text-indigo-600">{Math.round((weekStats.totalCompleted / weekStats.totalTasks) * 100)}%</span> מהמשימות
+              {weekStats.mostProductiveDay && (
+                <span> • היום הכי טוב שלך: <span className="font-bold">{weekStats.mostProductiveDay}</span></span>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ===== Quick Note ===== */}
