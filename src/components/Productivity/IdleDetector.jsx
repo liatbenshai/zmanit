@@ -1,7 +1,9 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
+import FullScreenFocus from '../ADHD/FullScreenFocus';
 import toast from 'react-hot-toast';
 
 /**
@@ -51,13 +53,48 @@ const IDLE_REASONS = [
 
 function IdleDetector() {
   const { user } = useAuth();
-  const { tasks } = useTasks();
+  const { tasks, editTask, toggleComplete, addTask } = useTasks();
+  const navigate = useNavigate();
   
   const [showAlert, setShowAlert] = useState(false);
   const [alertDismissedAt, setAlertDismissedAt] = useState(null); // 🆕 מתי נסגרה ההתראה
   const [alertType, setAlertType] = useState('idle'); // 'idle' or 'paused'
   const [idleMinutes, setIdleMinutes] = useState(0);
   const [lastActivity, setLastActivity] = useState(new Date());
+  
+  // 🆕 State לפוקוס
+  const [showFocus, setShowFocus] = useState(false);
+  const [focusTask, setFocusTask] = useState(null);
+  
+  // 🆕 מציאת המשימה הבאה לעבודה
+  const nextTask = useMemo(() => {
+    if (!tasks || tasks.length === 0) return null;
+    
+    const today = new Date().toISOString().split('T')[0];
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    // משימות של היום שלא הושלמו
+    const todayTasks = tasks.filter(t => 
+      !t.is_completed && 
+      !t.deleted_at &&
+      t.due_date === today
+    );
+    
+    // מיון: דחופות ראשון, אח"כ לפי שעה
+    return todayTasks.sort((a, b) => {
+      // דחוף קודם
+      if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
+      if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
+      
+      // לפי שעה
+      if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
+      if (a.due_time) return -1;
+      if (b.due_time) return 1;
+      
+      return 0;
+    })[0] || null;
+  }, [tasks]);
   const [pausedTaskName, setPausedTaskName] = useState('');
   const [isWorkHours, setIsWorkHours] = useState(true);
   const [currentMessage, setCurrentMessage] = useState('');
@@ -219,18 +256,75 @@ function IdleDetector() {
       console.error('Error saving idle log:', e);
     }
 
-    // הודעת עידוד
+    // סגירת ההתראה
+    setShowAlert(false);
+    setAlertDismissedAt(new Date());
+    setLastActivity(new Date());
+    setIdleMinutes(0);
+
+    // 🆕 פתיחת משימה אם לחצו "חוזרת לעבודה"
+    if (reason.id === 'back_to_work') {
+      // בדיקה אם יש משימה מושהית
+      const pausedData = localStorage.getItem('zmanit_focus_paused');
+      if (pausedData) {
+        try {
+          const { taskId } = JSON.parse(pausedData);
+          const pausedTask = tasks?.find(t => t.id === taskId);
+          if (pausedTask && !pausedTask.is_completed) {
+            // פתיחת המשימה המושהית
+            setFocusTask(pausedTask);
+            setShowFocus(true);
+            toast.success('🔄 חוזרת למשימה שהפסקת!', { duration: 2000 });
+            return;
+          }
+        } catch (e) {}
+      }
+      
+      // אם אין משימה מושהית - פתיחת המשימה הבאה
+      if (nextTask) {
+        setFocusTask(nextTask);
+        setShowFocus(true);
+        toast.success(`🎯 מתחילה: ${nextTask.title}`, { duration: 2000 });
+        return;
+      }
+      
+      // אם אין משימות - ניווט לתצוגה יומית
+      toast('📋 אין משימות מתוכננות - בואי נתכנן!', { duration: 3000 });
+      navigate('/daily');
+      return;
+    }
+
+    // הודעת עידוד לשאר הסיבות
     const encouragement = MANAGER_MESSAGES.encouragement[
       Math.floor(Math.random() * MANAGER_MESSAGES.encouragement.length)
     ];
     toast(encouragement, { duration: 3000 });
-
-    // איפוס
-    setShowAlert(false);
-    setAlertDismissedAt(new Date()); // 🆕 שמירת זמן הסגירה
-    setLastActivity(new Date());
-    setIdleMinutes(0);
-  }, [idleMinutes, alertType, user?.id]);
+  }, [idleMinutes, alertType, user?.id, tasks, nextTask, navigate]);
+  
+  // 🆕 עדכון זמן עבודה
+  const handleFocusTimeUpdate = useCallback(async (minutes) => {
+    if (!focusTask) return;
+    try {
+      const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+      await editTask(focusTask.id, { time_spent: newTimeSpent });
+      setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
+    } catch (err) {
+      console.error('שגיאה בעדכון זמן:', err);
+    }
+  }, [focusTask, editTask]);
+  
+  // 🆕 סיום משימה
+  const handleFocusComplete = useCallback(async () => {
+    if (!focusTask) return;
+    try {
+      await toggleComplete(focusTask.id);
+      setShowFocus(false);
+      setFocusTask(null);
+      toast.success('✅ כל הכבוד!');
+    } catch (err) {
+      toast.error('שגיאה');
+    }
+  }, [focusTask, toggleComplete]);
 
   // דחייה זמנית
   const handleSnooze = useCallback(() => {
@@ -382,6 +476,20 @@ function IdleDetector() {
           </motion.div>
         </>
       )}
+      
+      {/* 🆕 מסך מיקוד */}
+      <FullScreenFocus
+        isOpen={showFocus}
+        task={focusTask}
+        onClose={() => {
+          setShowFocus(false);
+          setFocusTask(null);
+        }}
+        onComplete={handleFocusComplete}
+        onPause={handleFocusTimeUpdate}
+        onTimeUpdate={handleFocusTimeUpdate}
+        onAddTask={addTask}
+      />
     </AnimatePresence>
   );
 }
