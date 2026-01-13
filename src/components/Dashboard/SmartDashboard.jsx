@@ -1,13 +1,11 @@
 /**
- * SmartDashboard - דשבורד מסונכרן עם כל המערכת
- * ==============================================
- * משתמש בקומפוננטות הקיימות:
+ * SmartDashboard - דשבורד נקי ופונקציונלי
+ * =========================================
+ * מסונכרן עם כל המערכת דרך:
+ * - useTasks hook
  * - DailyTaskCard (אותו כרטיס כמו בתצוגה יומית)
- * - DailySummaryCard (סיכום יומי)
- * - WeeklySummaryCard (סיכום שבועי)
- * - WorkPaceInsights (תובנות קצב עבודה)
- * - SmartRecommendationsPanel (המלצות חכמות)
- * - LearningInsightsPanel (תובנות למידה)
+ * - SimpleTaskForm (אותו טופס)
+ * - FullScreenFocus (אותו מסך מיקוד)
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -15,15 +13,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
-
-// קומפוננטות קיימות מהמערכת
 import DailyTaskCard from '../DailyView/DailyTaskCard';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
-import DailySummaryCard from './DailySummaryCard';
-import WeeklySummaryCard from './WeeklySummaryCard';
-import WorkPaceInsights from './WorkPaceInsights';
-import SmartRecommendationsPanel from './SmartRecommendationsPanel';
-import LearningInsightsPanel from '../Learning/LearningInsightsPanel';
 import FullScreenFocus from '../ADHD/FullScreenFocus';
 import Modal from '../UI/Modal';
 import toast from 'react-hot-toast';
@@ -32,6 +23,29 @@ import { supabase } from '../../services/supabase';
 // ========================================
 // עזרים
 // ========================================
+
+const QUOTES = [
+  { text: "הדרך להתחיל היא להפסיק לדבר ולהתחיל לעשות.", author: "וולט דיסני" },
+  { text: "כל מה שאת יכולה לדמיין - את יכולה להשיג.", author: "נפוליאון היל" },
+  { text: "אל תמתיני להזדמנות. צרי אותה.", author: "ג'ורג' ברנרד שו" },
+  { text: "התחילי מאיפה שאת נמצאת. עשי מה שאת יכולה.", author: "ארתור אש" },
+  { text: "הדרך היחידה לעשות עבודה נהדרת היא לאהוב את מה שאת עושה.", author: "סטיב ג'ובס" },
+  { text: "זה לא משנה כמה לאט את הולכת, כל עוד את לא עוצרת.", author: "קונפוציוס" },
+  { text: "הכי קשה זה להתחיל. אחרי זה הכל זורם.", author: "אנונימי" },
+];
+
+function getDailyQuote() {
+  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / 86400000);
+  return QUOTES[dayOfYear % QUOTES.length];
+}
+
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'בוקר טוב';
+  if (hour < 17) return 'צהריים טובים';
+  if (hour < 21) return 'ערב טוב';
+  return 'לילה טוב';
+}
 
 function formatMinutes(minutes) {
   if (!minutes || minutes === 0) return '0 דק׳';
@@ -47,31 +61,8 @@ function formatTime(seconds) {
   return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
-function getGreeting() {
-  const hour = new Date().getHours();
-  if (hour < 12) return 'בוקר טוב';
-  if (hour < 17) return 'צהריים טובים';
-  if (hour < 21) return 'ערב טוב';
-  return 'לילה טוב';
-}
-
-const QUOTES = [
-  { text: "הדרך להתחיל היא להפסיק לדבר ולהתחיל לעשות.", author: "וולט דיסני" },
-  { text: "כל מה שאת יכולה לדמיין - את יכולה להשיג.", author: "נפוליאון היל" },
-  { text: "אל תמתיני להזדמנות. צרי אותה.", author: "ג'ורג' ברנרד שו" },
-  { text: "התחילי מאיפה שאת נמצאת. השתמשי במה שיש לך. עשי מה שאת יכולה.", author: "ארתור אש" },
-  { text: "הדרך היחידה לעשות עבודה נהדרת היא לאהוב את מה שאת עושה.", author: "סטיב ג'ובס" },
-  { text: "זה לא משנה כמה לאט את הולכת, כל עוד את לא עוצרת.", author: "קונפוציוס" },
-  { text: "הכי קשה זה להתחיל. אחרי זה הכל זורם.", author: "אנונימי" },
-];
-
-function getDailyQuote() {
-  const today = new Date();
-  const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
-  return QUOTES[dayOfYear % QUOTES.length];
-}
-
-const HEBREW_DAYS = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+const HEBREW_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+const HEBREW_DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
 
 // ========================================
 // קומפוננטה ראשית
@@ -88,12 +79,19 @@ function SmartDashboard() {
   const [focusTask, setFocusTask] = useState(null);
   const [activeTimer, setActiveTimer] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
-  const [showInsights, setShowInsights] = useState(false);
-  const [activeTab, setActiveTab] = useState('today'); // today, week, insights
+  const [quickNote, setQuickNote] = useState('');
+  const [notes, setNotes] = useState([]);
   
   const today = new Date();
   const todayISO = today.toISOString().split('T')[0];
-  const currentMinutes = today.getHours() * 60 + today.getMinutes();
+
+  // טעינת פתקים מ-localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('zmanit_quick_notes');
+    if (saved) {
+      try { setNotes(JSON.parse(saved)); } catch (e) {}
+    }
+  }, []);
 
   // ========================================
   // חישובים
@@ -107,90 +105,90 @@ function SmartDashboard() {
     ).sort((a, b) => a.due_date.localeCompare(b.due_date));
   }, [tasks, todayISO]);
 
-  // משימות היום (לא הושלמו)
-  const todayTasksRemaining = useMemo(() => {
+  // משימות היום
+  const todayAllTasks = useMemo(() => {
     if (!tasks) return [];
-    return tasks.filter(t => 
-      t.due_date === todayISO && !t.deleted_at && !t.is_completed
-    ).sort((a, b) => {
+    return tasks.filter(t => t.due_date === todayISO && !t.deleted_at);
+  }, [tasks, todayISO]);
+
+  const todayRemaining = useMemo(() => {
+    return todayAllTasks.filter(t => !t.is_completed).sort((a, b) => {
       if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
       if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
       if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
       if (a.due_time) return -1;
       return 0;
     });
-  }, [tasks, todayISO]);
+  }, [todayAllTasks]);
 
-  // משימות שהושלמו היום
-  const todayTasksCompleted = useMemo(() => {
-    if (!tasks) return [];
-    return tasks.filter(t => 
-      t.due_date === todayISO && !t.deleted_at && t.is_completed
-    );
-  }, [tasks, todayISO]);
+  const todayCompleted = useMemo(() => {
+    return todayAllTasks.filter(t => t.is_completed);
+  }, [todayAllTasks]);
 
-  // סטטיסטיקות היום
-  const dailyStats = useMemo(() => {
-    const allToday = [...todayTasksRemaining, ...todayTasksCompleted];
-    const completed = todayTasksCompleted.length;
-    const total = allToday.length;
-    const remaining = todayTasksRemaining.length;
-    const minutesLeft = todayTasksRemaining.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
-    const timeSpentToday = allToday.reduce((sum, t) => sum + (t.time_spent || 0), 0);
+  // המשימה הבאה
+  const nextTask = useMemo(() => {
+    if (overdueTasks.length > 0) return overdueTasks[0];
+    return todayRemaining[0] || null;
+  }, [overdueTasks, todayRemaining]);
+
+  // סטטיסטיקות
+  const stats = useMemo(() => {
+    const completed = todayCompleted.length;
+    const total = todayAllTasks.length;
+    const remaining = todayRemaining.length;
+    const minutesLeft = todayRemaining.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
+    const timeSpentToday = todayAllTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0);
+    const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
     
-    return {
-      total,
-      completed,
-      remaining,
-      minutesLeft,
-      timeSpentToday,
-      overdue: overdueTasks.length,
-      completionRate: total > 0 ? Math.round((completed / total) * 100) : 0
-    };
-  }, [todayTasksRemaining, todayTasksCompleted, overdueTasks]);
+    return { completed, total, remaining, minutesLeft, timeSpentToday, progress, overdue: overdueTasks.length };
+  }, [todayAllTasks, todayCompleted, todayRemaining, overdueTasks]);
 
   // סטטיסטיקות שבוע
-  const weeklyStats = useMemo(() => {
-    if (!tasks) return { totalTasks: 0, completedTasks: 0, totalMinutes: 0, startOfWeek: null, endOfWeek: null };
+  const weekStats = useMemo(() => {
+    if (!tasks) return { days: [], streak: 0 };
     
     const startOfWeek = new Date(today);
     startOfWeek.setDate(today.getDate() - today.getDay());
-    const endOfWeek = new Date(startOfWeek);
-    endOfWeek.setDate(startOfWeek.getDate() + 6);
     
-    const startISO = startOfWeek.toISOString().split('T')[0];
-    const endISO = endOfWeek.toISOString().split('T')[0];
-    
-    const weekTasks = tasks.filter(t => 
-      !t.deleted_at && t.due_date >= startISO && t.due_date <= endISO
-    );
-    
-    const completedTasks = weekTasks.filter(t => t.is_completed).length;
-    const totalMinutes = weekTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0);
-    
-    // חישוב לפי יום
-    const byDay = {};
+    const days = [];
     for (let i = 0; i < 7; i++) {
       const date = new Date(startOfWeek);
       date.setDate(startOfWeek.getDate() + i);
       const dateISO = date.toISOString().split('T')[0];
-      const dayTasks = weekTasks.filter(t => t.due_date === dateISO);
-      byDay[dateISO] = {
-        total: dayTasks.length,
+      
+      const dayTasks = tasks.filter(t => t.due_date === dateISO && !t.deleted_at);
+      days.push({
+        day: HEBREW_DAYS[date.getDay()],
+        date: dateISO,
         completed: dayTasks.filter(t => t.is_completed).length,
-        minutes: dayTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0)
-      };
+        total: dayTasks.length,
+        isToday: dateISO === todayISO
+      });
     }
     
-    return {
-      totalTasks: weekTasks.length,
-      completedTasks,
-      totalMinutes,
-      startOfWeek,
-      endOfWeek,
-      byDay
-    };
-  }, [tasks, today]);
+    // חישוב streak
+    let streak = 0;
+    const checkDate = new Date(today);
+    while (true) {
+      const dateISO = checkDate.toISOString().split('T')[0];
+      const dayTasks = tasks.filter(t => t.due_date === dateISO && !t.deleted_at);
+      const dayCompleted = dayTasks.filter(t => t.is_completed).length;
+      
+      if (dayTasks.length > 0 && dayCompleted === dayTasks.length) {
+        streak++;
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else if (dateISO === todayISO && dayTasks.length > 0) {
+        // היום עדיין בתהליך
+        checkDate.setDate(checkDate.getDate() - 1);
+      } else {
+        break;
+      }
+      
+      if (streak > 100) break; // מניעת לולאה אינסופית
+    }
+    
+    return { days, streak };
+  }, [tasks, today, todayISO]);
 
   // ========================================
   // טיימר פעיל
@@ -203,9 +201,8 @@ function SmartDashboard() {
         const task = tasks.find(t => t.id === activeTaskId);
         if (task) {
           setActiveTimer(task);
-          const timerKey = `timer_v2_${activeTaskId}`;
           try {
-            const saved = localStorage.getItem(timerKey);
+            const saved = localStorage.getItem(`timer_v2_${activeTaskId}`);
             if (saved) {
               const data = JSON.parse(saved);
               if (data.isRunning && data.startTime) {
@@ -280,9 +277,25 @@ function SmartDashboard() {
       toast.success(`${overdueTasks.length} משימות הועברו להיום`);
       loadTasks();
     } catch (e) {
-      toast.error('שגיאה בהעברת משימות');
+      toast.error('שגיאה');
     }
   }, [overdueTasks, editTask, todayISO, loadTasks]);
+
+  // פתקים
+  const saveNote = useCallback(() => {
+    if (!quickNote.trim()) return;
+    const newNotes = [{ id: Date.now(), text: quickNote.trim() }, ...notes].slice(0, 10);
+    setNotes(newNotes);
+    localStorage.setItem('zmanit_quick_notes', JSON.stringify(newNotes));
+    setQuickNote('');
+    toast.success('📝 נשמר!');
+  }, [quickNote, notes]);
+
+  const deleteNote = useCallback((id) => {
+    const newNotes = notes.filter(n => n.id !== id);
+    setNotes(newNotes);
+    localStorage.setItem('zmanit_quick_notes', JSON.stringify(newNotes));
+  }, [notes]);
 
   // ========================================
   // רינדור
@@ -290,7 +303,7 @@ function SmartDashboard() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="text-center">
           <div className="animate-spin text-4xl mb-4">⏳</div>
           <p className="text-gray-500">טוען...</p>
@@ -299,13 +312,16 @@ function SmartDashboard() {
     );
   }
 
+  const quote = getDailyQuote();
+  const userName = user?.user_metadata?.full_name?.split(' ')[0] || 'שלום';
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 pb-24" dir="rtl">
-      
-      {/* === טיימר פעיל (sticky) === */}
-      {activeTimer && (
-        <div className="sticky top-0 z-40 bg-gradient-to-l from-green-500 to-emerald-600 text-white shadow-lg">
-          <div className="max-w-7xl mx-auto px-4 py-3">
+    <div dir="rtl" className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 md:p-6 pb-24">
+      <div className="max-w-4xl mx-auto space-y-5">
+        
+        {/* ===== טיימר פעיל (Sticky) ===== */}
+        {activeTimer && (
+          <div className="sticky top-0 z-50 bg-emerald-600 rounded-2xl p-4 text-white shadow-lg -mx-4 md:mx-0">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-4">
                 <div className="text-3xl font-mono font-bold">{formatTime(elapsedSeconds)}</div>
@@ -316,398 +332,346 @@ function SmartDashboard() {
               </div>
               <div className="flex gap-2">
                 <button 
-                  onClick={() => handleStartFocus(activeTimer)} 
-                  className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl font-medium"
+                  onClick={() => handleStartFocus(activeTimer)}
+                  className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl font-medium transition-colors"
                 >
                   📺 מסך מיקוד
                 </button>
                 <button 
-                  onClick={() => { localStorage.removeItem('zmanit_active_timer'); setActiveTimer(null); }} 
-                  className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-xl"
+                  onClick={() => { localStorage.removeItem('zmanit_active_timer'); setActiveTimer(null); toast('⏹️ טיימר נעצר'); }}
+                  className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"
                 >
                   ⏹️
                 </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      <div className="max-w-7xl mx-auto px-4 py-6">
-        
-        {/* === כותרת + כפתורים === */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">
-              {getGreeting()}, {user?.user_metadata?.full_name?.split(' ')[0] || 'שלום'} 👋
-            </h1>
-            <p className="text-gray-500 mt-1">
-              יום {HEBREW_DAYS[today.getDay()]}, {today.toLocaleDateString('he-IL')}
-            </p>
-          </div>
-          
-          <div className="flex gap-3">
-            <button
-              onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
-              className="px-5 py-3 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-2"
-            >
-              <span className="text-xl">➕</span>
-              משימה חדשה
-            </button>
-            <button
-              onClick={() => { 
-                setEditingTask({ priority: 'urgent', due_date: todayISO }); 
-                setShowTaskForm(true); 
-              }}
-              className="px-5 py-3 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white font-bold rounded-xl shadow-md transition-all flex items-center gap-2"
-            >
-              <span className="text-xl">🚨</span>
-              בלת״ם
-            </button>
-          </div>
-        </div>
-
-        {/* === ציטוט === */}
-        <motion.div 
-          initial={{ opacity: 0, y: -10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="mb-6 bg-gradient-to-l from-indigo-500 via-purple-500 to-pink-500 rounded-2xl p-4 text-white shadow-lg"
-        >
-          <div className="flex items-start gap-3">
-            <span className="text-3xl">"</span>
+        {/* ===== Header + Greeting ===== */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between">
             <div>
-              <p className="text-lg leading-relaxed">{getDailyQuote().text}</p>
-              <p className="text-white/70 mt-1">— {getDailyQuote().author}</p>
+              <h1 className="text-2xl font-bold text-gray-800 dark:text-white">
+                {getGreeting()}, {userName}! 👋
+              </h1>
+              <p className="text-gray-500 text-sm mt-1">
+                יום {HEBREW_DAY_NAMES[today.getDay()]}, {today.toLocaleDateString('he-IL', { day: 'numeric', month: 'long' })}
+              </p>
+            </div>
+            {weekStats.streak > 0 && (
+              <div className="flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 px-4 py-2 rounded-xl border border-amber-200 dark:border-amber-700">
+                <span className="text-2xl">🔥</span>
+                <div className="text-right">
+                  <div className="text-xl font-bold text-amber-600 dark:text-amber-400">{weekStats.streak}</div>
+                  <div className="text-xs text-amber-700 dark:text-amber-500">ימים רצופים</div>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ===== Daily Quote ===== */}
+        <div className="bg-gradient-to-r from-indigo-500 to-purple-600 rounded-2xl p-5 text-white shadow-md">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl">💡</span>
+            <div>
+              <p className="text-lg font-medium leading-relaxed">"{quote.text}"</p>
+              <p className="text-indigo-200 text-sm mt-2">— {quote.author}</p>
             </div>
           </div>
-        </motion.div>
+        </div>
 
-        {/* === סטטוס מהיר === */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-            <div className="text-3xl font-bold text-blue-600">{dailyStats.remaining}</div>
-            <div className="text-sm text-gray-500">משימות נותרו</div>
+        {/* ===== Quick Stats ===== */}
+        <div className="grid grid-cols-4 gap-3">
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center">
+            <div className="text-3xl font-bold text-emerald-600">{stats.completed}</div>
+            <div className="text-gray-500 dark:text-gray-400 text-sm">הושלמו ✓</div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-            <div className="text-3xl font-bold text-green-600">{dailyStats.completed}</div>
-            <div className="text-sm text-gray-500">הושלמו היום</div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center">
+            <div className="text-3xl font-bold text-blue-600">{stats.remaining}</div>
+            <div className="text-gray-500 dark:text-gray-400 text-sm">נותרו</div>
           </div>
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-            <div className="text-3xl font-bold text-purple-600">{formatMinutes(dailyStats.timeSpentToday)}</div>
-            <div className="text-sm text-gray-500">עבדת היום</div>
+          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center">
+            <div className="text-3xl font-bold text-purple-600">{formatMinutes(stats.minutesLeft)}</div>
+            <div className="text-gray-500 dark:text-gray-400 text-sm">זמן עבודה</div>
           </div>
-          {dailyStats.overdue > 0 ? (
-            <div className="bg-red-50 dark:bg-red-900/20 rounded-xl p-4 shadow-sm border border-red-200 dark:border-red-800">
-              <div className="text-3xl font-bold text-red-600">{dailyStats.overdue}</div>
-              <div className="text-sm text-red-500">באיחור!</div>
+          {stats.overdue > 0 ? (
+            <div className="bg-red-50 dark:bg-red-900/30 rounded-xl p-4 shadow-sm text-center border border-red-200 dark:border-red-800">
+              <div className="text-3xl font-bold text-red-600">{stats.overdue}</div>
+              <div className="text-red-500 text-sm">באיחור!</div>
             </div>
           ) : (
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-              <div className="text-3xl font-bold text-orange-600">{formatMinutes(dailyStats.minutesLeft)}</div>
-              <div className="text-sm text-gray-500">עבודה נותרה</div>
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm text-center">
+              <div className="text-3xl font-bold text-orange-600">{formatMinutes(stats.timeSpentToday)}</div>
+              <div className="text-gray-500 dark:text-gray-400 text-sm">עבדת היום</div>
             </div>
           )}
         </div>
 
-        {/* === פס התקדמות === */}
-        <div className="mb-6">
-          <div className="flex justify-between text-sm text-gray-500 mb-2">
-            <span>התקדמות היום</span>
-            <span>{dailyStats.completionRate}%</span>
+        {/* ===== Progress Bar ===== */}
+        <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
+          <div className="flex justify-between text-sm mb-2">
+            <span className="text-gray-600 dark:text-gray-400 font-medium">התקדמות היום</span>
+            <span className="font-bold text-indigo-600">{stats.progress}%</span>
           </div>
-          <div className="h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-            <motion.div
+          <div className="h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+            <motion.div 
               initial={{ width: 0 }}
-              animate={{ width: `${dailyStats.completionRate}%` }}
+              animate={{ width: `${stats.progress}%` }}
               transition={{ duration: 0.5 }}
-              className="h-full bg-gradient-to-l from-green-500 to-emerald-500 rounded-full"
+              className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
             />
           </div>
         </div>
 
-        {/* === טאבים === */}
-        <div className="flex gap-2 mb-6 overflow-x-auto pb-2">
-          <button
-            onClick={() => setActiveTab('today')}
-            className={`px-4 py-2 rounded-xl font-medium transition-all whitespace-nowrap ${
-              activeTab === 'today' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100'
-            }`}
-          >
-            📋 היום ({dailyStats.remaining + dailyStats.completed})
-          </button>
-          <button
-            onClick={() => setActiveTab('week')}
-            className={`px-4 py-2 rounded-xl font-medium transition-all whitespace-nowrap ${
-              activeTab === 'week' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100'
-            }`}
-          >
-            🗓️ השבוע ({weeklyStats.totalTasks})
-          </button>
-          <button
-            onClick={() => setActiveTab('insights')}
-            className={`px-4 py-2 rounded-xl font-medium transition-all whitespace-nowrap ${
-              activeTab === 'insights' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100'
-            }`}
-          >
-            📊 תובנות
-          </button>
-          <button
-            onClick={() => setActiveTab('recommendations')}
-            className={`px-4 py-2 rounded-xl font-medium transition-all whitespace-nowrap ${
-              activeTab === 'recommendations' 
-                ? 'bg-blue-500 text-white shadow-md' 
-                : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-100'
-            }`}
-          >
-            💡 המלצות
-          </button>
-        </div>
-
-        {/* === תוכן לפי טאב === */}
-        <AnimatePresence mode="wait">
-          
-          {/* טאב היום */}
-          {activeTab === 'today' && (
-            <motion.div
-              key="today"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
-            >
-              {/* משימות באיחור */}
-              {overdueTasks.length > 0 && (
-                <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border border-red-200 dark:border-red-800">
-                  <div className="flex items-center justify-between mb-4">
-                    <h2 className="text-lg font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
-                      🔥 משימות באיחור ({overdueTasks.length})
-                    </h2>
-                    <button
-                      onClick={handleMoveAllOverdueToToday}
-                      className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors"
-                    >
-                      העבר הכל להיום
-                    </button>
-                  </div>
-                  <div className="space-y-3">
-                    {overdueTasks.map(task => (
-                      <DailyTaskCard
-                        key={task.id}
-                        task={task}
-                        onEdit={handleEditTask}
-                        onStartFocus={handleStartFocus}
-                      />
-                    ))}
-                  </div>
-                </div>
+        {/* ===== Next Task ===== */}
+        {nextTask && !activeTimer && (
+          <div className={`bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm border-r-4 ${
+            nextTask.due_date < todayISO ? 'border-red-500' : 
+            nextTask.priority === 'urgent' ? 'border-orange-500' : 'border-indigo-500'
+          }`}>
+            <div className={`flex items-center gap-2 text-sm font-medium mb-2 ${
+              nextTask.due_date < todayISO ? 'text-red-500' : 
+              nextTask.priority === 'urgent' ? 'text-orange-500' : 'text-indigo-500'
+            }`}>
+              <span className="w-2 h-2 bg-current rounded-full animate-pulse"></span>
+              {nextTask.due_date < todayISO ? '⚠️ באיחור!' : 'המשימה הבאה שלך'}
+            </div>
+            <h2 className="text-xl font-bold text-gray-800 dark:text-white mb-3">{nextTask.title}</h2>
+            <div className="flex items-center gap-4 text-sm text-gray-500 mb-4 flex-wrap">
+              {nextTask.due_time && <span>🕐 {nextTask.due_time}</span>}
+              <span>⏱️ {nextTask.estimated_duration || 30} דקות</span>
+              {nextTask.priority === 'urgent' && (
+                <span className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 rounded text-xs font-medium">דחוף</span>
               )}
-
-              {/* משימות היום */}
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                    📋 משימות להיום ({todayTasksRemaining.length})
-                  </h2>
-                  <Link to="/daily" className="text-blue-500 hover:underline text-sm">
-                    תצוגה מלאה →
-                  </Link>
-                </div>
-                
-                {todayTasksRemaining.length === 0 ? (
-                  <div className="text-center py-8">
-                    <div className="text-5xl mb-3">🎉</div>
-                    <p className="text-gray-500 text-lg">סיימת את כל המשימות להיום!</p>
-                    <button
-                      onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
-                      className="mt-4 px-6 py-3 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl"
-                    >
-                      ➕ הוסיפי משימה חדשה
-                    </button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {todayTasksRemaining.map(task => (
-                      <DailyTaskCard
-                        key={task.id}
-                        task={task}
-                        onEdit={handleEditTask}
-                        onStartFocus={handleStartFocus}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* משימות שהושלמו */}
-              {todayTasksCompleted.length > 0 && (
-                <div className="bg-green-50 dark:bg-green-900/20 rounded-2xl p-5">
-                  <h2 className="text-lg font-bold text-green-700 dark:text-green-400 mb-4">
-                    ✅ הושלמו היום ({todayTasksCompleted.length})
-                  </h2>
-                  <div className="space-y-3 opacity-70">
-                    {todayTasksCompleted.slice(0, 5).map(task => (
-                      <DailyTaskCard
-                        key={task.id}
-                        task={task}
-                        onEdit={handleEditTask}
-                      />
-                    ))}
-                    {todayTasksCompleted.length > 5 && (
-                      <Link to="/daily" className="block text-center text-green-600 hover:underline">
-                        עוד {todayTasksCompleted.length - 5} משימות...
-                      </Link>
-                    )}
-                  </div>
-                </div>
+              {nextTask.due_date < todayISO && (
+                <span className="px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-600 rounded text-xs font-medium">מ-{nextTask.due_date}</span>
               )}
+            </div>
+            <div className="flex gap-3 flex-wrap">
+              <button 
+                onClick={() => handleStartFocus(nextTask)}
+                className="flex-1 min-w-[150px] bg-indigo-600 hover:bg-indigo-700 text-white py-3 px-6 rounded-xl font-medium transition-colors"
+              >
+                ▶️ התחילי עכשיו
+              </button>
+              <button 
+                onClick={() => handleEditTask(nextTask)}
+                className="px-4 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                ✏️ ערכי
+              </button>
+            </div>
+          </div>
+        )}
 
-              {/* סיכום יומי */}
-              <DailySummaryCard 
-                tasks={tasks} 
-                stats={dailyStats} 
-                date={todayISO} 
-              />
-            </motion.div>
-          )}
-
-          {/* טאב השבוע */}
-          {activeTab === 'week' && (
-            <motion.div
-              key="week"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
+        {/* ===== Navigation - Quick Actions ===== */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
+          <h3 className="font-bold text-gray-800 dark:text-white mb-4">🧭 פעולות מהירות</h3>
+          <div className="grid grid-cols-3 md:grid-cols-6 gap-3">
+            <button
+              onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
+              className="bg-blue-500 hover:bg-blue-600 text-white p-4 rounded-xl text-center transition-all hover:scale-105"
             >
-              <WeeklySummaryCard 
-                stats={weeklyStats} 
-                startOfWeek={weeklyStats.startOfWeek} 
-                endOfWeek={weeklyStats.endOfWeek} 
-              />
-              
-              <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="text-lg font-bold text-gray-900 dark:text-white">
-                    🗓️ תצוגת שבוע
-                  </h2>
-                  <Link to="/weekly" className="text-blue-500 hover:underline text-sm">
-                    תכנון שבועי →
-                  </Link>
-                </div>
-                
-                <div className="grid grid-cols-7 gap-2">
-                  {Object.entries(weeklyStats.byDay || {}).map(([date, data]) => {
-                    const dayDate = new Date(date);
-                    const isToday = date === todayISO;
-                    const isPast = date < todayISO;
-                    const allDone = data.total > 0 && data.completed === data.total;
-                    
-                    return (
-                      <div
-                        key={date}
-                        className={`text-center p-3 rounded-xl transition-all ${
-                          isToday 
-                            ? 'bg-blue-100 dark:bg-blue-900/50 ring-2 ring-blue-500' 
-                            : allDone
-                              ? 'bg-green-100 dark:bg-green-900/30'
-                              : isPast && data.total > data.completed
-                                ? 'bg-red-50 dark:bg-red-900/20'
-                                : 'bg-gray-50 dark:bg-gray-700/50'
-                        }`}
-                      >
-                        <div className="text-xs text-gray-500 font-medium">
-                          {HEBREW_DAYS[dayDate.getDay()]}
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          {dayDate.getDate()}/{dayDate.getMonth() + 1}
-                        </div>
-                        <div className={`text-2xl font-bold mt-1 ${
-                          allDone ? 'text-green-500' 
-                          : data.total === 0 ? 'text-gray-300'
-                          : isToday ? 'text-blue-600'
-                          : 'text-gray-700 dark:text-gray-300'
-                        }`}>
-                          {data.total === 0 ? '-' : allDone ? '✓' : data.total}
-                        </div>
-                        {data.total > 0 && !allDone && (
-                          <div className="text-xs text-gray-400">
-                            {data.completed}/{data.total}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* טאב תובנות */}
-          {activeTab === 'insights' && (
-            <motion.div
-              key="insights"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-              className="space-y-6"
+              <div className="text-2xl mb-1">➕</div>
+              <div className="text-xs font-medium">משימה</div>
+            </button>
+            <button
+              onClick={() => { setEditingTask({ priority: 'urgent', due_date: todayISO }); setShowTaskForm(true); }}
+              className="bg-red-500 hover:bg-red-600 text-white p-4 rounded-xl text-center transition-all hover:scale-105"
             >
-              <WorkPaceInsights tasks={tasks} />
-              <LearningInsightsPanel tasks={tasks} />
-            </motion.div>
-          )}
-
-          {/* טאב המלצות */}
-          {activeTab === 'recommendations' && (
-            <motion.div
-              key="recommendations"
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -20 }}
-            >
-              <SmartRecommendationsPanel 
-                tasks={tasks} 
-                onUpdateTask={editTask}
-                onAddTask={addTask}
-                onRefresh={loadTasks}
-              />
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* === ניווט מהיר === */}
-        <div className="fixed bottom-4 left-4 right-4 md:relative md:bottom-auto md:left-auto md:right-auto md:mt-8">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-2 flex justify-around max-w-md mx-auto">
-            <Link to="/daily" className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              <span className="text-2xl">📋</span>
-              <span className="text-xs text-gray-500 mt-1">יומי</span>
+              <div className="text-2xl mb-1">🚨</div>
+              <div className="text-xs font-medium">בלת"ם</div>
+            </button>
+            <Link to="/daily" className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 p-4 rounded-xl text-center transition-all hover:scale-105">
+              <div className="text-2xl mb-1">📋</div>
+              <div className="text-xs font-medium">יומי</div>
             </Link>
-            <Link to="/weekly" className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              <span className="text-2xl">🗓️</span>
-              <span className="text-xs text-gray-500 mt-1">שבועי</span>
+            <Link to="/weekly" className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 p-4 rounded-xl text-center transition-all hover:scale-105">
+              <div className="text-2xl mb-1">🗓️</div>
+              <div className="text-xs font-medium">שבועי</div>
             </Link>
-            <Link to="/focus" className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              <span className="text-2xl">🎯</span>
-              <span className="text-xs text-gray-500 mt-1">מיקוד</span>
+            <Link to="/focus" className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 p-4 rounded-xl text-center transition-all hover:scale-105">
+              <div className="text-2xl mb-1">🎯</div>
+              <div className="text-xs font-medium">מיקוד</div>
             </Link>
-            <Link to="/insights" className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              <span className="text-2xl">📊</span>
-              <span className="text-xs text-gray-500 mt-1">תובנות</span>
-            </Link>
-            <Link to="/settings" className="flex flex-col items-center p-3 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors">
-              <span className="text-2xl">⚙️</span>
-              <span className="text-xs text-gray-500 mt-1">הגדרות</span>
+            <Link to="/insights" className="bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 p-4 rounded-xl text-center transition-all hover:scale-105">
+              <div className="text-2xl mb-1">📊</div>
+              <div className="text-xs font-medium">תובנות</div>
             </Link>
           </div>
         </div>
+
+        {/* ===== Overdue Tasks ===== */}
+        {overdueTasks.length > 0 && (
+          <div className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-5 border border-red-200 dark:border-red-800">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-red-700 dark:text-red-400 flex items-center gap-2">
+                🔥 משימות באיחור ({overdueTasks.length})
+              </h3>
+              <button
+                onClick={handleMoveAllOverdueToToday}
+                className="px-4 py-2 bg-red-500 hover:bg-red-600 text-white text-sm font-medium rounded-xl transition-colors"
+              >
+                העבר הכל להיום
+              </button>
+            </div>
+            <div className="space-y-3">
+              {overdueTasks.map(task => (
+                <DailyTaskCard
+                  key={task.id}
+                  task={task}
+                  onEdit={handleEditTask}
+                  onStartFocus={handleStartFocus}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ===== Today's Tasks ===== */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-800 dark:text-white">📋 המשימות להיום ({todayAllTasks.length})</h3>
+            <Link to="/daily" className="text-indigo-500 text-sm hover:underline">צפי בהכל →</Link>
+          </div>
+          
+          {todayRemaining.length === 0 && todayCompleted.length === 0 ? (
+            <div className="text-center py-8">
+              <div className="text-5xl mb-3">📭</div>
+              <p className="text-gray-500 mb-4">אין משימות להיום</p>
+              <button
+                onClick={() => { setEditingTask(null); setShowTaskForm(true); }}
+                className="px-6 py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-medium rounded-xl transition-colors"
+              >
+                ➕ הוסיפי משימה
+              </button>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* משימות שנותרו */}
+              {todayRemaining.map(task => (
+                <DailyTaskCard
+                  key={task.id}
+                  task={task}
+                  onEdit={handleEditTask}
+                  onStartFocus={handleStartFocus}
+                />
+              ))}
+              
+              {/* משימות שהושלמו */}
+              {todayCompleted.length > 0 && (
+                <>
+                  <div className="border-t border-gray-200 dark:border-gray-700 pt-3 mt-3">
+                    <div className="text-sm text-gray-500 mb-2">✅ הושלמו ({todayCompleted.length})</div>
+                  </div>
+                  {todayCompleted.slice(0, 3).map(task => (
+                    <DailyTaskCard
+                      key={task.id}
+                      task={task}
+                      onEdit={handleEditTask}
+                    />
+                  ))}
+                  {todayCompleted.length > 3 && (
+                    <Link to="/daily" className="block text-center text-indigo-500 hover:underline text-sm py-2">
+                      עוד {todayCompleted.length - 3} משימות שהושלמו...
+                    </Link>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ===== Week Overview ===== */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-bold text-gray-800 dark:text-white">📊 סקירת השבוע</h3>
+            <Link to="/weekly" className="text-indigo-500 text-sm hover:underline">לתכנון שבועי →</Link>
+          </div>
+          <div className="grid grid-cols-7 gap-2">
+            {weekStats.days.map((day, i) => {
+              const allDone = day.total > 0 && day.completed === day.total;
+              const hasIncomplete = day.total > 0 && day.completed < day.total;
+              const isPast = day.date < todayISO;
+              
+              return (
+                <div 
+                  key={i}
+                  className={`text-center p-3 rounded-xl transition-all ${
+                    day.isToday 
+                      ? 'bg-indigo-600 text-white shadow-md' 
+                      : allDone
+                        ? 'bg-emerald-100 dark:bg-emerald-900/30'
+                        : isPast && hasIncomplete
+                          ? 'bg-red-50 dark:bg-red-900/20'
+                          : 'bg-gray-50 dark:bg-gray-700'
+                  }`}
+                >
+                  <div className={`text-sm font-medium ${day.isToday ? 'text-white' : 'text-gray-600 dark:text-gray-400'}`}>
+                    {day.day}
+                  </div>
+                  <div className={`text-lg font-bold mt-1 ${
+                    day.isToday ? 'text-white' : 
+                    allDone ? 'text-emerald-600 dark:text-emerald-400' :
+                    'text-gray-800 dark:text-gray-200'
+                  }`}>
+                    {day.total === 0 ? '-' : allDone ? '✓' : `${day.completed}/${day.total}`}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* ===== Quick Note ===== */}
+        <div className="bg-white dark:bg-gray-800 rounded-2xl p-5 shadow-sm">
+          <h3 className="font-bold text-gray-800 dark:text-white mb-3">📝 פתק מהיר</h3>
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={quickNote}
+              onChange={(e) => setQuickNote(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && saveNote()}
+              placeholder="רשמי משהו..."
+              className="flex-1 px-4 py-3 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+            />
+            <button
+              onClick={saveNote}
+              disabled={!quickNote.trim()}
+              className="px-5 py-3 bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-300 dark:disabled:bg-gray-600 text-white font-medium rounded-xl transition-colors"
+            >
+              💾
+            </button>
+          </div>
+          {notes.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {notes.slice(0, 5).map((note) => (
+                <div key={note.id} className="flex items-start gap-2 p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg text-sm text-gray-700 dark:text-gray-300 border border-yellow-100 dark:border-yellow-800 group">
+                  <span className="flex-1">{note.text}</span>
+                  <button
+                    onClick={() => deleteNote(note.id)}
+                    className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* ===== Footer - Settings ===== */}
+        <div className="flex justify-center pt-2 pb-4">
+          <Link to="/settings" className="flex items-center gap-2 text-sm text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+            ⚙️ הגדרות
+          </Link>
+        </div>
+
       </div>
 
-      {/* === מודלים === */}
+      {/* ===== Modals ===== */}
       <Modal
         isOpen={showTaskForm}
         onClose={() => { setShowTaskForm(false); setEditingTask(null); }}
@@ -717,14 +681,20 @@ function SmartDashboard() {
         <SimpleTaskForm
           task={editingTask}
           onSave={async (taskData) => {
-            if (editingTask?.id) {
-              await editTask(editingTask.id, taskData);
-            } else {
-              await addTask(taskData);
+            try {
+              if (editingTask?.id) {
+                await editTask(editingTask.id, taskData);
+                toast.success('✅ משימה עודכנה');
+              } else {
+                await addTask(taskData);
+                toast.success('✅ משימה נוספה');
+              }
+              setShowTaskForm(false);
+              setEditingTask(null);
+              loadTasks();
+            } catch (e) {
+              toast.error('שגיאה');
             }
-            setShowTaskForm(false);
-            setEditingTask(null);
-            loadTasks();
           }}
           onCancel={() => { setShowTaskForm(false); setEditingTask(null); }}
         />
