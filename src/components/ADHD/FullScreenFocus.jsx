@@ -429,6 +429,9 @@ export default function FullScreenFocus({
                       const minutesWorked = Math.floor(elapsedRef.current / 60);
                       if (onPause && minutesWorked > 0) {
                         await onPause(minutesWorked);
+                        // איפוס אחרי שמירה
+                        elapsedRef.current = 0;
+                        setElapsedSeconds(0);
                       }
                       
                       // 2. תיעוד ההפרעה
@@ -528,6 +531,9 @@ export default function FullScreenFocus({
                         const minutesWorked = Math.floor(elapsedRef.current / 60);
                         if (onPause && minutesWorked > 0) {
                           await onPause(minutesWorked);
+                          // איפוס אחרי שמירה
+                          elapsedRef.current = 0;
+                          setElapsedSeconds(0);
                         }
                         
                         // 2. הוספת הבלת"מ

@@ -16,6 +16,8 @@ import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
 import { supabase } from '../../services/supabase';
+// 🆕 קומפוננטות חכמות
+import SmartReminders, { InsightsPanel, GamificationPanel } from '../Productivity/SmartReminders';
 
 /**
  * דשבורד חכם - גרסה משופרת
@@ -599,6 +601,17 @@ function SmartDashboard() {
         </motion.div>
       )}
 
+      {/* === תובנות והתקדמות === */}
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.28 }}
+        className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6"
+      >
+        <GamificationPanel tasks={tasks} />
+        <InsightsPanel tasks={tasks} />
+      </motion.div>
+
       {/* === כפתורי פעולה נוספים === */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
@@ -736,6 +749,16 @@ function SmartDashboard() {
           loadTasks();
         }}
         onLogInterruption={handleLogInterruption}
+      />
+      
+      {/* 🆕 תזכורות חכמות - בוקר וסוף יום */}
+      <SmartReminders 
+        tasks={tasks}
+        onDeferTask={editTask}
+        onStartTask={(task) => {
+          setFocusTask(task);
+          setShowFocus(true);
+        }}
       />
     </div>
   );
