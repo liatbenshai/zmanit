@@ -1,11 +1,16 @@
 /**
- * SmartDashboard - דשבורד חכם ופונקציונלי
- * =========================================
- * ✅ כפתור "התחל עכשיו" בולט
- * ✅ טיימר פעיל בראש הדף
- * ✅ "מה עכשיו" - המשימה הבאה
- * ✅ סטטוס יום ברור
- * ✅ פעולות מהירות
+ * SmartDashboard - דשבורד חכם ומורחב
+ * =====================================
+ * ✅ סטטוס יום + פס התקדמות
+ * ✅ ציטוט יומי
+ * ✅ טיימר פעיל
+ * ✅ משימה הבאה + כפתור התחל
+ * ✅ תצוגת שבוע מיני
+ * ✅ המלצות חכמות
+ * ✅ פתקים מהירים
+ * ✅ כפתור בלת"ם
+ * ✅ סיכום שעות
+ * ✅ גיימיפיקציה + תובנות
  */
 
 import { useState, useMemo, useEffect, useCallback } from 'react';
@@ -13,7 +18,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Link, useNavigate } from 'react-router-dom';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
-import { getTaskType } from '../../config/taskTypes';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import FullScreenFocus from '../ADHD/FullScreenFocus';
 import Modal from '../UI/Modal';
@@ -65,12 +69,13 @@ const QUOTES = [
   { text: "הכי קשה זה להתחיל. אחרי זה הכל זורם.", author: "אנונימי" },
 ];
 
-// בחירת ציטוט לפי תאריך
 function getDailyQuote() {
   const today = new Date();
   const dayOfYear = Math.floor((today - new Date(today.getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
   return QUOTES[dayOfYear % QUOTES.length];
 }
+
+const HEBREW_DAYS = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
 
 // ========================================
 // קומפוננטה ראשית
@@ -88,49 +93,53 @@ function SmartDashboard() {
   const [focusTask, setFocusTask] = useState(null);
   const [activeTimer, setActiveTimer] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
+  const [showUrgentForm, setShowUrgentForm] = useState(false);
+  const [quickNote, setQuickNote] = useState('');
+  const [notes, setNotes] = useState([]);
+  const [showAllNotes, setShowAllNotes] = useState(false);
   
   const today = new Date();
   const todayISO = today.toISOString().split('T')[0];
   const currentMinutes = today.getHours() * 60 + today.getMinutes();
 
+  // טעינת פתקים
+  useEffect(() => {
+    const saved = localStorage.getItem('zmanit_quick_notes');
+    if (saved) {
+      try {
+        setNotes(JSON.parse(saved));
+      } catch (e) {}
+    }
+  }, []);
+
   // ========================================
   // חישובים
   // ========================================
 
-  // המשימה הבאה (עם עדיפות לבאיחור)
+  // המשימה הבאה
   const nextTask = useMemo(() => {
     if (!tasks || tasks.length === 0) return null;
     
-    // משימות באיחור מימים קודמים
     const overdueTasks = tasks.filter(t => 
-      !t.is_completed && 
-      !t.deleted_at &&
-      t.due_date && 
-      t.due_date < todayISO
+      !t.is_completed && !t.deleted_at && t.due_date && t.due_date < todayISO
     );
     
-    // משימות של היום
     const todayTasks = tasks.filter(t => 
-      !t.is_completed && 
-      !t.deleted_at &&
-      t.due_date === todayISO
+      !t.is_completed && !t.deleted_at && t.due_date === todayISO
     );
     
-    // משימות שהשעה עברה
     const lateTodayTasks = todayTasks.filter(t => {
       if (!t.due_time) return false;
       const [h, m] = t.due_time.split(':').map(Number);
       return (h * 60 + (m || 0)) < currentMinutes;
     });
     
-    // משימות עתידיות
     const upcomingTasks = todayTasks.filter(t => {
       if (!t.due_time) return true;
       const [h, m] = t.due_time.split(':').map(Number);
       return (h * 60 + (m || 0)) >= currentMinutes;
     });
     
-    // מיון
     const sortTasks = (list) => list.sort((a, b) => {
       if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
       if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
@@ -147,7 +156,7 @@ function SmartDashboard() {
 
   // סטטיסטיקות היום
   const stats = useMemo(() => {
-    if (!tasks) return { total: 0, completed: 0, remaining: 0, minutesLeft: 0, overdue: 0 };
+    if (!tasks) return { total: 0, completed: 0, remaining: 0, minutesLeft: 0, overdue: 0, timeSpentToday: 0 };
     
     const todayTasks = tasks.filter(t => t.due_date === todayISO && !t.deleted_at);
     const completed = todayTasks.filter(t => t.is_completed);
@@ -157,6 +166,7 @@ function SmartDashboard() {
     );
     
     const minutesLeft = remaining.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
+    const timeSpentToday = todayTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0);
     
     return {
       total: todayTasks.length,
@@ -164,15 +174,117 @@ function SmartDashboard() {
       remaining: remaining.length,
       minutesLeft,
       overdue: overdue.length,
+      timeSpentToday,
       tasks: remaining.slice(0, 6)
     };
   }, [tasks, todayISO]);
+
+  // סטטיסטיקות שבוע
+  const weekStats = useMemo(() => {
+    if (!tasks) return { totalTasks: 0, completedTasks: 0, totalTime: 0, days: [] };
+    
+    const startOfWeek = new Date(today);
+    startOfWeek.setDate(today.getDate() - today.getDay());
+    
+    const days = [];
+    let totalTasks = 0;
+    let completedTasks = 0;
+    let totalTime = 0;
+    
+    for (let i = 0; i < 7; i++) {
+      const date = new Date(startOfWeek);
+      date.setDate(startOfWeek.getDate() + i);
+      const dateISO = date.toISOString().split('T')[0];
+      
+      const dayTasks = tasks.filter(t => t.due_date === dateISO && !t.deleted_at);
+      const dayCompleted = dayTasks.filter(t => t.is_completed);
+      const dayTime = dayTasks.reduce((sum, t) => sum + (t.time_spent || 0), 0);
+      
+      totalTasks += dayTasks.length;
+      completedTasks += dayCompleted.length;
+      totalTime += dayTime;
+      
+      days.push({
+        date: dateISO,
+        dayName: HEBREW_DAYS[date.getDay()],
+        total: dayTasks.length,
+        completed: dayCompleted.length,
+        isToday: dateISO === todayISO,
+        isPast: dateISO < todayISO
+      });
+    }
+    
+    return { totalTasks, completedTasks, totalTime, days };
+  }, [tasks, today, todayISO]);
+
+  // המלצות חכמות
+  const recommendations = useMemo(() => {
+    if (!tasks) return [];
+    const recs = [];
+    
+    // משימות ארוכות לפיצול
+    const longTasks = tasks.filter(t => 
+      !t.is_completed && !t.deleted_at && 
+      t.due_date === todayISO && 
+      (t.estimated_duration || 30) > 90
+    );
+    if (longTasks.length > 0) {
+      recs.push({
+        id: 'split',
+        icon: '✂️',
+        text: `"${longTasks[0].title}" ארוכה (${longTasks[0].estimated_duration} דק׳) - שווה לפצל?`,
+        action: () => navigate('/daily'),
+        taskId: longTasks[0].id
+      });
+    }
+    
+    // עומס יתר
+    if (stats.minutesLeft > 480) {
+      recs.push({
+        id: 'overload',
+        icon: '⚠️',
+        text: `יש לך ${formatMinutes(stats.minutesLeft)} עבודה היום - אולי לדחות משהו?`,
+        action: () => navigate('/daily')
+      });
+    }
+    
+    // משימות באיחור
+    if (stats.overdue > 2) {
+      recs.push({
+        id: 'overdue',
+        icon: '🔥',
+        text: `${stats.overdue} משימות באיחור - בואי נטפל בהן!`,
+        action: () => navigate('/daily')
+      });
+    }
+    
+    // יום ריק
+    if (stats.total === 0) {
+      recs.push({
+        id: 'empty',
+        icon: '📋',
+        text: 'אין משימות להיום - רוצה לתכנן?',
+        action: () => setShowTaskForm(true)
+      });
+    }
+    
+    // הצלחה!
+    if (stats.total > 0 && stats.completed === stats.total) {
+      recs.push({
+        id: 'done',
+        icon: '🎉',
+        text: 'סיימת הכל להיום! מדהים!',
+        action: null
+      });
+    }
+    
+    return recs.slice(0, 2);
+  }, [tasks, stats, todayISO, navigate]);
 
   // ========================================
   // טיימר פעיל
   // ========================================
 
-  // בדיקת טיימר פעיל
   useEffect(() => {
     const checkActiveTimer = () => {
       const activeTaskId = localStorage.getItem('zmanit_active_timer');
@@ -180,8 +292,6 @@ function SmartDashboard() {
         const task = tasks.find(t => t.id === activeTaskId);
         if (task) {
           setActiveTimer(task);
-          
-          // חישוב זמן שעבר
           const timerKey = `timer_v2_${activeTaskId}`;
           try {
             const saved = localStorage.getItem(timerKey);
@@ -270,6 +380,44 @@ function SmartDashboard() {
     } catch (e) {}
   }, [user?.id]);
 
+  // פתקים
+  const saveNote = useCallback(() => {
+    if (!quickNote.trim()) return;
+    const newNote = {
+      id: Date.now(),
+      text: quickNote.trim(),
+      createdAt: new Date().toISOString()
+    };
+    const newNotes = [newNote, ...notes].slice(0, 10);
+    setNotes(newNotes);
+    localStorage.setItem('zmanit_quick_notes', JSON.stringify(newNotes));
+    setQuickNote('');
+    toast.success('📝 נשמר!');
+  }, [quickNote, notes]);
+
+  const deleteNote = useCallback((id) => {
+    const newNotes = notes.filter(n => n.id !== id);
+    setNotes(newNotes);
+    localStorage.setItem('zmanit_quick_notes', JSON.stringify(newNotes));
+  }, [notes]);
+
+  // בלת"ם
+  const handleAddUrgent = useCallback(async (taskData) => {
+    try {
+      await addTask({
+        ...taskData,
+        priority: 'urgent',
+        due_date: todayISO,
+        due_time: new Date().toTimeString().slice(0, 5)
+      });
+      setShowUrgentForm(false);
+      toast.success('🚨 בלת"ם נוסף!');
+      loadTasks();
+    } catch (e) {
+      toast.error('שגיאה');
+    }
+  }, [addTask, todayISO, loadTasks]);
+
   // ========================================
   // רינדור
   // ========================================
@@ -286,10 +434,10 @@ function SmartDashboard() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4" dir="rtl">
+    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 p-4 pb-24" dir="rtl">
       <div className="max-w-2xl mx-auto space-y-4">
         
-        {/* === טיימר פעיל (אם יש) === */}
+        {/* === טיימר פעיל === */}
         {activeTimer && (
           <motion.div
             initial={{ opacity: 0, y: -20 }}
@@ -336,8 +484,7 @@ function SmartDashboard() {
             {getGreeting()} 👋
           </h1>
           
-          {/* סטטוס יום */}
-          <div className="flex justify-center gap-4 mt-2 text-sm">
+          <div className="flex justify-center gap-4 mt-2 text-sm flex-wrap">
             <span className="text-gray-600 dark:text-gray-400">
               ✅ {stats.completed}/{stats.total} הושלמו
             </span>
@@ -381,7 +528,7 @@ function SmartDashboard() {
           </motion.div>
         </motion.div>
 
-        {/* === המשימה הבאה + כפתור התחל === */}
+        {/* === המשימה הבאה === */}
         {!activeTimer && nextTask && (
           <motion.div
             initial={{ opacity: 0, scale: 0.95 }}
@@ -398,9 +545,7 @@ function SmartDashboard() {
             </h2>
             
             <div className="flex items-center gap-3 text-sm text-gray-500 mb-4">
-              {nextTask.due_time && (
-                <span>🕐 {nextTask.due_time}</span>
-              )}
+              {nextTask.due_time && <span>🕐 {nextTask.due_time}</span>}
               <span>⏱️ {nextTask.estimated_duration || 30} דק׳</span>
               {nextTask.time_spent > 0 && (
                 <span className="text-green-600">✓ {nextTask.time_spent} דק׳ בוצעו</span>
@@ -489,11 +634,170 @@ function SmartDashboard() {
           </motion.div>
         )}
 
-        {/* === פעולות מהירות === */}
+        {/* === תצוגת שבוע מיני === */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="grid grid-cols-4 gap-2"
+          className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-bold text-gray-900 dark:text-white">🗓️ השבוע</h3>
+            <Link to="/weekly" className="text-blue-500 text-sm hover:underline">
+              תכנון →
+            </Link>
+          </div>
+          
+          <div className="grid grid-cols-7 gap-1">
+            {weekStats.days.map((day) => (
+              <div
+                key={day.date}
+                className={`text-center p-2 rounded-lg transition-colors ${
+                  day.isToday 
+                    ? 'bg-blue-100 dark:bg-blue-900/50 ring-2 ring-blue-500' 
+                    : day.isPast 
+                      ? 'bg-gray-100 dark:bg-gray-700/50' 
+                      : 'bg-gray-50 dark:bg-gray-700/30'
+                }`}
+              >
+                <div className={`text-xs font-medium ${
+                  day.isToday ? 'text-blue-600 dark:text-blue-400' : 'text-gray-500'
+                }`}>
+                  {day.dayName}
+                </div>
+                <div className={`text-lg font-bold ${
+                  day.total === 0 
+                    ? 'text-gray-300 dark:text-gray-600' 
+                    : day.completed === day.total && day.total > 0
+                      ? 'text-green-500'
+                      : day.isToday 
+                        ? 'text-blue-600 dark:text-blue-400'
+                        : 'text-gray-700 dark:text-gray-300'
+                }`}>
+                  {day.total === 0 ? '-' : day.completed === day.total ? '✓' : day.total}
+                </div>
+                {day.total > 0 && day.completed < day.total && (
+                  <div className="text-[10px] text-gray-400">
+                    {day.completed}/{day.total}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+          
+          {/* סיכום שבועי */}
+          <div className="flex justify-around mt-3 pt-3 border-t border-gray-100 dark:border-gray-700 text-sm">
+            <div className="text-center">
+              <div className="text-gray-500">משימות</div>
+              <div className="font-bold text-gray-900 dark:text-white">
+                {weekStats.completedTasks}/{weekStats.totalTasks}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-gray-500">שעות עבודה</div>
+              <div className="font-bold text-gray-900 dark:text-white">
+                {formatMinutes(weekStats.totalTime)}
+              </div>
+            </div>
+            <div className="text-center">
+              <div className="text-gray-500">היום</div>
+              <div className="font-bold text-gray-900 dark:text-white">
+                {formatMinutes(stats.timeSpentToday)}
+              </div>
+            </div>
+          </div>
+        </motion.div>
+
+        {/* === המלצות חכמות === */}
+        {recommendations.length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="bg-gradient-to-l from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-2xl p-4"
+          >
+            <h3 className="font-bold text-gray-900 dark:text-white mb-2">💡 המלצות</h3>
+            <div className="space-y-2">
+              {recommendations.map((rec) => (
+                <div
+                  key={rec.id}
+                  className="flex items-center gap-3 p-3 bg-white/60 dark:bg-gray-800/60 rounded-xl"
+                >
+                  <span className="text-xl">{rec.icon}</span>
+                  <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">{rec.text}</span>
+                  {rec.action && (
+                    <button
+                      onClick={rec.action}
+                      className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded-lg transition-colors"
+                    >
+                      טפלי
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
+
+        {/* === פתקים מהירים === */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-sm"
+        >
+          <h3 className="font-bold text-gray-900 dark:text-white mb-3">📝 פתק מהיר</h3>
+          
+          <div className="flex gap-2">
+            <input
+              type="text"
+              value={quickNote}
+              onChange={(e) => setQuickNote(e.target.value)}
+              onKeyPress={(e) => e.key === 'Enter' && saveNote()}
+              placeholder="רשמי משהו..."
+              className="flex-1 px-4 py-2 border border-gray-200 dark:border-gray-600 rounded-xl bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <button
+              onClick={saveNote}
+              disabled={!quickNote.trim()}
+              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 disabled:bg-gray-300 text-white font-medium rounded-xl transition-colors"
+            >
+              💾
+            </button>
+          </div>
+          
+          {notes.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {(showAllNotes ? notes : notes.slice(0, 3)).map((note) => (
+                <div
+                  key={note.id}
+                  className="flex items-start gap-2 p-2 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg group"
+                >
+                  <span className="flex-1 text-sm text-gray-700 dark:text-gray-300">
+                    {note.text}
+                  </span>
+                  <button
+                    onClick={() => deleteNote(note.id)}
+                    className="text-gray-400 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity"
+                  >
+                    ✕
+                  </button>
+                </div>
+              ))}
+              {notes.length > 3 && (
+                <button
+                  onClick={() => setShowAllNotes(!showAllNotes)}
+                  className="text-sm text-blue-500 hover:underline"
+                >
+                  {showAllNotes ? 'הסתר' : `עוד ${notes.length - 3} פתקים...`}
+                </button>
+              )}
+            </div>
+          )}
+        </motion.div>
+
+        {/* === כפתורי פעולה === */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-3 gap-2"
         >
           <button
             onClick={() => setShowTaskForm(true)}
@@ -503,6 +807,28 @@ function SmartDashboard() {
             <span className="text-xs text-gray-600 dark:text-gray-400">משימה</span>
           </button>
           
+          <button
+            onClick={() => setShowUrgentForm(true)}
+            className="p-4 bg-gradient-to-br from-red-500 to-orange-500 rounded-xl shadow-sm hover:shadow-md transition-all text-center text-white"
+          >
+            <span className="text-2xl block mb-1">🚨</span>
+            <span className="text-xs">בלת"ם</span>
+          </button>
+          
+          <Link
+            to="/focus"
+            className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all text-center"
+          >
+            <span className="text-2xl block mb-1">🎯</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400">מיקוד</span>
+          </Link>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="grid grid-cols-3 gap-2"
+        >
           <Link
             to="/daily"
             className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all text-center"
@@ -520,11 +846,11 @@ function SmartDashboard() {
           </Link>
           
           <Link
-            to="/focus"
+            to="/insights"
             className="p-4 bg-white dark:bg-gray-800 rounded-xl shadow-sm hover:shadow-md transition-all text-center"
           >
-            <span className="text-2xl block mb-1">🎯</span>
-            <span className="text-xs text-gray-600 dark:text-gray-400">מיקוד</span>
+            <span className="text-2xl block mb-1">📊</span>
+            <span className="text-xs text-gray-600 dark:text-gray-400">תובנות</span>
           </Link>
         </motion.div>
 
@@ -534,16 +860,16 @@ function SmartDashboard() {
           <InsightsPanel tasks={tasks} />
         </div>
 
-        {/* === ניווט נוסף === */}
+        {/* === הגדרות === */}
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
-          className="flex justify-center gap-4 text-sm text-gray-500 pt-4"
+          className="flex justify-center pt-4"
         >
-          <Link to="/insights" className="hover:text-gray-700 dark:hover:text-gray-300">
-            📊 תובנות
-          </Link>
-          <Link to="/settings" className="hover:text-gray-700 dark:hover:text-gray-300">
+          <Link 
+            to="/settings" 
+            className="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+          >
             ⚙️ הגדרות
           </Link>
         </motion.div>
@@ -578,6 +904,20 @@ function SmartDashboard() {
             setShowTaskForm(false);
             setEditingTask(null);
           }}
+        />
+      </Modal>
+
+      {/* טופס בלת"ם */}
+      <Modal
+        isOpen={showUrgentForm}
+        onClose={() => setShowUrgentForm(false)}
+        title="🚨 הוספת בלת״ם"
+        maxWidth="max-w-lg"
+      >
+        <SimpleTaskForm
+          task={{ priority: 'urgent', due_date: todayISO }}
+          onSave={handleAddUrgent}
+          onCancel={() => setShowUrgentForm(false)}
         />
       </Modal>
 
