@@ -75,6 +75,12 @@ function IdleDetector() {
     let pausedTask = '';
     let pausedSince = null;
 
+    // בדיקה אם יש טיימר פעיל מ-FullScreenFocus
+    const activeTimer = localStorage.getItem('zmanit_active_timer');
+    if (activeTimer) {
+      hasRunningTimer = true;
+    }
+
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key?.startsWith('timer_v2_')) {
@@ -86,7 +92,20 @@ function IdleDetector() {
             // טיימר מושהה
             hasPausedTimer = true;
             pausedTask = data.taskTitle || '';
-            pausedSince = data.lastPausedAt ? new Date(data.lastPausedAt) : null;
+            // תיקון: חיפוש interruptionStart או lastPausedAt
+            const pauseTime = data.interruptionStart || data.lastPausedAt;
+            pausedSince = pauseTime ? new Date(pauseTime) : null;
+          }
+        } catch (e) {}
+      }
+      // בדיקה של zmanit_focus_paused (מ-FullScreenFocus)
+      if (key === 'zmanit_focus_paused') {
+        try {
+          const data = JSON.parse(localStorage.getItem(key));
+          if (data?.isPaused && data?.pausedAt) {
+            hasPausedTimer = true;
+            pausedTask = data.taskTitle || '';
+            pausedSince = new Date(data.pausedAt);
           }
         } catch (e) {}
       }
