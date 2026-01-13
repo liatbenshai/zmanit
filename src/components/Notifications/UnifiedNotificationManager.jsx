@@ -209,6 +209,13 @@ export function useUnifiedNotifications() {
   const checkTaskAlerts = useCallback((task, currentMinutes, today) => {
     if (!task.due_time) return;
     
+    // ✅ לא להתריע על משימות שנדחו בגלל בלת"מ
+    if (task.was_deferred) return;
+    
+    // ✅ וידוא שהמשימה באמת מתוכננת להיום
+    const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
+    if (taskDate !== today) return;
+    
     const [hour, min] = task.due_time.split(':').map(Number);
     const taskMinutes = hour * 60 + (min || 0);
     const diff = taskMinutes - currentMinutes;

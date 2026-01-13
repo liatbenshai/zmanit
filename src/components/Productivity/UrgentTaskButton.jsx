@@ -154,11 +154,11 @@ function UrgentTaskButton() {
 
       for (const task of deferredTasks) {
         await editTask(task.id, {
-          ...task,
-          dueDate: tomorrowISO,
-          title: task.title,
-          estimatedDuration: task.estimated_duration,
-          taskType: task.task_type
+          due_date: tomorrowISO,
+          due_time: null, // ✅ ניקוי השעה! המשימה נדחתה אז אין לה שעה מוגדרת למחר
+          was_deferred: true,
+          deferred_at: new Date().toISOString(),
+          deferred_reason: 'בלת"מ'
         });
       }
 
