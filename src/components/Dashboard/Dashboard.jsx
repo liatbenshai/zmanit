@@ -16,6 +16,7 @@ import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import InterruptionsTracker from './InterruptionsTracker';
 import MiniTimer from './MiniTimer';
 import SmartRecommendationsPanel from './SmartRecommendationsPanel';
+import DailyProgressCard from './DailyProgressCard';
 
 /**
  * שעות העבודה
@@ -316,6 +317,9 @@ function Dashboard({ onNavigate }) {
           </div>
         </motion.div>
 
+        {/* ✅ כרטיס התקדמות יומית חדש */}
+        <DailyProgressCard tasks={tasks} currentTime={currentTime} />
+
         {/* כרטיס המשימה הנוכחית */}
         <motion.div
           initial={{ opacity: 0, scale: 0.95 }}
@@ -388,35 +392,6 @@ function Dashboard({ onNavigate }) {
             console.log('Navigate to task:', task.id);
           }}
         />
-
-        {/* סטטיסטיקות */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="grid grid-cols-3 gap-3"
-        >
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow border border-gray-100 dark:border-gray-700">
-            <div className="text-3xl font-bold text-blue-600 dark:text-blue-400">
-              {todayStats.pending}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">משימות היום</div>
-          </div>
-          
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow border border-gray-100 dark:border-gray-700">
-            <div className="text-3xl font-bold text-green-600 dark:text-green-400">
-              {todayStats.completed}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">הושלמו</div>
-          </div>
-          
-          <div className="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow border border-gray-100 dark:border-gray-700">
-            <div className="text-3xl font-bold text-purple-600 dark:text-purple-400">
-              {formatMinutes(todayStats.totalPlannedMinutes).replace(" שעות", "h").replace(" דק'", "m")}
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400 mt-1">מתוכנן</div>
-          </div>
-        </motion.div>
 
         {/* ציר זמן - משימות היום */}
         <motion.div

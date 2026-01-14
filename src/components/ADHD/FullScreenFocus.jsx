@@ -77,7 +77,50 @@ export default function FullScreenFocus({
 
   // טיימר
   const [showTimeUpDialog, setShowTimeUpDialog] = useState(false); // 🆕 דיאלוג סיום זמן
+  const [showFeedbackOptions, setShowFeedbackOptions] = useState(false); // 🆕 הצגת אפשרויות משוב
+  const [taskExtended, setTaskExtended] = useState(false); // 🆕 האם המשימה הוארכה
   const timeUpTriggeredRef = useRef(false); // למניעת התראה כפולה
+  
+  // בדיקה אם המשימה כבר הוארכה בעבר
+  useEffect(() => {
+    if (task?.id) {
+      try {
+        const extensions = JSON.parse(localStorage.getItem('zmanit_task_extensions') || '{}');
+        setTaskExtended(!!extensions[task.id]?.extended);
+      } catch (e) {}
+    }
+  }, [task?.id]);
+  
+  // 🆕 שמירת משוב וסיום
+  const saveFeedbackAndComplete = async (feedback) => {
+    const minutesWorked = timeSpent + Math.floor(elapsedRef.current / 60);
+    try {
+      const feedbackData = JSON.parse(localStorage.getItem('zmanit_completion_feedback') || '[]');
+      feedbackData.push({
+        taskId: task?.id,
+        taskType: task?.task_type,
+        feedback,
+        actualDuration: minutesWorked,
+        estimatedDuration: estimated,
+        ratio: minutesWorked / estimated,
+        timestamp: new Date().toISOString()
+      });
+      // שומרים רק 100 אחרונים
+      if (feedbackData.length > 100) feedbackData.shift();
+      localStorage.setItem('zmanit_completion_feedback', JSON.stringify(feedbackData));
+    } catch (e) {}
+    
+    const messages = {
+      completed_all: '🎉 מעולה! סיימת הכל!',
+      completed_partial: '👍 טוב! סיימת חלק',
+      did_not_finish: '📝 נרשם - נלמד מזה'
+    };
+    
+    toast.success(messages[feedback]);
+    setShowTimeUpDialog(false);
+    setShowFeedbackOptions(false);
+    handleComplete();
+  };
 
   useEffect(() => {
     if (isRunning && !isPaused) {
@@ -607,60 +650,152 @@ export default function FullScreenFocus({
           </p>
         </div>
         
-        {/* 🆕 דיאלוג סיום זמן */}
+        {/* 🆕 דיאלוג סיום זמן - עם הארכה 20% ומשוב */}
         <AnimatePresence>
           {showTimeUpDialog && (
             <motion.div
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="absolute inset-0 bg-black/80 flex items-center justify-center p-4"
+              className="absolute inset-0 bg-black/80 flex items-center justify-center p-4 z-50"
             >
               <motion.div
                 initial={{ scale: 0.8, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
-                className="bg-white dark:bg-gray-800 rounded-3xl p-8 max-w-md w-full text-center"
+                className="bg-white dark:bg-gray-800 rounded-3xl p-6 max-w-md w-full"
                 dir="rtl"
               >
-                <div className="text-6xl mb-4">⏰</div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
-                  הזמן המוקצב נגמר!
-                </h2>
-                <p className="text-gray-600 dark:text-gray-400 mb-6">
-                  עבדת {formatDuration(totalMinutesWorked)} על "{task?.title}"
-                </p>
-                
-                <div className="space-y-3">
-                  <button
-                    onClick={() => {
-                      setShowTimeUpDialog(false);
-                      handleComplete();
-                    }}
-                    className="w-full py-4 bg-green-500 hover:bg-green-600 text-white font-bold rounded-xl text-lg transition-colors"
-                  >
-                    ✅ סיימתי את המשימה!
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      setShowTimeUpDialog(false);
-                      toast('⏰ ממשיכה לעבוד...', { icon: '💪' });
-                    }}
-                    className="w-full py-4 bg-blue-500 hover:bg-blue-600 text-white font-bold rounded-xl text-lg transition-colors"
-                  >
-                    🔄 צריכה עוד זמן
-                  </button>
-                  
-                  <button
-                    onClick={() => {
-                      setShowTimeUpDialog(false);
-                      handlePause();
-                    }}
-                    className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl transition-colors"
-                  >
-                    ⏸️ הפסקה
-                  </button>
-                </div>
+                {!showFeedbackOptions ? (
+                  <>
+                    {/* מצב ראשון - בחירה בין הארכה לסיום */}
+                    <div className="text-center mb-6">
+                      <div className="text-5xl mb-3">⏰</div>
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+                        הזמן המוקצב נגמר!
+                      </h2>
+                      <p className="text-gray-600 dark:text-gray-400 text-sm">
+                        עבדת {formatDuration(totalMinutesWorked)} על "{task?.title}"
+                      </p>
+                    </div>
+                    
+                    {/* סטטיסטיקה */}
+                    <div className="flex justify-center gap-4 mb-6">
+                      <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-2 text-center">
+                        <div className="text-xs text-gray-500">תוכנן</div>
+                        <div className="font-bold">{estimated} דק'</div>
+                      </div>
+                      <div className="bg-gray-100 dark:bg-gray-700 rounded-lg px-4 py-2 text-center">
+                        <div className="text-xs text-gray-500">בפועל</div>
+                        <div className="font-bold">{totalMinutesWorked} דק'</div>
+                      </div>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      {/* כפתור הארכה 20% - רק אם לא הוארכה */}
+                      {!taskExtended && (
+                        <button
+                          onClick={() => {
+                            const extensionMinutes = Math.ceil(estimated * 0.2);
+                            setTaskExtended(true);
+                            setShowTimeUpDialog(false);
+                            // שמירה ב-localStorage שהמשימה הוארכה
+                            try {
+                              const extensions = JSON.parse(localStorage.getItem('zmanit_task_extensions') || '{}');
+                              extensions[task.id] = { extended: true, timestamp: new Date().toISOString() };
+                              localStorage.setItem('zmanit_task_extensions', JSON.stringify(extensions));
+                            } catch (e) {}
+                            toast.success(`⏱️ נוספו ${extensionMinutes} דקות (20%)`, { duration: 3000 });
+                          }}
+                          className="w-full py-4 bg-gradient-to-r from-orange-400 to-amber-500 text-white font-bold rounded-xl text-lg shadow-lg shadow-orange-500/30 flex items-center justify-center gap-2"
+                        >
+                          <span>⏱️</span>
+                          <span>עוד {Math.ceil(estimated * 0.2)} דקות (20%)</span>
+                        </button>
+                      )}
+                      
+                      {taskExtended && (
+                        <div className="w-full py-3 bg-gray-100 dark:bg-gray-700 text-gray-500 font-medium rounded-xl text-center">
+                          ⚠️ כבר השתמשת בהארכה
+                        </div>
+                      )}
+                      
+                      <button
+                        onClick={() => setShowFeedbackOptions(true)}
+                        className="w-full py-4 bg-gradient-to-r from-green-500 to-emerald-600 text-white font-bold rounded-xl text-lg shadow-lg shadow-green-500/30"
+                      >
+                        ✓ סיימתי - תני משוב
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          setShowTimeUpDialog(false);
+                          toast('💪 ממשיכה...', { duration: 2000 });
+                        }}
+                        className="w-full py-3 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 font-medium rounded-xl"
+                      >
+                        ממשיכה בלי הארכה
+                      </button>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    {/* מצב שני - משוב על הספק */}
+                    <div className="text-center mb-6">
+                      <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                        איך הרגשת עם ההספק?
+                      </h2>
+                      <p className="text-gray-500 text-sm mt-1">המערכת לומדת כדי להציע הערכות טובות יותר</p>
+                    </div>
+                    
+                    <div className="space-y-3">
+                      <button
+                        onClick={() => {
+                          saveFeedbackAndComplete('completed_all');
+                        }}
+                        className="w-full p-4 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 rounded-xl font-medium flex items-center gap-3 hover:bg-green-200 transition-colors"
+                      >
+                        <span className="text-2xl">😊</span>
+                        <div className="text-right">
+                          <div className="font-bold">סיימתי הכל!</div>
+                          <div className="text-sm opacity-75">עשיתי את כל מה שרציתי</div>
+                        </div>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          saveFeedbackAndComplete('completed_partial');
+                        }}
+                        className="w-full p-4 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-xl font-medium flex items-center gap-3 hover:bg-yellow-200 transition-colors"
+                      >
+                        <span className="text-2xl">😐</span>
+                        <div className="text-right">
+                          <div className="font-bold">סיימתי חלקית</div>
+                          <div className="text-sm opacity-75">עשיתי את הרוב אבל לא הכל</div>
+                        </div>
+                      </button>
+                      
+                      <button
+                        onClick={() => {
+                          saveFeedbackAndComplete('did_not_finish');
+                        }}
+                        className="w-full p-4 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-xl font-medium flex items-center gap-3 hover:bg-red-200 transition-colors"
+                      >
+                        <span className="text-2xl">😓</span>
+                        <div className="text-right">
+                          <div className="font-bold">לא הספקתי</div>
+                          <div className="text-sm opacity-75">צריך יותר זמן בפעם הבאה</div>
+                        </div>
+                      </button>
+                      
+                      <button
+                        onClick={() => setShowFeedbackOptions(false)}
+                        className="w-full py-2 text-gray-500 text-sm"
+                      >
+                        ← חזרה
+                      </button>
+                    </div>
+                  </>
+                )}
               </motion.div>
             </motion.div>
           )}
