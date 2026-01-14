@@ -17,7 +17,7 @@ import { AddWeekTaskButton, PanicButton, TimerEndDialog } from '../ADHD';
  * דשבורד ממוקד - תצוגה נקייה למה שחשוב עכשיו
  */
 function FocusedDashboard() {
-  const { tasks, loading, toggleComplete, loadTasks, addTask, editTask, updateTaskTime } = useTasks();
+  const { tasks, loading, toggleComplete, loadTasks, addTask, editTask, updateTaskTime, dataVersion } = useTasks();
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -109,7 +109,7 @@ function FocusedDashboard() {
         const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
         return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
       });
-  }, [tasks, showCompleted]);
+  }, [tasks, showCompleted, dataVersion]);
 
   // המשימה הנוכחית (הבאה בתור)
   const currentTask = useMemo(() => {

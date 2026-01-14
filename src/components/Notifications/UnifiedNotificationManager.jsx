@@ -160,6 +160,25 @@ export function useUnifiedNotifications() {
       return taskDate === today && task.due_time;
     });
     
+    // ✅ יצירת בלוקים מתוזמנים עבור alertManager
+    const scheduledBlocks = todayTasks.map(task => {
+      const [h, m] = (task.due_time || '09:00').split(':').map(Number);
+      const startMinute = h * 60 + (m || 0);
+      const duration = task.estimated_duration || 30;
+      return {
+        taskId: task.id,
+        title: task.title,
+        dayDate: today,
+        startMinute,
+        endMinute: startMinute + duration,
+        startTime: task.due_time,
+        isCompleted: task.is_completed
+      };
+    });
+    
+    // ✅ קריאה ל-alertManager לבדיקת התראות חכמות
+    alertManager.checkScheduledTasks(tasks, scheduledBlocks);
+    
     todayTasks.forEach(task => {
       checkTaskAlerts(task, currentMinutes, today);
     });

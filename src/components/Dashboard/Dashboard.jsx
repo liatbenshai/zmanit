@@ -15,6 +15,7 @@ import WorkPreferences from '../Settings/WorkPreferences';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import InterruptionsTracker from './InterruptionsTracker';
 import MiniTimer from './MiniTimer';
+import SmartRecommendationsPanel from './SmartRecommendationsPanel';
 
 /**
  * שעות העבודה
@@ -101,7 +102,7 @@ function getGreeting() {
  */
 function Dashboard({ onNavigate }) {
   const { user } = useAuth();
-  const { tasks, loading, loadTasks, editTask } = useTasks();
+  const { tasks, loading, loadTasks, editTask, dataVersion } = useTasks();
   const [currentTime, setCurrentTime] = useState(getCurrentTime());
   const [lastAlertedTask, setLastAlertedTask] = useState(null);
   const [showTaskAlert, setShowTaskAlert] = useState(false);
@@ -140,7 +141,7 @@ function Dashboard({ onNavigate }) {
     return tasks
       .filter(t => t.due_date === today && !t.is_completed && t.due_time)
       .sort((a, b) => timeToMinutes(a.due_time) - timeToMinutes(b.due_time));
-  }, [tasks, today]);
+  }, [tasks, today, dataVersion]);
 
   // המשימה הנוכחית
   const currentTask = useMemo(() => {
@@ -641,6 +642,13 @@ function Dashboard({ onNavigate }) {
             <span>⚙️</span> העדפות
           </button>
         </motion.div>
+
+        {/* 🤖 המלצות חכמות */}
+        <SmartRecommendationsPanel 
+          tasks={tasks}
+          onUpdateTask={editTask}
+          onRefresh={loadTasks}
+        />
       </div>
 
       {/* מודלים */}
