@@ -20,6 +20,7 @@ import InstallPrompt from './components/PWA/InstallPrompt';
 import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
+import FloatingNowWidget from './components/Productivity/FloatingNowWidget';
 // ✅ מנהל התראות מאוחד - מחליף את NotificationChecker + OverdueTaskManager
 import UnifiedNotificationManager from './components/Notifications/UnifiedNotificationManager';
 import { DeadlineConflictManager } from './components/Notifications/DeadlineConflictModal';
@@ -72,6 +73,9 @@ function App() {
 
       {/* כפתור עבודה דחופה */}
       {user && <UrgentTaskButton />}
+
+      {/* ווידג'ט צף "עכשיו" */}
+      {user && <FloatingNowWidget />}
 
       {/* סיכום יומי */}
       {user && <EndOfDayPopup />}
