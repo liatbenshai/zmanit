@@ -10,6 +10,7 @@ import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
 import RescheduleModal from './RescheduleModal';
 import FullScreenFocus from '../ADHD/FullScreenFocus'; // ✅ תצוגה ממוקדת
+import DayOverrideButton, { getEffectiveHoursForDate } from './DayOverrideButton'; // ✅ דריסות יום
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
 import { sortTasksByOrder, saveTaskOrder } from '../../utils/taskOrder';
@@ -208,6 +209,9 @@ function DailyView() {
   // ✅ תצוגה ממוקדת
   const [focusTask, setFocusTask] = useState(null);
   const [showFocus, setShowFocus] = useState(false);
+  
+  // ✅ רענון לוח זמנים אחרי דריסה
+  const [scheduleRefresh, setScheduleRefresh] = useState(0);
   
   // ✅ חדש: בדיקת טיימרים כל 5 שניות
   useEffect(() => {
@@ -1038,12 +1042,30 @@ function DailyView() {
           </button>
         </div>
         
-        <p className="text-center text-gray-500 dark:text-gray-400 mt-2 text-sm">
-          {(() => {
-            const schedule = getDaySchedule(selectedDate);
-            return `${schedule.label}: ${schedule.startStr} - ${schedule.endStr}`;
-          })()}
-        </p>
+        <div className="flex items-center justify-center gap-2 mt-2">
+          <p className="text-gray-500 dark:text-gray-400 text-sm">
+            {(() => {
+              const schedule = getDaySchedule(selectedDate);
+              const effective = getEffectiveHoursForDate(selectedDate, schedule);
+              return (
+                <>
+                  {schedule.label}: {effective.startStr || schedule.startStr} - {effective.endStr || schedule.endStr}
+                  {effective.hasOverride && (
+                    <span className="text-purple-500 mr-1"> (מותאם)</span>
+                  )}
+                </>
+              );
+            })()}
+          </p>
+          <DayOverrideButton 
+            date={selectedDate}
+            currentSchedule={getDaySchedule(selectedDate)}
+            onScheduleChange={() => {
+              setScheduleRefresh(prev => prev + 1);
+              loadTasks();
+            }}
+          />
+        </div>
       </motion.div>
 
       <motion.div

@@ -640,7 +640,7 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
                 
                 {/* תפריט העברה */}
                 {showMoveMenu && (
-                  <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[140px]">
+                  <div className="absolute left-0 top-full mt-1 bg-white dark:bg-gray-800 rounded-lg shadow-lg border border-gray-200 dark:border-gray-700 py-1 z-20 min-w-[160px]">
                     <button
                       onClick={handleMoveToTomorrow}
                       className="w-full px-3 py-2 text-right text-sm hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center gap-2"
@@ -662,6 +662,34 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
                       <span>🗓️</span>
                       <span>עוד שבוע</span>
                     </button>
+                    
+                    {/* אפשרות לשחרר שעה קבועה */}
+                    {currentTask.due_time && (
+                      <>
+                        <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            try {
+                              await editTask(currentTask.id, { 
+                                due_time: null,
+                                is_fixed_time: false 
+                              });
+                              toast.success('🔓 השעה שוחררה - המשימה גמישה עכשיו');
+                              setShowMoveMenu(false);
+                              if (onUpdate) onUpdate();
+                            } catch (err) {
+                              toast.error('שגיאה בשחרור השעה');
+                            }
+                          }}
+                          className="w-full px-3 py-2 text-right text-sm hover:bg-purple-100 dark:hover:bg-purple-900/30 text-purple-600 dark:text-purple-400 flex items-center gap-2"
+                        >
+                          <span>🔓</span>
+                          <span>שחרר שעה קבועה</span>
+                        </button>
+                      </>
+                    )}
+                    
                     <div className="border-t border-gray-200 dark:border-gray-700 my-1"></div>
                     <button
                       onClick={() => setShowMoveMenu(false)}
