@@ -4,6 +4,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import FullScreenFocus from '../ADHD/FullScreenFocus';
+import { getDayOverrides } from '../DailyView/DayOverrideButton';
+import { WORK_HOURS } from '../../config/workSchedule';
 import toast from 'react-hot-toast';
 
 /**
@@ -193,7 +195,7 @@ function IdleDetector() {
     return { hasRunningTimer, hasPausedTimer, pausedTask, pausedSince };
   }, []);
 
-  // בדיקה אם זה שעות עבודה
+  // בדיקה אם זה שעות עבודה - עם תמיכה בדריסות יום
   const checkWorkHours = useCallback(() => {
     // מצב בדיקה - תמיד מחזיר true
     if (TEST_MODE) return true;
@@ -202,17 +204,36 @@ function IdleDetector() {
     const hour = now.getHours();
     const minutes = now.getMinutes();
     const day = now.getDay();
+    const dateISO = now.toISOString().split('T')[0];
     
-    // ימים א'-ה' (0=ראשון, 5=שישי, 6=שבת)
-    const isWorkDay = day >= 0 && day <= 4;
+    // קבלת הגדרות יום העבודה מ-WORK_HOURS
+    const dayConfig = WORK_HOURS[day];
+    if (!dayConfig || !dayConfig.enabled) {
+      return false; // יום לא פעיל (שישי/שבת)
+    }
     
-    // שעות 08:30-16:15
-    const currentTime = hour * 60 + minutes; // זמן נוכחי בדקות
-    const startTime = 8 * 60 + 30;  // 08:30 = 510 דקות
-    const endTime = 16 * 60 + 15;   // 16:15 = 975 דקות
+    // בדיקת דריסות יום (אם המשתמש שינה שעות ליום ספציפי)
+    const overrides = getDayOverrides();
+    const dayOverride = overrides[dateISO];
+    
+    // שימוש בשעות מותאמות או ברירת מחדל
+    let startHour, endHour;
+    if (dayOverride) {
+      startHour = dayOverride.start; // פורמט עשרוני: 8.5 = 08:30
+      endHour = dayOverride.end;
+    } else {
+      startHour = dayConfig.start;
+      endHour = dayConfig.end;
+    }
+    
+    // המרה לדקות
+    const currentTime = hour * 60 + minutes;
+    const startTime = Math.floor(startHour * 60);
+    const endTime = Math.floor(endHour * 60);
+    
     const isWorkTime = currentTime >= startTime && currentTime <= endTime;
     
-    return isWorkDay && isWorkTime;
+    return isWorkTime;
   }, []);
 
   // בדיקה תקופתית
@@ -382,12 +403,12 @@ function IdleDetector() {
     <AnimatePresence>
       {showAlert && (
         <>
-          {/* רקע כהה */}
+          {/* רקע כהה - מעל FullScreenFocus */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50"
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[10000]"
             onClick={handleSnooze}
           />
           
@@ -397,7 +418,7 @@ function IdleDetector() {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             transition={{ type: "spring", damping: 25, stiffness: 300 }}
-            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50
+            className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[10001]
                        w-[95%] max-w-2xl bg-white dark:bg-gray-800 rounded-3xl shadow-2xl
                        overflow-hidden"
             dir="rtl"
