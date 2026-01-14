@@ -9,6 +9,8 @@ import toast from 'react-hot-toast';
  * 
  * נפתח כשלוחצים "התחל לעבוד" על משימה
  * מציג רק את המשימה הנוכחית עם טיימר גדול
+ * 
+ * 🔧 תיקון: שימוש ב-Date.now() במקום setInterval לספירת זמן מדויקת
  */
 
 // פורמט זמן MM:SS
@@ -37,6 +39,7 @@ export default function FullScreenFocus({
   const [isRunning, setIsRunning] = useState(true);
   const [isPaused, setIsPaused] = useState(false);
   const [startTime, setStartTime] = useState(null);
+  const [accumulatedSeconds, setAccumulatedSeconds] = useState(0); // 🔧 זמן שנצבר לפני השהיות
   const [showInterruptionModal, setShowInterruptionModal] = useState(false); // 🆕 פופאפ בלת"ם
   const [interruptionTitle, setInterruptionTitle] = useState(''); // 🆕 כותרת בלת"ם
   const [showLogInterruptionModal, setShowLogInterruptionModal] = useState(false); // 🆕 תיעוד הפרעה
@@ -44,6 +47,7 @@ export default function FullScreenFocus({
   const [interruptionNote, setInterruptionNote] = useState(''); // 🆕 הערה להפרעה
   const intervalRef = useRef(null);
   const elapsedRef = useRef(0);
+  const startTimeRef = useRef(null); // 🔧 שמירת זמן התחלה ב-ref
 
   // 🆕 סוגי הפרעות
   const INTERRUPTION_TYPES = {
@@ -64,29 +68,37 @@ export default function FullScreenFocus({
   // התחלת טיימר כשנפתח
   useEffect(() => {
     if (isOpen && task) {
-      setStartTime(new Date());
+      const now = Date.now();
+      setStartTime(now);
+      startTimeRef.current = now;
       setElapsedSeconds(0);
+      setAccumulatedSeconds(0);
       setIsRunning(true);
       setIsPaused(false);
+      elapsedRef.current = 0;
       
-      // שמירת מצב טיימר
+      // שמירת מצב טיימר ל-localStorage (לשחזור אם הדף נסגר)
       localStorage.setItem('zmanit_active_timer', task.id);
-      console.log('🎯 FullScreenFocus נפתח - טיימר:', task.id);
+      localStorage.setItem('zmanit_timer_start', now.toString());
+      console.log('🎯 FullScreenFocus נפתח - טיימר:', task.id, 'התחלה:', new Date(now).toLocaleTimeString());
     }
   }, [isOpen, task?.id]);
 
-  // טיימר
-  const [showTimeUpDialog, setShowTimeUpDialog] = useState(false); // 🆕 דיאלוג סיום זמן
-  const timeUpTriggeredRef = useRef(false); // למניעת התראה כפולה
+  // 🔧 טיימר משופר - מבוסס Date.now() במקום ספירה
+  const [showTimeUpDialog, setShowTimeUpDialog] = useState(false);
+  const timeUpTriggeredRef = useRef(false);
 
   useEffect(() => {
-    if (isRunning && !isPaused) {
+    if (isRunning && !isPaused && startTimeRef.current) {
+      // עדכון כל 100ms לדיוק מקסימלי
       intervalRef.current = setInterval(() => {
-        setElapsedSeconds(prev => {
-          elapsedRef.current = prev + 1;
-          return prev + 1;
-        });
-      }, 1000);
+        const now = Date.now();
+        const currentSessionSeconds = Math.floor((now - startTimeRef.current) / 1000);
+        const totalSeconds = accumulatedSeconds + currentSessionSeconds;
+        
+        setElapsedSeconds(totalSeconds);
+        elapsedRef.current = totalSeconds;
+      }, 100); // 🔧 עדכון כל 100ms במקום 1000ms
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -98,7 +110,7 @@ export default function FullScreenFocus({
         clearInterval(intervalRef.current);
       }
     };
-  }, [isRunning, isPaused]);
+  }, [isRunning, isPaused, accumulatedSeconds]);
 
   // 🆕 בדיקה אם הזמן המוקצב נגמר
   useEffect(() => {
@@ -160,21 +172,28 @@ export default function FullScreenFocus({
     setIsPaused(true);
     localStorage.removeItem('zmanit_active_timer');
     
-    // שמירת מצב השהייה ל-IdleDetector
+    // 🔧 שמירת הזמן שנצבר עד עכשיו
+    const currentSessionSeconds = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0;
+    const totalSeconds = accumulatedSeconds + currentSessionSeconds;
+    setAccumulatedSeconds(totalSeconds);
+    
+    // שמירת מצב השהייה ל-localStorage
     localStorage.setItem('zmanit_focus_paused', JSON.stringify({
       isPaused: true,
       pausedAt: new Date().toISOString(),
       taskId: task.id,
-      taskTitle: task.title
+      taskTitle: task.title,
+      accumulatedSeconds: totalSeconds // 🔧 שמירת הזמן שנצבר
     }));
     
-    const minutesWorked = Math.floor(elapsedRef.current / 60);
-    if (onPause && minutesWorked > 0) {
-      await onPause(minutesWorked);
-      console.log('💾 FullScreenFocus handlePause - נשמרו:', minutesWorked, 'דקות');
-      // 🆕 איפוס אחרי שמירה כדי לא לספור פעמיים
-      elapsedRef.current = 0;
-      setElapsedSeconds(0);
+    // שמירת דקות ל-DB (רק אם יש דקות שלמות חדשות)
+    const totalMinutes = Math.floor(totalSeconds / 60);
+    const previouslySavedMinutes = Math.floor(accumulatedSeconds / 60);
+    const newMinutes = totalMinutes - previouslySavedMinutes;
+    
+    if (onPause && newMinutes > 0) {
+      await onPause(newMinutes);
+      console.log('💾 FullScreenFocus handlePause - נשמרו:', newMinutes, 'דקות חדשות, סה"כ:', totalMinutes, 'דקות');
     }
     
     toast('⏸️ מושהה');
@@ -182,23 +201,33 @@ export default function FullScreenFocus({
 
   // המשך
   const handleResume = () => {
+    // 🔧 התחלת סשן חדש עם שמירת הזמן שנצבר
+    const now = Date.now();
+    startTimeRef.current = now;
+    localStorage.setItem('zmanit_timer_start', now.toString());
+    
     setIsRunning(true);
     setIsPaused(false);
     localStorage.setItem('zmanit_active_timer', task.id);
-    localStorage.removeItem('zmanit_focus_paused'); // מחיקת מצב השהייה
+    localStorage.removeItem('zmanit_focus_paused');
     toast.success('▶️ ממשיכים!');
   };
 
   // סיום
   const handleComplete = async () => {
     localStorage.removeItem('zmanit_active_timer');
-    localStorage.removeItem('zmanit_focus_paused'); // ניקוי מצב השהייה
-    const minutesWorked = Math.floor(elapsedRef.current / 60);
+    localStorage.removeItem('zmanit_focus_paused');
+    localStorage.removeItem('zmanit_timer_start'); // 🔧 ניקוי זמן התחלה
     
-    // 🔧 תיקון: await לשמירת הזמן לפני סימון כהושלם
-    if (onTimeUpdate) {
+    // 🔧 חישוב סה"כ זמן עבודה מדויק
+    const currentSessionSeconds = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0;
+    const totalSeconds = accumulatedSeconds + currentSessionSeconds;
+    const minutesWorked = Math.floor(totalSeconds / 60);
+    
+    // שמירת הזמן לפני סימון כהושלם
+    if (onTimeUpdate && minutesWorked > 0) {
       await onTimeUpdate(minutesWorked);
-      console.log('💾 FullScreenFocus handleComplete - נשמרו:', minutesWorked, 'דקות');
+      console.log('💾 FullScreenFocus handleComplete - נשמרו:', minutesWorked, 'דקות (', totalSeconds, 'שניות)');
     }
     
     if (onComplete) {
@@ -425,13 +454,14 @@ export default function FullScreenFocus({
                   {/* כפתור ראשי - עצור ושמור */}
                   <button
                     onClick={async () => {
+                      // 🔧 חישוב זמן מדויק
+                      const currentSessionSeconds = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0;
+                      const totalSeconds = accumulatedSeconds + currentSessionSeconds;
+                      const minutesWorked = Math.floor(totalSeconds / 60);
+                      
                       // 1. שמירת הזמן
-                      const minutesWorked = Math.floor(elapsedRef.current / 60);
                       if (onPause && minutesWorked > 0) {
                         await onPause(minutesWorked);
-                        // איפוס אחרי שמירה
-                        elapsedRef.current = 0;
-                        setElapsedSeconds(0);
                       }
                       
                       // 2. תיעוד ההפרעה
@@ -446,6 +476,7 @@ export default function FullScreenFocus({
                       
                       // 3. ניקוי
                       localStorage.removeItem('zmanit_active_timer');
+                      localStorage.removeItem('zmanit_timer_start');
                       toast.success(`💾 נשמרו ${minutesWorked} דקות. הפרעה תועדה.`);
                       setInterruptionNote('');
                       setShowLogInterruptionModal(false);
@@ -453,7 +484,7 @@ export default function FullScreenFocus({
                     }}
                     className="w-full py-3 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-xl transition-colors"
                   >
-                    ⏹️ עצור ושמור ({Math.floor(elapsedRef.current / 60)} דקות)
+                    ⏹️ עצור ושמור ({Math.floor((accumulatedSeconds + (startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0)) / 60)} דקות)
                   </button>
                   
                   {/* כפתור משני - רק תעד וחזור */}
@@ -527,13 +558,14 @@ export default function FullScreenFocus({
                   <button
                     onClick={async () => {
                       if (interruptionTitle.trim() && onAddTask) {
+                        // 🔧 חישוב זמן מדויק
+                        const currentSessionSeconds = startTimeRef.current ? Math.floor((Date.now() - startTimeRef.current) / 1000) : 0;
+                        const totalSeconds = accumulatedSeconds + currentSessionSeconds;
+                        const minutesWorked = Math.floor(totalSeconds / 60);
+                        
                         // 1. שמירת הזמן של המשימה הנוכחית
-                        const minutesWorked = Math.floor(elapsedRef.current / 60);
                         if (onPause && minutesWorked > 0) {
                           await onPause(minutesWorked);
-                          // איפוס אחרי שמירה
-                          elapsedRef.current = 0;
-                          setElapsedSeconds(0);
                         }
                         
                         // 2. הוספת הבלת"מ
@@ -548,6 +580,7 @@ export default function FullScreenFocus({
                         
                         // 3. ניקוי וסגירה
                         localStorage.removeItem('zmanit_active_timer');
+                        localStorage.removeItem('zmanit_timer_start');
                         toast.success(`💾 נשמרו ${minutesWorked} דקות. בלת"ם נוסף!`);
                         setInterruptionTitle('');
                         setShowInterruptionModal(false);
