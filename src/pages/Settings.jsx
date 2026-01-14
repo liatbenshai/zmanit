@@ -324,8 +324,31 @@ function TaskTypesSettings() {
   const [selectedCategory, setSelectedCategory] = useState('home');
   const [showAddForm, setShowAddForm] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  const [editingType, setEditingType] = useState(null);
+  const [builtInOverrides, setBuiltInOverrides] = useState({});
+
+  // טעינת התאמות מובנים
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem('zmanit_builtin_overrides');
+      if (saved) setBuiltInOverrides(JSON.parse(saved));
+    } catch (e) {}
+  }, [refreshKey]);
 
   const refresh = () => setRefreshKey(k => k + 1);
+  
+  // בדיקה אם סוג מובנה שונה
+  const isBuiltInModified = (typeId) => !!builtInOverrides[typeId];
+  
+  // איפוס סוג מובנה
+  const resetBuiltInType = (typeId) => {
+    const newOverrides = { ...builtInOverrides };
+    delete newOverrides[typeId];
+    localStorage.setItem('zmanit_builtin_overrides', JSON.stringify(newOverrides));
+    setBuiltInOverrides(newOverrides);
+    toast.success('סוג המשימה אופס להגדרות המקוריות');
+    refresh();
+  };
 
   // קבלת סוגים לפי קטגוריה
   const typesForCategory = getTaskTypesByCategory(selectedCategory);
@@ -378,32 +401,53 @@ function TaskTypesSettings() {
                   {type.name}
                 </p>
                 <p className="text-xs text-gray-500">
-                  {type.inputType === 'recording' && `הקלטה × ${type.timeRatio}`}
-                  {type.inputType === 'pages' && `${type.timePerPage} דק' לעמוד`}
-                  {type.inputType === 'direct' && `${type.defaultDuration} דק' ברירת מחדל`}
+                  {type.defaultDuration} דק' ברירת מחדל
+                  {' • '}
+                  {type.isBuiltIn 
+                    ? (isBuiltInModified(type.id) ? '✨ מותאם' : 'מובנה') 
+                    : 'מותאם אישית'}
                 </p>
               </div>
             </div>
             
-            {type.isBuiltIn ? (
-              <span className="text-xs bg-gray-200 dark:bg-gray-600 text-gray-600 dark:text-gray-300 px-2 py-1 rounded">
-                מובנה
-              </span>
-            ) : (
+            {/* כפתורי פעולה - לכל הסוגים */}
+            <div className="flex gap-1">
               <button
-                onClick={() => {
-                  if (confirm(`למחוק את "${type.name}"?`)) {
-                    deleteCustomTaskType(type.id);
-                    refresh();
-                    toast.success('סוג המשימה נמחק');
-                  }
-                }}
-                className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-gray-500 hover:text-red-600 transition-colors"
-                title="מחק"
+                onClick={() => setEditingType(type)}
+                className="p-2 hover:bg-white/50 dark:hover:bg-gray-600 rounded-lg transition-colors"
+                title="ערוך"
               >
-                🗑️
+                ✏️
               </button>
-            )}
+              {type.isBuiltIn && isBuiltInModified(type.id) && (
+                <button
+                  onClick={() => {
+                    if (confirm(`לאפס את "${type.name}" להגדרות המקוריות?`)) {
+                      resetBuiltInType(type.id);
+                    }
+                  }}
+                  className="p-2 hover:bg-orange-100 dark:hover:bg-orange-900/30 rounded-lg transition-colors"
+                  title="אפס להגדרות מקוריות"
+                >
+                  🔄
+                </button>
+              )}
+              {!type.isBuiltIn && (
+                <button
+                  onClick={() => {
+                    if (confirm(`למחוק את "${type.name}"?`)) {
+                      deleteCustomTaskType(type.id);
+                      refresh();
+                      toast.success('סוג המשימה נמחק');
+                    }
+                  }}
+                  className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg text-gray-500 hover:text-red-600 transition-colors"
+                  title="מחק"
+                >
+                  🗑️
+                </button>
+              )}
+            </div>
           </div>
         ))}
       </div>
@@ -436,8 +480,46 @@ function TaskTypesSettings() {
 
       {/* הסבר */}
       <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
-        💡 <strong>טיפ:</strong> סוגי משימות מותאמים נשמרים בדפדפן. הם יופיעו בטופס הוספת משימה חדשה.
+        💡 <strong>טיפ:</strong> ניתן לערוך את כל סוגי המשימות. שינויים נשמרים בדפדפן.
       </div>
+      
+      {/* מודל עריכה */}
+      {editingType && (
+        <EditTaskTypeModal
+          taskType={editingType}
+          onSave={(updates) => {
+            // עדכון הסוג - תומך גם במובנים וגם במותאמים
+            if (editingType.isBuiltIn) {
+              // סוג מובנה - שומרים כ-override
+              const overridesKey = 'zmanit_builtin_overrides';
+              let overrides = {};
+              try {
+                const saved = localStorage.getItem(overridesKey);
+                if (saved) overrides = JSON.parse(saved);
+              } catch (e) {}
+              
+              overrides[editingType.id] = {
+                ...overrides[editingType.id],
+                ...updates
+              };
+              localStorage.setItem(overridesKey, JSON.stringify(overrides));
+              toast.success(`סוג המשימה "${updates.name}" עודכן`);
+            } else {
+              // סוג מותאם אישית
+              const customTypes = loadCustomTaskTypes();
+              if (customTypes[editingType.id]) {
+                customTypes[editingType.id] = { ...customTypes[editingType.id], ...updates };
+                localStorage.setItem('zmanit_custom_task_types', JSON.stringify(customTypes));
+                toast.success('סוג המשימה עודכן');
+              }
+            }
+            
+            setEditingType(null);
+            refresh();
+          }}
+          onClose={() => setEditingType(null)}
+        />
+      )}
     </div>
   );
 }
@@ -547,6 +629,127 @@ function AddTaskTypeForm({ category, onSave, onCancel }) {
         </Button>
       </div>
     </form>
+  );
+}
+
+/**
+ * מודל עריכת סוג משימה
+ */
+function EditTaskTypeModal({ taskType, onSave, onClose }) {
+  const [name, setName] = useState(taskType.name);
+  const [icon, setIcon] = useState(taskType.icon);
+  const [defaultDuration, setDefaultDuration] = useState(taskType.defaultDuration || 30);
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) {
+      toast.error('נא להזין שם');
+      return;
+    }
+    onSave({ name: name.trim(), icon, defaultDuration });
+  };
+  
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[60] p-4" dir="rtl">
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        className="bg-white dark:bg-gray-800 rounded-xl p-6 w-full max-w-md shadow-xl"
+      >
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-bold text-gray-900 dark:text-white">
+            ✏️ עריכת "{taskType.name}"
+          </h3>
+          <button
+            onClick={onClose}
+            className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg"
+          >
+            ✕
+          </button>
+        </div>
+        
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* שם ואייקון */}
+          <div className="flex gap-3">
+            <div className="relative">
+              <button
+                type="button"
+                onClick={() => setShowEmojiPicker(!showEmojiPicker)}
+                className="w-14 h-14 text-3xl bg-gray-50 dark:bg-gray-900 border border-gray-300 
+                           dark:border-gray-600 rounded-lg hover:border-blue-400 transition-colors"
+              >
+                {icon}
+              </button>
+              
+              {showEmojiPicker && (
+                <div className="absolute top-full right-0 mt-2 p-2 bg-white dark:bg-gray-800 
+                                border border-gray-200 dark:border-gray-700 rounded-lg shadow-lg z-10
+                                grid grid-cols-8 gap-1 w-72">
+                  {COMMON_EMOJIS.map(emoji => (
+                    <button
+                      key={emoji}
+                      type="button"
+                      onClick={() => {
+                        setIcon(emoji);
+                        setShowEmojiPicker(false);
+                      }}
+                      className="w-8 h-8 text-xl hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                    >
+                      {emoji}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+            
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
+                         bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+              autoFocus
+            />
+          </div>
+          
+          {/* זמן ברירת מחדל */}
+          <div>
+            <label className="block text-sm text-gray-600 dark:text-gray-400 mb-1">
+              זמן ברירת מחדל (דקות)
+            </label>
+            <input
+              type="number"
+              value={defaultDuration}
+              onChange={(e) => setDefaultDuration(parseInt(e.target.value) || 30)}
+              min="5"
+              max="480"
+              className="w-32 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg
+                         bg-white dark:bg-gray-800 text-gray-900 dark:text-white"
+            />
+          </div>
+          
+          {/* כפתורים */}
+          <div className="flex gap-2 pt-2">
+            <button
+              type="submit"
+              className="flex-1 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 
+                         transition-colors font-medium"
+            >
+              שמור ✓
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:bg-gray-200 
+                         dark:hover:bg-gray-700 rounded-lg transition-colors"
+            >
+              ביטול
+            </button>
+          </div>
+        </form>
+      </motion.div>
+    </div>
   );
 }
 
