@@ -45,10 +45,11 @@ export function sendLocalNotification(title, options = {}) {
     return null;
   }
   
-  // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
+  // 🔧 בדיקה ספציפית: אם הטיימר רץ על המשימה הזו - לא לשלוח
   const activeTimer = localStorage.getItem('zmanit_active_timer');
-  if (activeTimer) {
-    console.log('🔇 pushNotifications: יש טיימר פעיל - לא שולח התראה');
+  const taskId = options.taskId || options.data?.taskId;
+  if (activeTimer && taskId && activeTimer === taskId) {
+    console.log('🔇 pushNotifications: טיימר רץ על המשימה הזו - לא שולח');
     return null;
   }
 

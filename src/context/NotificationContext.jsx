@@ -53,10 +53,10 @@ function sendLocalNotification(title, options = {}) {
   if (!isNotificationSupported()) return null;
   if (Notification.permission !== 'granted') return null;
   
-  // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
+  // 🔧 בדיקה ספציפית: אם הטיימר רץ על המשימה הזו - לא לשלוח
   const activeTimer = localStorage.getItem('zmanit_active_timer');
-  if (activeTimer) {
-    console.log('🔇 NotificationContext: יש טיימר פעיל - לא שולח התראה');
+  if (activeTimer && options.taskId && activeTimer === options.taskId) {
+    console.log('🔇 NotificationContext: טיימר רץ על המשימה הזו - לא שולח');
     return null;
   }
 

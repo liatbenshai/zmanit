@@ -17,7 +17,7 @@ import { AddWeekTaskButton, PanicButton, TimerEndDialog } from '../ADHD';
  * דשבורד ממוקד - תצוגה נקייה למה שחשוב עכשיו
  */
 function FocusedDashboard() {
-  const { tasks, loading, toggleComplete, loadTasks, addTask, editTask } = useTasks();
+  const { tasks, loading, toggleComplete, loadTasks, addTask, editTask, updateTaskTime } = useTasks();
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [showCompleted, setShowCompleted] = useState(false);
@@ -31,6 +31,9 @@ function FocusedDashboard() {
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [taskToEnd, setTaskToEnd] = useState(null);
   const [elapsedTime, setElapsedTime] = useState(0);
+  
+  // 🔧 שמירת זמן עבודה למשימה
+  const currentTimeRef = useRef({}); // { taskId: totalMinutes }
 
   // יצירת אלמנט אודיו להתראות
   useEffect(() => {
@@ -160,17 +163,20 @@ function FocusedDashboard() {
   // בדיקת התראות
   useEffect(() => {
     const checkNotifications = () => {
-      // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
-      const activeTimer = localStorage.getItem('zmanit_active_timer');
-      if (activeTimer) {
-        return;
-      }
-      
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       
+      // 🔧 בדיקה איזה טיימר פעיל (אם בכלל)
+      const activeTimerId = localStorage.getItem('zmanit_active_timer');
+      
       todayTasks.forEach(task => {
         if (task.is_completed || !task.due_time) return;
+        
+        // 🔧 אם הטיימר רץ על המשימה הזו - לא לשלוח התראות "התחילי"
+        // (כי כבר עובדת עליה!)
+        if (activeTimerId === task.id) {
+          return;
+        }
         
         const [h, m] = task.due_time.split(':').map(Number);
         const taskMinutes = h * 60 + (m || 0);
@@ -264,13 +270,24 @@ function FocusedDashboard() {
   const handleFullComplete = async () => {
     if (!taskToEnd) return;
     try {
+      // 🔧 שמירת הזמן שנצבר לפני סימון כהושלם
+      const savedTime = currentTimeRef.current[taskToEnd.id];
+      if (savedTime && savedTime > (taskToEnd.time_spent || 0)) {
+        await updateTaskTime(taskToEnd.id, savedTime);
+        console.log('💾 handleFullComplete: נשמרו', savedTime, 'דקות');
+      }
+      
       await toggleComplete(taskToEnd.id);
       toast.success('✅ כל הכבוד! המשימה הושלמה');
+      
+      // ניקוי
+      delete currentTimeRef.current[taskToEnd.id];
       setShowEndDialog(false);
       setTaskToEnd(null);
       setActiveTaskId(null);
-      loadTasks(); // 🆕 רענון
+      loadTasks();
     } catch (err) {
+      console.error('❌ שגיאה בסיום משימה:', err);
       toast.error('שגיאה בעדכון');
     }
   };
@@ -287,22 +304,67 @@ function FocusedDashboard() {
   // התקדמות חלקית
   const handlePartial = async (percent) => {
     if (!taskToEnd) return;
-    // שמירת ההתקדמות
-    const newProgress = Math.min(100, (taskToEnd.progress || 0) + percent);
-    await editTask(taskToEnd.id, { progress: newProgress });
-    toast.success(`📊 התקדמות נשמרה: ${newProgress}%`);
-    setShowEndDialog(false);
-    setTaskToEnd(null);
-    setActiveTaskId(null);
-    loadTasks(); // 🆕 רענון
+    try {
+      // 🔧 שמירת הזמן שנצבר
+      const savedTime = currentTimeRef.current[taskToEnd.id];
+      if (savedTime && savedTime > (taskToEnd.time_spent || 0)) {
+        await updateTaskTime(taskToEnd.id, savedTime);
+        console.log('💾 handlePartial: נשמרו', savedTime, 'דקות');
+      }
+      
+      // שמירת ההתקדמות
+      const newProgress = Math.min(100, (taskToEnd.progress || 0) + percent);
+      await editTask(taskToEnd.id, { progress: newProgress });
+      toast.success(`📊 התקדמות נשמרה: ${newProgress}%`);
+      
+      // ניקוי
+      delete currentTimeRef.current[taskToEnd.id];
+      setShowEndDialog(false);
+      setTaskToEnd(null);
+      setActiveTaskId(null);
+      loadTasks();
+    } catch (err) {
+      console.error('❌ שגיאה בשמירת התקדמות:', err);
+      toast.error('שגיאה בשמירה');
+    }
   };
   
   // נתקעתי
   const handleStuck = async () => {
+    // 🔧 שמירת הזמן שנצבר גם אם נתקענו
+    if (taskToEnd) {
+      const savedTime = currentTimeRef.current[taskToEnd.id];
+      if (savedTime && savedTime > (taskToEnd.time_spent || 0)) {
+        try {
+          await updateTaskTime(taskToEnd.id, savedTime);
+          console.log('💾 handleStuck: נשמרו', savedTime, 'דקות');
+        } catch (err) {
+          console.error('שגיאה בשמירת זמן:', err);
+        }
+      }
+      delete currentTimeRef.current[taskToEnd.id];
+    }
+    
     toast('😵 לא נורא! נמשיך אחר כך', { icon: '💪' });
     setShowEndDialog(false);
     setTaskToEnd(null);
     setActiveTaskId(null);
+  };
+
+  // 🔧 עדכון זמן עבודה - נקרא מהטיימר
+  const handleTimeUpdate = async (taskId, totalMinutes, isRunning) => {
+    // שמירה ב-ref לשימוש ב-handleFullComplete
+    currentTimeRef.current[taskId] = totalMinutes;
+    
+    // אם הטיימר עצר - שומרים ל-DB
+    if (!isRunning && totalMinutes > 0) {
+      try {
+        await updateTaskTime(taskId, totalMinutes);
+        console.log('💾 FocusedDashboard: נשמרו', totalMinutes, 'דקות למשימה', taskId);
+      } catch (err) {
+        console.error('❌ שגיאה בשמירת זמן:', err);
+      }
+    }
   };
 
   // פתיחת טופס
@@ -423,6 +485,7 @@ function FocusedDashboard() {
             isActive={activeTaskId === currentTask.id}
             onStart={() => handleStartTask(currentTask)}
             onUpdate={loadTasks}
+            onTimeUpdate={(totalMinutes, isRunning) => handleTimeUpdate(currentTask.id, totalMinutes, isRunning)}
           />
         </motion.div>
       )}
@@ -563,7 +626,7 @@ function FocusedDashboard() {
 /**
  * כרטיס המשימה הנוכחית - בולט
  */
-function CurrentTaskCard({ task, onComplete, onEdit, isActive, onStart, onUpdate }) {
+function CurrentTaskCard({ task, onComplete, onEdit, isActive, onStart, onUpdate, onTimeUpdate }) {
   const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
   
   return (
@@ -609,6 +672,7 @@ function CurrentTaskCard({ task, onComplete, onEdit, isActive, onStart, onUpdate
                 task={task}
                 onComplete={onComplete}
                 onUpdate={onUpdate}
+                onTimeUpdate={onTimeUpdate}
               />
             </div>
           ) : (

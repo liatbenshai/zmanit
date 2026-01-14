@@ -48,37 +48,19 @@ export function useTaskTimeMonitor(tasks) {
   // בדיקה כל 10 שניות
   useEffect(() => {
     const checkTasks = () => {
-      // 🆕 אם עובדים על משימה - לא להציק!
-      const isWorking = checkIfWorking();
-      if (isWorking) {
-        console.log('🔇 AutoFocus: יש טיימר פעיל - לא מפריעים');
-        return;
-      }
-      console.log('✅ AutoFocus: אין טיימר פעיל - בודק משימות');
+      // 🔧 בודקים לכל משימה בנפרד
+      const activeTimerId = localStorage.getItem('zmanit_active_timer');
       
       const now = new Date();
       const currentMinutes = now.getHours() * 60 + now.getMinutes();
       const today = now.toISOString().split('T')[0];
 
-      // 🔍 לוג לדיבוג
-      console.log('🎯 AutoFocus בודק משימות:', {
-        today,
-        currentTime: `${Math.floor(currentMinutes/60)}:${currentMinutes%60}`,
-        tasksCount: tasks?.length || 0
-      });
-
       // מציאת משימה שהגיע זמנה
       for (const task of tasks) {
-        // 🔍 לוג לכל משימה
-        if (!task.is_completed && task.due_date === today) {
-          console.log('📋 משימה להיום:', {
-            title: task.title,
-            due_time: task.due_time,
-            due_date: task.due_date
-          });
-        }
-
         if (task.is_completed || task.due_date !== today || !task.due_time) continue;
+        
+        // 🔧 אם הטיימר רץ על המשימה הזו - לא מציקים (כבר עובדת!)
+        if (activeTimerId === task.id) continue;
         
         // תיקון: due_time יכול להיות "09:45" או "09:45:00"
         const timeParts = task.due_time.split(':');

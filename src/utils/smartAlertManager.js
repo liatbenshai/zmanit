@@ -469,10 +469,10 @@ export class SmartAlertManager {
   }
   
   sendSystemNotification(alert) {
-    // 🆕 אם יש טיימר פעיל - לא לשלוח התראות
+    // 🔧 בדיקה ספציפית: אם הטיימר רץ על המשימה הזו - לא לשלוח
     const activeTimer = localStorage.getItem('zmanit_active_timer');
-    if (activeTimer) {
-      console.log('🔇 smartAlertManager: יש טיימר פעיל - לא שולח התראה');
+    if (activeTimer && alert.taskId && activeTimer === alert.taskId) {
+      console.log('🔇 smartAlertManager: טיימר רץ על המשימה הזו - לא שולח');
       return;
     }
     
