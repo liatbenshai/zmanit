@@ -15,14 +15,14 @@ export const DEFAULT_CATEGORIES = {
     name: 'תמלול', 
     color: 'blue',
     scheduleType: 'work',  // משויך לשעות עבודה
-    isFixed: true
+    isFixed: false  // ✅ שונה - המשתמש יכול להזיז
   },
   translation: { 
     icon: '🌍', 
     name: 'תרגום', 
     color: 'purple',
     scheduleType: 'work',  // משויך לשעות עבודה
-    isFixed: true
+    isFixed: false  // ✅ שונה - המשתמש יכול להזיז
   }
 };
 

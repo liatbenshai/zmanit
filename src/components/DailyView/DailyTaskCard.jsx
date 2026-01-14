@@ -213,6 +213,8 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
   const [showMoveMenu, setShowMoveMenu] = useState(false);
   const [showBlockerModal, setShowBlockerModal] = useState(false); // ✅ לוג חסמים
   const [pendingMove, setPendingMove] = useState(null); // ✅ פעולה ממתינה
+  const [showTimeEdit, setShowTimeEdit] = useState(false); // ✅ עריכת שעה מהירה
+  const [editingTime, setEditingTime] = useState(task.due_time || ''); // ✅ שעה בעריכה
 
   const currentTask = task;
   const isVirtual = isVirtualBlock(currentTask.id);
@@ -515,10 +517,96 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
                   🟠 גבוה
                 </span>
               )}
-              {currentTask.startTime && currentTask.endTime && (
-                <span className="text-sm text-gray-500 dark:text-gray-400" dir="ltr">
-                  {currentTask.startTime} - {currentTask.endTime}
-                </span>
+              
+              {/* ✅ תצוגת/עריכת שעה - לחיצה לעריכה */}
+              {(currentTask.startTime || currentTask.due_time) && !showTimeEdit && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTime(currentTask.due_time || currentTask.startTime || '');
+                    setShowTimeEdit(true);
+                  }}
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2 py-0.5 rounded transition-colors"
+                  dir="ltr"
+                  title="לחצי לשינוי השעה"
+                >
+                  🕐 {currentTask.startTime && currentTask.endTime 
+                    ? `${currentTask.startTime} - ${currentTask.endTime}`
+                    : currentTask.due_time}
+                </button>
+              )}
+              
+              {/* ✅ עריכת שעה מהירה */}
+              {showTimeEdit && (
+                <div className="flex items-center gap-1 bg-white dark:bg-gray-800 border border-blue-300 dark:border-blue-600 rounded-lg p-1 shadow-lg">
+                  <input
+                    type="time"
+                    value={editingTime}
+                    onChange={(e) => setEditingTime(e.target.value)}
+                    className="px-2 py-1 text-sm border-0 bg-transparent focus:outline-none"
+                    autoFocus
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await editTask(currentTask.id, { due_time: editingTime || null });
+                        toast.success(editingTime ? `⏰ השעה עודכנה ל-${editingTime}` : '🔓 השעה הוסרה');
+                        setShowTimeEdit(false);
+                        if (onUpdate) onUpdate();
+                      } catch (err) {
+                        toast.error('שגיאה בעדכון');
+                      }
+                    }}
+                    className="p-1 text-green-600 hover:bg-green-100 dark:hover:bg-green-900/30 rounded"
+                    title="שמור"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    onClick={async (e) => {
+                      e.stopPropagation();
+                      try {
+                        await editTask(currentTask.id, { due_time: null });
+                        toast.success('🔓 השעה הוסרה - המשימה גמישה');
+                        setShowTimeEdit(false);
+                        if (onUpdate) onUpdate();
+                      } catch (err) {
+                        toast.error('שגיאה');
+                      }
+                    }}
+                    className="p-1 text-purple-600 hover:bg-purple-100 dark:hover:bg-purple-900/30 rounded"
+                    title="הסר שעה"
+                  >
+                    🔓
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowTimeEdit(false);
+                    }}
+                    className="p-1 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700 rounded"
+                    title="ביטול"
+                  >
+                    ✕
+                  </button>
+                </div>
+              )}
+              
+              {/* ✅ כפתור להוספת שעה אם אין */}
+              {!currentTask.startTime && !currentTask.due_time && !showTimeEdit && !isCompleted && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setEditingTime('09:00');
+                    setShowTimeEdit(true);
+                  }}
+                  className="text-xs text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/30 px-2 py-0.5 rounded transition-colors"
+                  title="הוסף שעה"
+                >
+                  + שעה
+                </button>
               )}
             </div>
 

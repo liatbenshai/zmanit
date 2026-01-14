@@ -617,9 +617,23 @@ function EnhancedTaskBlock({
               </span>
             )}
             {block.isFixed && !block.isGoogleEvent && (
-              <span className="inline-block px-1.5 py-0.5 bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-200 text-xs rounded">
+              <button
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (task?.id) {
+                    try {
+                      await editTask(task.id, { due_time: null });
+                      toast.success('🔓 המשימה שוחררה - גמישה עכשיו');
+                    } catch (err) {
+                      toast.error('שגיאה בשחרור');
+                    }
+                  }
+                }}
+                className="inline-block px-1.5 py-0.5 bg-purple-100 dark:bg-purple-800 text-purple-700 dark:text-purple-200 text-xs rounded hover:bg-purple-200 dark:hover:bg-purple-700 transition-colors cursor-pointer"
+                title="לחצי לשחרור - להפוך לגמיש"
+              >
                 📍 קבוע
-              </span>
+              </button>
             )}
             {!block.isFixed && !block.isGoogleEvent && !block.isCompleted && (
               <span className="inline-block px-1.5 py-0.5 bg-blue-100 dark:bg-blue-800 text-blue-700 dark:text-blue-200 text-xs rounded">
