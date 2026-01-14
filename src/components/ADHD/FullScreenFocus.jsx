@@ -87,18 +87,25 @@ export default function FullScreenFocus({
   // 🔧 טיימר משופר - מבוסס Date.now() במקום ספירה
   const [showTimeUpDialog, setShowTimeUpDialog] = useState(false);
   const timeUpTriggeredRef = useRef(false);
+  const accumulatedSecondsRef = useRef(0); // 🔧 ref לזמן שנצבר
+
+  // 🔧 סנכרון ref עם state
+  useEffect(() => {
+    accumulatedSecondsRef.current = accumulatedSeconds;
+  }, [accumulatedSeconds]);
 
   useEffect(() => {
     if (isRunning && !isPaused && startTimeRef.current) {
-      // עדכון כל 100ms לדיוק מקסימלי
+      // עדכון כל 500ms
       intervalRef.current = setInterval(() => {
         const now = Date.now();
         const currentSessionSeconds = Math.floor((now - startTimeRef.current) / 1000);
-        const totalSeconds = accumulatedSeconds + currentSessionSeconds;
+        // 🔧 שימוש ב-ref במקום state (כדי לקבל ערך עדכני בתוך closure)
+        const totalSeconds = accumulatedSecondsRef.current + currentSessionSeconds;
         
         setElapsedSeconds(totalSeconds);
         elapsedRef.current = totalSeconds;
-      }, 100); // 🔧 עדכון כל 100ms במקום 1000ms
+      }, 500);
     } else {
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
@@ -110,7 +117,7 @@ export default function FullScreenFocus({
         clearInterval(intervalRef.current);
       }
     };
-  }, [isRunning, isPaused, accumulatedSeconds]);
+  }, [isRunning, isPaused]);
 
   // 🆕 בדיקה אם הזמן המוקצב נגמר
   useEffect(() => {

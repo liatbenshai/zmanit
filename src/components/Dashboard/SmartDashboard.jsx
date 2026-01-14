@@ -824,23 +824,12 @@ function SmartDashboard() {
       >
         <SimpleTaskForm
           task={editingTask}
-          onSave={async (taskData) => {
-            try {
-              if (editingTask?.id) {
-                await editTask(editingTask.id, taskData);
-                toast.success('✅ משימה עודכנה');
-              } else {
-                await addTask(taskData);
-                toast.success('✅ משימה נוספה');
-              }
-              setShowTaskForm(false);
-              setEditingTask(null);
-              loadTasks();
-            } catch (e) {
-              toast.error('שגיאה');
-            }
+          onClose={() => { 
+            setShowTaskForm(false); 
+            setEditingTask(null); 
+            loadTasks(); // רענון אחרי שמירה/סגירה
           }}
-          onCancel={() => { setShowTaskForm(false); setEditingTask(null); }}
+          defaultDate={todayISO}
         />
       </Modal>
 
