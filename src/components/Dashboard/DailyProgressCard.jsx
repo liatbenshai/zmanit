@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { getAverageBufferTime, getDelayStats } from './WhyNotStartedDetector';
-import { getCompletionStats } from './SmartTaskCompletionDialog';
+import { getAverageBufferTime, getDelayStats } from '../Productivity/WhyNotStartedDetector';
+import { getCompletionStats } from '../Productivity/SmartTaskCompletionDialog';
 
 /**
  * כרטיס התקדמות יומית

@@ -16,6 +16,7 @@ import { useAuth } from '../../hooks/useAuth';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import FullScreenFocus from '../ADHD/FullScreenFocus';
 import SmartRecommendationsPanel from './SmartRecommendationsPanel';
+import DailyProgressCard from './DailyProgressCard';
 import Modal from '../UI/Modal';
 import toast from 'react-hot-toast';
 import { supabase } from '../../services/supabase';
@@ -491,47 +492,8 @@ function SmartDashboard() {
           {/* ===== עמודה שמאלית - משימות היום ===== */}
           <div className="lg:col-span-2 space-y-6">
             
-            {/* סטטיסטיקות מהירות */}
-            <div className="grid grid-cols-4 gap-3">
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm">
-                <div className="text-2xl font-bold text-emerald-600">{stats.completed}</div>
-                <div className="text-xs text-gray-500">הושלמו</div>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm">
-                <div className="text-2xl font-bold text-blue-600">{stats.remaining}</div>
-                <div className="text-xs text-gray-500">נותרו</div>
-              </div>
-              <div className="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm">
-                <div className="text-2xl font-bold text-purple-600">{formatMinutes(stats.minutesLeft)}</div>
-                <div className="text-xs text-gray-500">עבודה</div>
-              </div>
-              {stats.overdue > 0 ? (
-                <div className="bg-red-100 dark:bg-red-900/30 rounded-xl p-4 text-center shadow-sm border border-red-200">
-                  <div className="text-2xl font-bold text-red-600">{stats.overdue}</div>
-                  <div className="text-xs text-red-500">באיחור!</div>
-                </div>
-              ) : (
-                <div className="bg-white dark:bg-gray-800 rounded-xl p-4 text-center shadow-sm">
-                  <div className="text-2xl font-bold text-orange-600">{stats.progress}%</div>
-                  <div className="text-xs text-gray-500">הושלם</div>
-                </div>
-              )}
-            </div>
-
-            {/* פס התקדמות */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow-sm">
-              <div className="flex justify-between text-sm mb-2">
-                <span className="text-gray-600 dark:text-gray-400">התקדמות היום</span>
-                <span className="font-bold text-indigo-600">{stats.progress}%</span>
-              </div>
-              <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                <motion.div 
-                  initial={{ width: 0 }}
-                  animate={{ width: `${stats.progress}%` }}
-                  className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
-                />
-              </div>
-            </div>
+            {/* ✅ כרטיס התקדמות יומית חדש */}
+            <DailyProgressCard tasks={tasks} currentTime={new Date().toTimeString().slice(0,5)} />
 
             {/* משימות באיחור */}
             {overdueTasks.length > 0 && (
