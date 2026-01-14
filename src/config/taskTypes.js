@@ -438,11 +438,37 @@ export function deleteCustomTaskType(id) {
 // =====================================
 
 /**
- * קבלת כל סוגי המשימות (מובנים + מותאמים)
+ * טעינת התאמות לסוגים מובנים
+ */
+function loadBuiltInOverrides() {
+  try {
+    const saved = localStorage.getItem('zmanit_builtin_overrides');
+    if (saved) {
+      return JSON.parse(saved);
+    }
+  } catch (e) {
+    console.error('שגיאה בטעינת התאמות מובנים:', e);
+  }
+  return {};
+}
+
+/**
+ * קבלת כל סוגי המשימות (מובנים + התאמות + מותאמים)
  */
 export function getAllTaskTypes() {
   const customTypes = loadCustomTaskTypes();
-  return { ...BUILT_IN_TASK_TYPES, ...customTypes };
+  const builtInOverrides = loadBuiltInOverrides();
+  
+  // מיזוג מובנים עם התאמות
+  const mergedBuiltIn = {};
+  for (const [id, type] of Object.entries(BUILT_IN_TASK_TYPES)) {
+    mergedBuiltIn[id] = {
+      ...type,
+      ...(builtInOverrides[id] || {})
+    };
+  }
+  
+  return { ...mergedBuiltIn, ...customTypes };
 }
 
 /**

@@ -5,7 +5,8 @@ import {
   getTaskTypesByCategory,
   addCustomTaskType,
   deleteCustomTaskType,
-  loadCustomTaskTypes
+  loadCustomTaskTypes,
+  BUILT_IN_TASK_TYPES
 } from '../../config/taskTypes';
 import toast from 'react-hot-toast';
 
@@ -27,15 +28,39 @@ function TaskTypeSettings({ onClose }) {
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingType, setEditingType] = useState(null);
   const [customTypes, setCustomTypes] = useState({});
+  const [builtInOverrides, setBuiltInOverrides] = useState({});
   
-  // טעינת סוגים מותאמים
+  // טעינת סוגים מותאמים והתאמות
   useEffect(() => {
     setCustomTypes(loadCustomTaskTypes());
+    try {
+      const saved = localStorage.getItem('zmanit_builtin_overrides');
+      if (saved) setBuiltInOverrides(JSON.parse(saved));
+    } catch (e) {}
   }, []);
+  
+  // בדיקה אם סוג מובנה שונה
+  const isBuiltInModified = (typeId) => {
+    return !!builtInOverrides[typeId];
+  };
+  
+  // איפוס סוג מובנה להגדרות מקוריות
+  const resetBuiltInType = (typeId) => {
+    const newOverrides = { ...builtInOverrides };
+    delete newOverrides[typeId];
+    localStorage.setItem('zmanit_builtin_overrides', JSON.stringify(newOverrides));
+    setBuiltInOverrides(newOverrides);
+    toast.success('סוג המשימה אופס להגדרות המקוריות');
+    window.location.reload();
+  };
   
   // רענון הרשימה
   const refreshTypes = () => {
     setCustomTypes(loadCustomTaskTypes());
+    try {
+      const saved = localStorage.getItem('zmanit_builtin_overrides');
+      if (saved) setBuiltInOverrides(JSON.parse(saved));
+    } catch (e) {}
   };
 
   // קבלת סוגים לפי קטגוריה (מובנים + מותאמים)
@@ -100,25 +125,38 @@ function TaskTypeSettings({ onClose }) {
                   <div>
                     <p className={`font-medium ${type.text}`}>{type.name}</p>
                     <p className="text-xs text-gray-500">
-                      {type.inputType === 'recording' && `הקלטה × ${type.timeRatio}`}
-                      {type.inputType === 'pages' && `${type.timePerPage} דק' לעמוד`}
-                      {type.inputType === 'direct' && 'זמן ישיר'}
+                      {type.defaultDuration} דק' ברירת מחדל
                       {' • '}
-                      {type.isBuiltIn ? 'מובנה' : 'מותאם אישית'}
+                      {type.isBuiltIn 
+                        ? (isBuiltInModified(type.id) ? '✨ מובנה (מותאם)' : 'מובנה') 
+                        : 'מותאם אישית'}
                     </p>
                   </div>
                 </div>
                 
-                {/* כפתורי פעולה - רק לסוגים מותאמים */}
-                {!type.isBuiltIn && (
-                  <div className="flex gap-1">
+                {/* כפתורי פעולה - לכל הסוגים */}
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setEditingType(type)}
+                    className="p-2 hover:bg-white/50 rounded-lg transition-colors"
+                    title="ערוך"
+                  >
+                    ✏️
+                  </button>
+                  {type.isBuiltIn && isBuiltInModified(type.id) && (
                     <button
-                      onClick={() => setEditingType(type)}
-                      className="p-2 hover:bg-white/50 rounded-lg transition-colors"
-                      title="ערוך"
+                      onClick={() => {
+                        if (confirm(`לאפס את "${type.name}" להגדרות המקוריות?`)) {
+                          resetBuiltInType(type.id);
+                        }
+                      }}
+                      className="p-2 hover:bg-orange-100 rounded-lg transition-colors"
+                      title="אפס להגדרות מקוריות"
                     >
-                      ✏️
+                      🔄
                     </button>
+                  )}
+                  {!type.isBuiltIn && (
                     <button
                       onClick={() => {
                         if (confirm(`למחוק את "${type.name}"?`)) {
@@ -132,8 +170,8 @@ function TaskTypeSettings({ onClose }) {
                     >
                       🗑️
                     </button>
-                  </div>
-                )}
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -168,7 +206,7 @@ function TaskTypeSettings({ onClose }) {
         {/* הסבר */}
         <div className="p-4 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-200 dark:border-gray-700">
           <p className="text-sm text-gray-500 dark:text-gray-400 text-center">
-            💡 סוגי משימות מותאמים נשמרים בדפדפן. ניתן להוסיף, לערוך ולמחוק אותם בכל עת.
+            💡 ניתן לערוך את כל סוגי המשימות. שינויים נשמרים בדפדפן ואפשר לאפס בכל עת.
           </p>
         </div>
       </motion.div>
@@ -178,15 +216,38 @@ function TaskTypeSettings({ onClose }) {
         <EditTaskTypeModal
           taskType={editingType}
           onSave={(updates) => {
-            // עדכון הסוג
+            // עדכון הסוג - תומך גם במובנים וגם במותאמים
             const customTypes = loadCustomTaskTypes();
-            if (customTypes[editingType.id]) {
-              customTypes[editingType.id] = { ...customTypes[editingType.id], ...updates };
-              localStorage.setItem('zmanit_custom_task_types', JSON.stringify(customTypes));
-              refreshTypes();
-              toast.success('סוג המשימה עודכן');
+            
+            if (editingType.isBuiltIn) {
+              // סוג מובנה - שומרים כ-override
+              const overridesKey = 'zmanit_builtin_overrides';
+              let overrides = {};
+              try {
+                const saved = localStorage.getItem(overridesKey);
+                if (saved) overrides = JSON.parse(saved);
+              } catch (e) {}
+              
+              overrides[editingType.id] = {
+                ...overrides[editingType.id],
+                ...updates
+              };
+              localStorage.setItem(overridesKey, JSON.stringify(overrides));
+              toast.success(`סוג המשימה "${updates.name}" עודכן`);
+            } else {
+              // סוג מותאם אישית
+              if (customTypes[editingType.id]) {
+                customTypes[editingType.id] = { ...customTypes[editingType.id], ...updates };
+                localStorage.setItem('zmanit_custom_task_types', JSON.stringify(customTypes));
+                toast.success('סוג המשימה עודכן');
+              }
             }
+            
+            refreshTypes();
             setEditingType(null);
+            
+            // רענון הדף כדי לטעון את השינויים
+            window.location.reload();
           }}
           onClose={() => setEditingType(null)}
         />
