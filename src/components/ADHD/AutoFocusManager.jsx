@@ -190,7 +190,7 @@ function saveDelayReason(taskId, reason) {
 /**
  * 🎯 מודאל מיקוד - נפתח כשמגיע זמן משימה
  */
-export function TaskFocusModal({ task, onStart, onSnooze, onDismiss }) {
+export function TaskFocusModal({ task, onStart, onSnooze, onSkip, onReschedule, onDismiss }) {
   const taskType = TASK_TYPES[task?.task_type] || TASK_TYPES.other;
   const [countdown, setCountdown] = useState(120); // 2 דקות
 
@@ -278,6 +278,21 @@ export function TaskFocusModal({ task, onStart, onSnooze, onDismiss }) {
                 className="flex-1 py-3 bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400 rounded-xl font-medium"
               >
                 ⏰ עוד 15 דק'
+              </button>
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => onSkip && onSkip()}
+                className="flex-1 py-3 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 rounded-xl font-medium"
+              >
+                ⏭️ דלג למשימה הבאה
+              </button>
+              <button
+                onClick={() => onReschedule && onReschedule()}
+                className="flex-1 py-3 bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 rounded-xl font-medium"
+              >
+                📅 דחה למחר
               </button>
             </div>
 
@@ -398,6 +413,27 @@ function AutoFocusManager() {
     toast(`⏰ נדחה ל-${newTimeStr}`, { icon: '🔔' });
   };
 
+  // דילוג למשימה הבאה
+  const onSkip = () => {
+    dismissAll();
+    toast('⏭️ דילגת על המשימה', { icon: '👋' });
+  };
+
+  // דחייה למחר
+  const onReschedule = async () => {
+    if (!pendingTask) return;
+    
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    await editTask(pendingTask.id, {
+      ...pendingTask,
+      due_date: tomorrow.toISOString().split('T')[0]
+    });
+    
+    dismissAll();
+    toast.success('📅 המשימה הועברה למחר');
+  };
+
   // בחירת סיבה
   const onSelectReason = async (reason) => {
     const result = handleDelayReason(reason);
@@ -456,6 +492,8 @@ function AutoFocusManager() {
             task={pendingTask}
             onStart={onStart}
             onSnooze={onSnooze}
+            onSkip={onSkip}
+            onReschedule={onReschedule}
             onDismiss={dismissAll}
           />
         )}
