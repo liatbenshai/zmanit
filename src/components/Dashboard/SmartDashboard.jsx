@@ -161,7 +161,7 @@ function DashboardTaskCard({ task, onEdit, onStart, onComplete, onDefer, onDelet
 // ========================================
 
 function SmartDashboard() {
-  const { tasks, loading, toggleComplete, editTask, addTask, removeTask, loadTasks } = useTasks();
+  const { tasks, loading, toggleComplete, editTask, addTask, removeTask, loadTasks, dataVersion, updateTaskTime } = useTasks();
   const { user } = useAuth();
   
   // State
@@ -214,7 +214,7 @@ function SmartDashboard() {
     const progress = total > 0 ? Math.round((completed / total) * 100) : 0;
     
     return { total, completed, remaining: todayTasks.remaining.length, minutesLeft, timeSpent, progress, overdue: overdueTasks.length };
-  }, [todayTasks, overdueTasks]);
+  }, [todayTasks, overdueTasks, dataVersion]); // 🔧 תיקון: תלוי ב-dataVersion לסנכרון
 
   // נתוני שבוע
   const weekData = useMemo(() => {
@@ -361,14 +361,17 @@ function SmartDashboard() {
     }
   }, [overdueTasks, editTask, todayISO]);
 
-  const handleTimeUpdate = useCallback(async (minutes) => {
+  const handleTimeUpdate = useCallback(async (minutes, isRunning = false) => {
     if (!focusTask) return;
     try {
       const newTimeSpent = (focusTask.time_spent || 0) + minutes;
-      await editTask(focusTask.id, { time_spent: newTimeSpent });
+      // 🔧 תיקון: שימוש ב-updateTaskTime במקום editTask לסנכרון טוב יותר
+      await updateTaskTime(focusTask.id, newTimeSpent);
       setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-    } catch (err) {}
-  }, [focusTask, editTask]);
+    } catch (err) {
+      console.error('❌ שגיאה בשמירת זמן:', err);
+    }
+  }, [focusTask, updateTaskTime]);
 
   const handleFocusComplete = useCallback(async () => {
     if (!focusTask) return;

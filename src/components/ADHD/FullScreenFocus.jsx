@@ -80,6 +80,32 @@ export default function FullScreenFocus({
   const [showFeedbackOptions, setShowFeedbackOptions] = useState(false); // 🆕 הצגת אפשרויות משוב
   const [taskExtended, setTaskExtended] = useState(false); // 🆕 האם המשימה הוארכה
   const timeUpTriggeredRef = useRef(false); // למניעת התראה כפולה
+  const lastSavedMinuteRef = useRef(0); // 🆕 לשמירה תקופתית
+  
+  // 🆕 שמירה תקופתית של הזמן כל 60 שניות
+  useEffect(() => {
+    if (!isRunning || isPaused || !task?.id || !onTimeUpdate) return;
+    
+    const saveInterval = setInterval(async () => {
+      const currentMinutes = Math.floor(elapsedRef.current / 60);
+      
+      // שומרים רק אם עברה לפחות דקה מהשמירה האחרונה
+      if (currentMinutes > 0 && currentMinutes !== lastSavedMinuteRef.current) {
+        lastSavedMinuteRef.current = currentMinutes;
+        
+        try {
+          // שליחת הזמן הכולל (כולל מה שכבר נשמר)
+          const totalMinutes = timeSpent + currentMinutes;
+          await onTimeUpdate(totalMinutes, true); // true = הטיימר עדיין רץ
+          console.log('⏱️ שמירה תקופתית:', totalMinutes, 'דקות');
+        } catch (err) {
+          console.error('❌ שגיאה בשמירה תקופתית:', err);
+        }
+      }
+    }, 60 * 1000); // כל 60 שניות
+    
+    return () => clearInterval(saveInterval);
+  }, [isRunning, isPaused, task?.id, onTimeUpdate, timeSpent]);
   
   // בדיקה אם המשימה כבר הוארכה בעבר
   useEffect(() => {

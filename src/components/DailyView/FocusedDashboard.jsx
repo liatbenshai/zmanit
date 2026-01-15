@@ -356,11 +356,11 @@ function FocusedDashboard() {
     // שמירה ב-ref לשימוש ב-handleFullComplete
     currentTimeRef.current[taskId] = totalMinutes;
     
-    // אם הטיימר עצר - שומרים ל-DB
-    if (!isRunning && totalMinutes > 0) {
+    // 🔧 תיקון: שומרים ל-DB גם בשמירה תקופתית (כשהטיימר רץ)
+    if (totalMinutes > 0) {
       try {
         await updateTaskTime(taskId, totalMinutes);
-        console.log('💾 FocusedDashboard: נשמרו', totalMinutes, 'דקות למשימה', taskId);
+        console.log('💾 FocusedDashboard: נשמרו', totalMinutes, 'דקות למשימה', taskId, isRunning ? '(תקופתי)' : '(סיום)');
       } catch (err) {
         console.error('❌ שגיאה בשמירת זמן:', err);
       }

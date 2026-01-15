@@ -281,6 +281,10 @@ export function TaskProvider({ children }) {
       const updatedTask = await updateTask(taskId, updatePayload);
       
       setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updatedTask } : t));
+      
+      // 🔧 תיקון: עדכון dataVersion כדי לסנכרן מסכים אחרים
+      setDataVersion(v => v + 1);
+      
       return updatedTask;
     } catch (err) {
       console.error('שגיאה בעדכון משימה:', err);
@@ -332,6 +336,9 @@ export function TaskProvider({ children }) {
       setTasks(prev => prev.map(t => 
         t.id === taskId ? { ...t, time_spent: timeSpentInt } : t
       ));
+      
+      // 🔧 תיקון: עדכון dataVersion כדי לסנכרן מסכים אחרים
+      setDataVersion(v => v + 1);
       
       return updatedTask || { id: taskId, time_spent: timeSpentInt };
     } catch (err) {
