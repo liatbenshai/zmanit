@@ -104,6 +104,17 @@ export function getDelayStats() {
 }
 
 /**
+ * המרת תאריך לפורמט ISO מקומי
+ */
+function toLocalISODate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+/**
  * הקומפוננטה הראשית
  */
 function WhyNotStartedDetector() {
@@ -148,16 +159,16 @@ function WhyNotStartedDetector() {
     if (hasRunningTimer()) return; // יש טיימר רץ - לא מפריעים
     
     const now = new Date();
-    const today = now.toISOString().split('T')[0];
+    const today = toLocalISODate(now); // 🔧 תיקון: שימוש בפונקציה אחידה
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
     // משימות היום שלא הושלמו
-    const todayTasks = tasks.filter(t => 
-      t.due_date === today && 
-      !t.is_completed && 
-      !t.deleted_at &&
-      t.due_time
-    );
+    const todayTasks = tasks.filter(t => {
+      if (t.is_completed || t.deleted_at || !t.due_time) return false;
+      // 🔧 תיקון: המרה לפורמט אחיד
+      const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+      return taskDate === today;
+    });
     
     for (const task of todayTasks) {
       const [h, m] = task.due_time.split(':').map(Number);

@@ -53,6 +53,17 @@ const IDLE_REASONS = [
   { id: 'meeting', icon: '👥', label: 'הייתי בפגישה', color: 'indigo' },
 ];
 
+/**
+ * המרת תאריך לפורמט ISO מקומי
+ */
+function toLocalISODate(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function IdleDetector() {
   const { user } = useAuth();
   const { tasks, editTask, toggleComplete, addTask } = useTasks();
@@ -72,24 +83,23 @@ function IdleDetector() {
   const nextTask = useMemo(() => {
     if (!tasks || tasks.length === 0) return null;
     
-    const today = new Date().toISOString().split('T')[0];
+    const today = toLocalISODate(new Date()); // 🔧 תיקון
     const now = new Date();
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
     // משימות של היום שלא הושלמו
-    const todayTasks = tasks.filter(t => 
-      !t.is_completed && 
-      !t.deleted_at &&
-      t.due_date === today
-    );
+    const todayTasks = tasks.filter(t => {
+      if (t.is_completed || t.deleted_at) return false;
+      const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+      return taskDate === today;
+    });
     
     // משימות באיחור (מימים קודמים)
-    const overdueTasks = tasks.filter(t => 
-      !t.is_completed && 
-      !t.deleted_at &&
-      t.due_date && 
-      t.due_date < today
-    );
+    const overdueTasks = tasks.filter(t => {
+      if (t.is_completed || t.deleted_at || !t.due_date) return false;
+      const taskDate = toLocalISODate(new Date(t.due_date));
+      return taskDate < today;
+    });
     
     // משימות שהשעה שלהן כבר עברה היום
     const lateToday = todayTasks.filter(t => {

@@ -133,8 +133,10 @@ export function useUnifiedNotifications() {
   
   // ✅ בדיקת משימות ושליחת התראות מתואמות
   const checkAndNotify = useCallback(() => {
-    if (permission !== 'granted') return;
+    // 🔧 תיקון: לא עוצרים אם אין הרשאה - פשוט לא שולחים Push
     if (!tasks || tasks.length === 0) return;
+    
+    const hasPushPermission = permission === 'granted';
     
     const now = new Date();
     const today = toLocalISODate(now);
@@ -148,7 +150,7 @@ export function useUnifiedNotifications() {
       // רק התראות על המשימה הפעילה (זמן נגמר וכו')
       const activeTask = tasks.find(t => t.id === activeTaskId);
       if (activeTask) {
-        checkActiveTaskAlerts(activeTask, currentMinutes);
+        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
       }
       return;
     }
@@ -180,13 +182,13 @@ export function useUnifiedNotifications() {
     alertManager.checkScheduledTasks(tasks, scheduledBlocks);
     
     todayTasks.forEach(task => {
-      checkTaskAlerts(task, currentMinutes, today);
+      checkTaskAlerts(task, currentMinutes, today, hasPushPermission);
     });
     
   }, [tasks, permission, canNotify, markNotified, sendNotification]);
   
   // ✅ בדיקת התראות למשימה פעילה (עם טיימר)
-  const checkActiveTaskAlerts = useCallback((task, currentMinutes) => {
+  const checkActiveTaskAlerts = useCallback((task, currentMinutes, hasPushPermission = false) => {
     const estimated = task.estimated_duration || 0;
     const timeSpent = task.time_spent || 0;
     
@@ -197,9 +199,17 @@ export function useUnifiedNotifications() {
     // 5 דקות לסיום
     if (remaining > 0 && remaining <= 5 && remaining > 2) {
       if (canNotify(task.id, 'endingSoon', 5)) {
-        sendNotification(`⏳ ${task.title}`, {
-          body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
-          tag: `task-ending-${task.id}`
+        // 🔧 שולח Push רק אם יש הרשאה
+        if (hasPushPermission) {
+          sendNotification(`⏳ ${task.title}`, {
+            body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
+            tag: `task-ending-${task.id}`
+          });
+        }
+        // 🔧 תמיד מציג toast
+        toast(`⏳ נשארו ${remaining} דקות ל-${task.title}`, {
+          duration: 5000,
+          icon: '⏰'
         });
         markNotified(task.id, 'endingSoon');
       }
@@ -208,16 +218,18 @@ export function useUnifiedNotifications() {
     // הזמן נגמר
     if (remaining <= 0 && remaining > -2) {
       if (canNotify(task.id, 'timeUp', 60)) { // פעם בשעה
-        sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
-          body: 'הזמן המוקצב הסתיים',
-          tag: `task-timeup-${task.id}`,
-          requireInteraction: true
-        });
+        if (hasPushPermission) {
+          sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
+            body: 'הזמן המוקצב הסתיים',
+            tag: `task-timeup-${task.id}`,
+            requireInteraction: true
+          });
+        }
         markNotified(task.id, 'timeUp');
         
-        // גם toast בתוך האפליקציה
-        toast('🔔 הזמן המוקצב הסתיים!', {
-          duration: 5000,
+        // 🔧 תמיד מציג toast בתוך האפליקציה
+        toast.error(`🔔 הזמן נגמר: ${task.title}`, {
+          duration: 8000,
           icon: '⏰'
         });
       }
@@ -225,7 +237,7 @@ export function useUnifiedNotifications() {
   }, [canNotify, markNotified, sendNotification]);
   
   // ✅ בדיקת התראות למשימה (ללא טיימר)
-  const checkTaskAlerts = useCallback((task, currentMinutes, today) => {
+  const checkTaskAlerts = useCallback((task, currentMinutes, today, hasPushPermission = false) => {
     if (!task.due_time) return;
     
     // ✅ לא להתריע על משימות שנדחו בגלל בלת"מ
@@ -242,10 +254,12 @@ export function useUnifiedNotifications() {
     // 5 דקות לפני
     if (diff > 0 && diff <= 5) {
       if (canNotify(task.id, 'before', 5)) {
-        sendNotification(`⏰ ${task.title}`, {
-          body: `מתחיל בעוד ${diff} דקות (${task.due_time})`,
-          tag: `task-before-${task.id}`
-        });
+        if (hasPushPermission) {
+          sendNotification(`⏰ ${task.title}`, {
+            body: `מתחיל בעוד ${diff} דקות (${task.due_time})`,
+            tag: `task-before-${task.id}`
+          });
+        }
         markNotified(task.id, 'before');
         
         toast(`⏰ ${task.title} מתחיל בעוד ${diff} דקות`, {
@@ -257,10 +271,12 @@ export function useUnifiedNotifications() {
     // בדיוק בזמן
     if (diff >= -1 && diff <= 1) {
       if (canNotify(task.id, 'onTime', 5)) {
-        sendNotification(`🔔 ${task.title}`, {
-          body: `הגיע הזמן להתחיל!`,
-          tag: `task-ontime-${task.id}`
-        });
+        if (hasPushPermission) {
+          sendNotification(`🔔 ${task.title}`, {
+            body: `הגיע הזמן להתחיל!`,
+            tag: `task-ontime-${task.id}`
+          });
+        }
         markNotified(task.id, 'onTime');
         
         toast.success(`🔔 הגיע הזמן להתחיל: ${task.title}`, {
@@ -276,10 +292,12 @@ export function useUnifiedNotifications() {
       
       if (canNotify(task.id, 'late', 10)) {
         const lateMinutes = Math.abs(Math.round(diff));
-        sendNotification(`⏰ ${task.title}`, {
-          body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
-          tag: `task-late-${task.id}`
-        });
+        if (hasPushPermission) {
+          sendNotification(`⏰ ${task.title}`, {
+            body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
+            tag: `task-late-${task.id}`
+          });
+        }
         markNotified(task.id, 'late');
         
         toast(`⏰ ${task.title} - באיחור של ${lateMinutes} דקות`, {
@@ -292,7 +310,7 @@ export function useUnifiedNotifications() {
   
   // ✅ הפעלת בדיקה תקופתית
   useEffect(() => {
-    if (permission !== 'granted') return;
+    // 🔧 תיקון: לא עוצרים אם אין הרשאה - פשוט מציגים toast במקום Push
     
     // בדיקה ראשונית
     checkAndNotify();
@@ -305,7 +323,7 @@ export function useUnifiedNotifications() {
         clearInterval(checkIntervalRef.current);
       }
     };
-  }, [permission, checkAndNotify]);
+  }, [checkAndNotify]);
   
   // ✅ סגירת התראה פעילה
   const dismissAlert = useCallback(() => {
