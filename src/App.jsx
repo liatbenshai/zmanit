@@ -23,8 +23,6 @@ import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
 import FloatingNowWidget from './components/Productivity/FloatingNowWidget';
 import WhyNotStartedDetector from './components/Productivity/WhyNotStartedDetector';
-// ✅ מנהל התראות מאוחד - מחליף את NotificationChecker + OverdueTaskManager
-import UnifiedNotificationManager from './components/Notifications/UnifiedNotificationManager';
 import EndOfDaySummary from './components/Learning/EndOfDaySummary';
 import { useTasks } from './hooks/useTasks';
 
@@ -98,10 +96,7 @@ function App() {
       {/* סיכום יומי */}
       {user && <EndOfDayPopup />}
 
-      {/* ✅ מנהל התראות מאוחד - מטפל בהכל! */}
-      {user && <UnifiedNotificationManager />}
-      
-      {/* ✅ חדש: סיכום יומי אוטומטי בסוף היום */}
+      {/* ✅ סיכום יומי אוטומטי בסוף היום */}
       {user && <EndOfDaySummaryWrapper />}
       
       {/* 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה */}
