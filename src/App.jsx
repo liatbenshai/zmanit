@@ -1,23 +1,23 @@
-import { Suspense, lazy } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuth } from './hooks/useAuth';
 import { Toaster } from 'react-hot-toast';
 
-// דפים - טעינה עצלה (lazy loading) לשיפור ביצועים
-const Login = lazy(() => import('./pages/Login'));
-const Register = lazy(() => import('./pages/Register'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const DailyViewPage = lazy(() => import('./pages/DailyViewPage'));
-const WeeklyViewPage = lazy(() => import('./pages/WeeklyViewPage'));
-const TaskInsights = lazy(() => import('./pages/TaskInsights'));
-const Settings = lazy(() => import('./pages/Settings'));
-const FocusedDashboard = lazy(() => import('./components/DailyView/FocusedDashboard'));
+// דפים - 6 עמודים
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Dashboard from './pages/Dashboard';           // דשבורד - עמוד הבית
+import DailyViewPage from './pages/DailyViewPage';   // תצוגה יומית
+import WeeklyViewPage from './pages/WeeklyViewPage'; // תצוגה שבועית
+import TaskInsights from './pages/TaskInsights';     // תובנות ולמידה
+import Settings from './pages/Settings';             // הגדרות
+import FocusedDashboard from './components/DailyView/FocusedDashboard'; // ✅ תצוגה ממוקדת
 
 // רכיבים
 import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Header from './components/Layout/Header';
 import MobileNav from './components/Layout/MobileNav';
 import InstallPrompt from './components/PWA/InstallPrompt';
+import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
 import EndOfDaySummary from './components/Learning/EndOfDaySummary';
@@ -25,20 +25,6 @@ import { useTasks } from './hooks/useTasks';
 
 // 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה
 import { AutoFocusManager } from './components/ADHD';
-
-/**
- * רכיב טעינה לדפים (Lazy Loading)
- */
-function PageLoader() {
-  return (
-    <div className="min-h-[50vh] flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-10 w-10 border-4 border-blue-500 border-t-transparent mx-auto mb-3"></div>
-        <p className="text-gray-500 dark:text-gray-400 text-sm">טוען...</p>
-      </div>
-    </div>
-  );
-}
 
 /**
  * ✅ Wrapper לסיכום יומי
@@ -78,16 +64,19 @@ function App() {
       {/* הודעת התקנת PWA */}
       <InstallPrompt />
 
+      {/* זיהוי זמן מת */}
+      {user && <IdleDetector />}
+
       {/* כפתור עבודה דחופה */}
       {user && <UrgentTaskButton />}
 
       {/* סיכום יומי */}
       {user && <EndOfDayPopup />}
-
-      {/* ✅ סיכום יומי אוטומטי בסוף היום */}
+      
+      {/* ✅ חדש: סיכום יומי אוטומטי בסוף היום */}
       {user && <EndOfDaySummaryWrapper />}
       
-      {/* 🎯 מיקוד אוטומטי - זה מה שעובד מעולה! */}
+      {/* 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה - זה מה שעובד! */}
       {user && <AutoFocusManager />}
 
       {/* כותרת עליונה */}
@@ -95,63 +84,61 @@ function App() {
 
       {/* תוכן עם padding לניווט תחתון בנייד */}
       <main className={user ? 'pb-20 md:pb-0' : ''}>
-        <Suspense fallback={<PageLoader />}>
-          <Routes>
-            {/* דף בית - מפנה לדשבורד */}
-            <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
-            
-            {/* התחברות והרשמה */}
-            <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
-            <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register />} />
-            
-            {/* ===== 5 העמודים הראשיים ===== */}
-            
-            {/* 1. דשבורד - עמוד הבית */}
-            <Route path="/dashboard" element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            } />
+        <Routes>
+          {/* דף בית - מפנה לדשבורד */}
+          <Route path="/" element={user ? <Navigate to="/dashboard" /> : <Navigate to="/login" />} />
+          
+          {/* התחברות והרשמה */}
+          <Route path="/login" element={user ? <Navigate to="/dashboard" /> : <Login />} />
+          <Route path="/register" element={user ? <Navigate to="/dashboard" /> : <Register />} />
+          
+          {/* ===== 5 העמודים הראשיים ===== */}
+          
+          {/* 1. דשבורד - עמוד הבית */}
+          <Route path="/dashboard" element={
+            <ProtectedRoute>
+              <Dashboard />
+            </ProtectedRoute>
+          } />
 
-            {/* 2. תצוגה יומית */}
-            <Route path="/daily" element={
-              <ProtectedRoute>
-                <DailyViewPage />
-              </ProtectedRoute>
-            } />
+          {/* 2. תצוגה יומית */}
+          <Route path="/daily" element={
+            <ProtectedRoute>
+              <DailyViewPage />
+            </ProtectedRoute>
+          } />
 
-            {/* 3. תצוגה שבועית */}
-            <Route path="/weekly" element={
-              <ProtectedRoute>
-                <WeeklyViewPage />
-              </ProtectedRoute>
-            } />
-            
-            {/* 4. תובנות ולמידה */}
-            <Route path="/insights" element={
-              <ProtectedRoute>
-                <TaskInsights />
-              </ProtectedRoute>
-            } />
+          {/* 3. תצוגה שבועית */}
+          <Route path="/weekly" element={
+            <ProtectedRoute>
+              <WeeklyViewPage />
+            </ProtectedRoute>
+          } />
+          
+          {/* 4. תובנות ולמידה */}
+          <Route path="/insights" element={
+            <ProtectedRoute>
+              <TaskInsights />
+            </ProtectedRoute>
+          } />
 
-            {/* 5. הגדרות */}
-            <Route path="/settings" element={
-              <ProtectedRoute>
-                <Settings />
-              </ProtectedRoute>
-            } />
+          {/* 5. הגדרות */}
+          <Route path="/settings" element={
+            <ProtectedRoute>
+              <Settings />
+            </ProtectedRoute>
+          } />
 
-            {/* 6. תצוגה ממוקדת */}
-            <Route path="/focus" element={
-              <ProtectedRoute>
-                <FocusedDashboard />
-              </ProtectedRoute>
-            } />
+          {/* 6. תצוגה ממוקדת */}
+          <Route path="/focus" element={
+            <ProtectedRoute>
+              <FocusedDashboard />
+            </ProtectedRoute>
+          } />
 
-            {/* דף 404 - מפנה לדשבורד */}
-            <Route path="*" element={<Navigate to="/dashboard" />} />
-          </Routes>
-        </Suspense>
+          {/* דף 404 - מפנה לדשבורד */}
+          <Route path="*" element={<Navigate to="/dashboard" />} />
+        </Routes>
       </main>
 
       {/* ניווט תחתון בנייד */}
