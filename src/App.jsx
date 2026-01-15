@@ -18,11 +18,8 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Header from './components/Layout/Header';
 import MobileNav from './components/Layout/MobileNav';
 import InstallPrompt from './components/PWA/InstallPrompt';
-import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
-import FloatingNowWidget from './components/Productivity/FloatingNowWidget';
-import WhyNotStartedDetector from './components/Productivity/WhyNotStartedDetector';
 import EndOfDaySummary from './components/Learning/EndOfDaySummary';
 import { useTasks } from './hooks/useTasks';
 
@@ -81,17 +78,8 @@ function App() {
       {/* הודעת התקנת PWA */}
       <InstallPrompt />
 
-      {/* זיהוי זמן מת */}
-      {user && <IdleDetector />}
-
       {/* כפתור עבודה דחופה */}
       {user && <UrgentTaskButton />}
-
-      {/* ווידג'ט צף "עכשיו" */}
-      {user && <FloatingNowWidget />}
-
-      {/* גלאי "למה לא התחלת?" */}
-      {user && <WhyNotStartedDetector />}
 
       {/* סיכום יומי */}
       {user && <EndOfDayPopup />}
@@ -99,7 +87,7 @@ function App() {
       {/* ✅ סיכום יומי אוטומטי בסוף היום */}
       {user && <EndOfDaySummaryWrapper />}
       
-      {/* 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה */}
+      {/* 🎯 מיקוד אוטומטי - זה מה שעובד מעולה! */}
       {user && <AutoFocusManager />}
 
       {/* כותרת עליונה */}
