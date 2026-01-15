@@ -25,7 +25,6 @@ import FloatingNowWidget from './components/Productivity/FloatingNowWidget';
 import WhyNotStartedDetector from './components/Productivity/WhyNotStartedDetector';
 // ✅ מנהל התראות מאוחד - מחליף את NotificationChecker + OverdueTaskManager
 import UnifiedNotificationManager from './components/Notifications/UnifiedNotificationManager';
-import { DeadlineConflictManager } from './components/Notifications/DeadlineConflictModal';
 import EndOfDaySummary from './components/Learning/EndOfDaySummary';
 import { useTasks } from './hooks/useTasks';
 
@@ -104,9 +103,6 @@ function App() {
       
       {/* ✅ חדש: סיכום יומי אוטומטי בסוף היום */}
       {user && <EndOfDaySummaryWrapper />}
-      
-      {/* ✅ חדש: מנהל התנגשויות דדליין */}
-      {user && <DeadlineConflictManager />}
       
       {/* 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה */}
       {user && <AutoFocusManager />}
