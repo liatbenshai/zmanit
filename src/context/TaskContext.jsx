@@ -7,6 +7,7 @@ import {
   deleteTask, 
   moveTask, 
   toggleTaskComplete,
+  updateTaskTimeSpent,
   supabase
 } from '../services/supabase';
 import { 
@@ -330,7 +331,6 @@ export function TaskProvider({ children }) {
     const timeSpentInt = parseInt(timeSpent) || 0;
     
     try {
-      const { updateTaskTimeSpent } = await import('../services/supabase');
       const updatedTask = await updateTaskTimeSpent(taskId, timeSpentInt);
       
       setTasks(prev => prev.map(t => 

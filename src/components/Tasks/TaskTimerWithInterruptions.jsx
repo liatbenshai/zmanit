@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
+import { saveInterruption } from '../../services/supabase';
 import Button from '../UI/Button';
 import toast from 'react-hot-toast';
 
@@ -277,7 +278,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     // שמירה ב-DB
     if (user?.id) {
       try {
-        const { saveInterruption } = await import('../../services/supabase');
         await saveInterruption({
           user_id: user.id,
           task_id: currentTask?.id || null,
