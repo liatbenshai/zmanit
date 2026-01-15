@@ -90,37 +90,6 @@ export default function FullScreenFocus({
       } catch (e) {}
     }
   }, [task?.id]);
-  
-  // 🆕 שמירת משוב וסיום
-  const saveFeedbackAndComplete = async (feedback) => {
-    const minutesWorked = timeSpent + Math.floor(elapsedRef.current / 60);
-    try {
-      const feedbackData = JSON.parse(localStorage.getItem('zmanit_completion_feedback') || '[]');
-      feedbackData.push({
-        taskId: task?.id,
-        taskType: task?.task_type,
-        feedback,
-        actualDuration: minutesWorked,
-        estimatedDuration: estimated,
-        ratio: minutesWorked / estimated,
-        timestamp: new Date().toISOString()
-      });
-      // שומרים רק 100 אחרונים
-      if (feedbackData.length > 100) feedbackData.shift();
-      localStorage.setItem('zmanit_completion_feedback', JSON.stringify(feedbackData));
-    } catch (e) {}
-    
-    const messages = {
-      completed_all: '🎉 מעולה! סיימת הכל!',
-      completed_partial: '👍 טוב! סיימת חלק',
-      did_not_finish: '📝 נרשם - נלמד מזה'
-    };
-    
-    toast.success(messages[feedback]);
-    setShowTimeUpDialog(false);
-    setShowFeedbackOptions(false);
-    handleComplete();
-  };
 
   useEffect(() => {
     if (isRunning && !isPaused) {
@@ -211,7 +180,12 @@ export default function FullScreenFocus({
       taskTitle: task.title
     }));
     
-    const minutesWorked = Math.floor(elapsedRef.current / 60);
+    // 🔧 תיקון: שימוש ב-elapsedSeconds כגיבוי
+    const currentElapsed = elapsedRef.current > 0 ? elapsedRef.current : elapsedSeconds;
+    const minutesWorked = Math.floor(currentElapsed / 60);
+    
+    console.log('💾 FullScreenFocus handlePause - elapsedRef:', elapsedRef.current, 'elapsedSeconds:', elapsedSeconds, 'minutesWorked:', minutesWorked);
+    
     if (onPause && minutesWorked > 0) {
       await onPause(minutesWorked);
       console.log('💾 FullScreenFocus handlePause - נשמרו:', minutesWorked, 'דקות');
@@ -236,10 +210,15 @@ export default function FullScreenFocus({
   const handleComplete = async () => {
     localStorage.removeItem('zmanit_active_timer');
     localStorage.removeItem('zmanit_focus_paused'); // ניקוי מצב השהייה
-    const minutesWorked = Math.floor(elapsedRef.current / 60);
+    
+    // 🔧 תיקון: שימוש ב-elapsedSeconds (הערך המעודכן) ולא elapsedRef
+    const currentElapsed = elapsedRef.current > 0 ? elapsedRef.current : elapsedSeconds;
+    const minutesWorked = Math.max(1, Math.floor(currentElapsed / 60)); // לפחות דקה אחת
+    
+    console.log('💾 FullScreenFocus handleComplete - elapsedRef:', elapsedRef.current, 'elapsedSeconds:', elapsedSeconds, 'minutesWorked:', minutesWorked);
     
     // 🔧 תיקון: await לשמירת הזמן לפני סימון כהושלם
-    if (onTimeUpdate) {
+    if (onTimeUpdate && minutesWorked > 0) {
       await onTimeUpdate(minutesWorked);
       console.log('💾 FullScreenFocus handleComplete - נשמרו:', minutesWorked, 'דקות');
     }
@@ -248,7 +227,39 @@ export default function FullScreenFocus({
       await onComplete();
     }
     
-    toast.success('✅ כל הכבוד!');
+    toast.success(`✅ כל הכבוד! עבדת ${minutesWorked} דקות`);
+  };
+
+  // 🆕 שמירת משוב וסיום
+  const saveFeedbackAndComplete = async (feedback) => {
+    const currentElapsed = elapsedRef.current > 0 ? elapsedRef.current : elapsedSeconds;
+    const minutesWorked = timeSpent + Math.floor(currentElapsed / 60);
+    try {
+      const feedbackData = JSON.parse(localStorage.getItem('zmanit_completion_feedback') || '[]');
+      feedbackData.push({
+        taskId: task?.id,
+        taskType: task?.task_type,
+        feedback,
+        actualDuration: minutesWorked,
+        estimatedDuration: estimated,
+        ratio: minutesWorked / estimated,
+        timestamp: new Date().toISOString()
+      });
+      // שומרים רק 100 אחרונים
+      if (feedbackData.length > 100) feedbackData.shift();
+      localStorage.setItem('zmanit_completion_feedback', JSON.stringify(feedbackData));
+    } catch (e) {}
+    
+    const messages = {
+      completed_all: '🎉 מעולה! סיימת הכל!',
+      completed_partial: '👍 טוב! סיימת חלק',
+      did_not_finish: '📝 נרשם - נלמד מזה'
+    };
+    
+    toast.success(messages[feedback]);
+    setShowTimeUpDialog(false);
+    setShowFeedbackOptions(false);
+    await handleComplete();
   };
 
   // יציאה (מזעור)
