@@ -13,8 +13,13 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { alertManager, ALERT_TYPES } from '../../utils/smartAlertManager';
 import toast from 'react-hot-toast';
+
+// סוגי התראות (היו בקובץ smartAlertManager שנמחק)
+const ALERT_TYPES = {
+  IDLE_DETECTED: 'idle_detected',
+  PROCRASTINATION_WARNING: 'procrastination_warning'
+};
 
 /**
  * הגדרות ניטור
