@@ -375,10 +375,11 @@ function IdleDetector() {
   }, [idleMinutes, alertType, user?.id, tasks, nextTask, navigate]);
   
   // 🆕 עדכון זמן עבודה
-  const handleFocusTimeUpdate = useCallback(async (minutes) => {
+  const handleFocusTimeUpdate = useCallback(async (minutes, isAbsolute = false) => {
     if (!focusTask) return;
     try {
-      const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+      // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
+      const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
       await editTask(focusTask.id, { time_spent: newTimeSpent });
       setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
     } catch (err) {

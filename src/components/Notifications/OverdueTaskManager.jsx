@@ -372,17 +372,19 @@ function OverdueTaskManager({ tasks = [], onStartTask }) {
         setShowFullScreen(false);
         setFocusTask(null);
       }}
-      onPause={async (minutes) => {
+      onPause={async (minutes, isAbsolute = false) => {
         if (minutes > 0 && focusTask) {
-          const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+          // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
+          const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
           await editTask(focusTask.id, { time_spent: newTimeSpent });
           // ✅ עדכון focusTask מקומית
           setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
         }
       }}
-      onTimeUpdate={async (minutes) => {
+      onTimeUpdate={async (minutes, isAbsolute = false) => {
         if (minutes > 0 && focusTask) {
-          const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+          // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
+          const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
           await editTask(focusTask.id, { time_spent: newTimeSpent });
           // ✅ עדכון focusTask מקומית
           setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);

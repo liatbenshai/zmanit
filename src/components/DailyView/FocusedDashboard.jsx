@@ -352,15 +352,15 @@ function FocusedDashboard() {
   };
 
   // 🔧 עדכון זמן עבודה - נקרא מהטיימר
-  const handleTimeUpdate = async (taskId, totalMinutes, isRunning) => {
+  const handleTimeUpdate = async (taskId, totalMinutes, isAbsolute = false) => {
     // שמירה ב-ref לשימוש ב-handleFullComplete
     currentTimeRef.current[taskId] = totalMinutes;
     
-    // 🔧 תיקון: שומרים ל-DB גם בשמירה תקופתית (כשהטיימר רץ)
+    // 🔧 תיקון: שומרים ל-DB - הערך כבר מוחלט מ-FullScreenFocus
     if (totalMinutes > 0) {
       try {
         await updateTaskTime(taskId, totalMinutes);
-        console.log('💾 FocusedDashboard: נשמרו', totalMinutes, 'דקות למשימה', taskId, isRunning ? '(תקופתי)' : '(סיום)');
+        console.log('💾 FocusedDashboard: נשמרו', totalMinutes, 'דקות למשימה', taskId, isAbsolute ? '(מוחלט)' : '');
       } catch (err) {
         console.error('❌ שגיאה בשמירת זמן:', err);
       }

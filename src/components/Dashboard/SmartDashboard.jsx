@@ -361,13 +361,14 @@ function SmartDashboard() {
     }
   }, [overdueTasks, editTask, todayISO]);
 
-  const handleTimeUpdate = useCallback(async (minutes, isRunning = false) => {
+  const handleTimeUpdate = useCallback(async (minutes, isAbsolute = false) => {
     if (!focusTask) return;
     try {
-      const newTimeSpent = (focusTask.time_spent || 0) + minutes;
-      // 🔧 תיקון: שימוש ב-updateTaskTime במקום editTask לסנכרון טוב יותר
+      // 🔧 תיקון: אם isAbsolute=true, זה הזמן הכולל. אחרת - מוסיפים לקיים
+      const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
       await updateTaskTime(focusTask.id, newTimeSpent);
       setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
+      console.log('💾 SmartDashboard - זמן עודכן:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '(יחסי)');
     } catch (err) {
       console.error('❌ שגיאה בשמירת זמן:', err);
     }

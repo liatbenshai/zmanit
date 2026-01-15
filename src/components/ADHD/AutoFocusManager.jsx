@@ -482,17 +482,19 @@ function AutoFocusManager() {
           setShowTimer(false);
           setActiveTask(null);
         }}
-        onPause={async (minutes) => {
+        onPause={async (minutes, isAbsolute = false) => {
           if (minutes > 0 && activeTask) {
-            const newTimeSpent = (activeTask.time_spent || 0) + minutes;
+            // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
+            const newTimeSpent = isAbsolute ? minutes : (activeTask.time_spent || 0) + minutes;
             await editTask(activeTask.id, { time_spent: newTimeSpent });
             // ✅ עדכון activeTask מקומית
             setActiveTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
           }
         }}
-        onTimeUpdate={async (minutes) => {
+        onTimeUpdate={async (minutes, isAbsolute = false) => {
           if (minutes > 0 && activeTask) {
-            const newTimeSpent = (activeTask.time_spent || 0) + minutes;
+            // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
+            const newTimeSpent = isAbsolute ? minutes : (activeTask.time_spent || 0) + minutes;
             await editTask(activeTask.id, { time_spent: newTimeSpent });
             // ✅ עדכון activeTask מקומית
             setActiveTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);

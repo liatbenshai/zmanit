@@ -483,16 +483,17 @@ function DailyView() {
   };
 
   // ✅ עדכון זמן עבודה
-  const handleFocusTimeUpdate = async (minutes) => {
+  const handleFocusTimeUpdate = async (minutes, isAbsolute = false) => {
     if (!focusTask) return;
     try {
-      const newTimeSpent = (focusTask.time_spent || 0) + minutes;
+      // 🔧 תיקון: אם isAbsolute=true, זה הזמן הכולל. אחרת - מוסיפים לקיים
+      const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
       await editTask(focusTask.id, { time_spent: newTimeSpent });
       
       // ✅ עדכון focusTask מקומית כדי שהזמן יישמר
       setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
       
-      console.log('💾 DailyView - זמן עודכן:', newTimeSpent, 'דקות');
+      console.log('💾 DailyView - זמן עודכן:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '(יחסי)');
     } catch (err) {
       console.error('שגיאה בעדכון זמן:', err);
     }

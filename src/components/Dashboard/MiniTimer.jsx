@@ -508,22 +508,24 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
             onComplete(task);
           }
         }}
-        onPause={async (minutes) => {
+        onPause={async (minutes, isAbsolute = false) => {
           if (minutes > 0 && task) {
-            const newTimeSpent = (task.time_spent || 0) + minutes;
+            // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
+            const newTimeSpent = isAbsolute ? minutes : (task.time_spent || 0) + minutes;
             await editTask(task.id, { time_spent: newTimeSpent });
             // 🆕 עדכון state מקומי
             setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-            console.log('💾 FullScreenFocus onPause - נשמרו:', minutes, 'דקות');
+            console.log('💾 FullScreenFocus onPause - נשמרו:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '');
           }
         }}
-        onTimeUpdate={async (minutes) => {
+        onTimeUpdate={async (minutes, isAbsolute = false) => {
           if (minutes > 0 && task) {
-            const newTimeSpent = (task.time_spent || 0) + minutes;
+            // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
+            const newTimeSpent = isAbsolute ? minutes : (task.time_spent || 0) + minutes;
             await editTask(task.id, { time_spent: newTimeSpent });
             // 🆕 עדכון state מקומי
             setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-            console.log('💾 FullScreenFocus onTimeUpdate - נשמרו:', minutes, 'דקות');
+            console.log('💾 FullScreenFocus onTimeUpdate - נשמרו:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '');
           }
         }}
         onAddTask={addTask}
