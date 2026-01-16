@@ -296,7 +296,12 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
       const dayStart = isHome ? (day.homeDayStart || 17 * 60) : (day.dayStart || config.defaultDayStart);
       const dayEnd = isHome ? (day.homeDayEnd || 21 * 60) : (day.dayEnd || config.defaultDayEnd);
       
-      const currentStart = dayNextAvailable.get(day.date) || dayStart;
+      // ✅ תיקון: אם יש due_time, משתמשים בו כזמן התחלה!
+      let requestedStart = null;
+      if (task.due_time && day.date === task.due_date) {
+        requestedStart = timeToMinutes(task.due_time);
+      }
+      const currentStart = requestedStart || dayNextAvailable.get(day.date) || dayStart;
       const freeSlots = findFreeSlotsForDayWithRange(day, currentStart, dayEnd, config, isHome);
       
       for (const slot of freeSlots) {
