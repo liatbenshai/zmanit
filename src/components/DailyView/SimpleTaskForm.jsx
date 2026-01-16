@@ -466,6 +466,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         startDate: task.start_date || '',
         dueDate: task.due_date || '',
         dueTime: task.due_time || '',
+        deadlineDate: task.deadline_date || '',
+        deadlineTime: task.deadline_time || '',
         description: task.description || '',
         priority: task.priority || 'normal'
       });
@@ -486,6 +488,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         startDate: defaultDate || '',
         dueDate: defaultDate || '',
         dueTime: '',
+        deadlineDate: '',
+        deadlineTime: '',
         description: '',
         priority: 'normal'
       });
@@ -737,6 +741,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       start_date: formData.startDate || null,
       due_date: formData.dueDate || null,
       due_time: autoDueTime,  // ✅ שימוש בזמן המחושב
+      deadline_date: formData.deadlineDate || null,  // 🆕 דדליין תאריך
+      deadline_time: formData.deadlineTime || null,  // 🆕 דדליין שעה
       description: formData.description || null,
       priority: formData.priority,
       // ✅ שינוי: sourceValue נשמר כ-recording_duration או page_count (למעקב)
@@ -935,7 +941,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
           min={getLocalDateISO(new Date())}
         />
         <Input
-          label="🎯 תאריך יעד (דדליין)"
+          label="📆 תאריך לשיבוץ"
           type="date"
           name="dueDate"
           value={formData.dueDate}
@@ -948,7 +954,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       <div>
         <div className="flex items-center justify-between mb-2">
           <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
-            🕐 שעה ספציפית
+            🕐 שעת התחלה רצויה
           </label>
           <button
             type="button"
@@ -983,6 +989,49 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         {!showTimeField && (
           <p className="text-xs text-gray-500 dark:text-gray-400">
             💡 השעה תיקבע אוטומטית לפי העומס היומי
+          </p>
+        )}
+      </div>
+
+      {/* דדליין - אופציונלי */}
+      <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-2">
+        <div className="flex items-center justify-between mb-3">
+          <label className="text-sm font-medium text-gray-700 dark:text-gray-300">
+            🎯 דדליין (אופציונלי)
+          </label>
+          {formData.deadlineDate && (
+            <button
+              type="button"
+              onClick={() => setFormData(prev => ({ ...prev, deadlineDate: '', deadlineTime: '' }))}
+              className="text-xs text-red-500 hover:text-red-600"
+            >
+              הסר דדליין
+            </button>
+          )}
+        </div>
+        
+        <div className="grid grid-cols-2 gap-3">
+          <Input
+            label="תאריך"
+            type="date"
+            name="deadlineDate"
+            value={formData.deadlineDate}
+            onChange={handleChange}
+            min={formData.dueDate || formData.startDate || getLocalDateISO(new Date())}
+          />
+          <Input
+            label="שעה (אופציונלי)"
+            type="time"
+            name="deadlineTime"
+            value={formData.deadlineTime}
+            onChange={handleChange}
+            disabled={!formData.deadlineDate}
+          />
+        </div>
+        
+        {!formData.deadlineDate && (
+          <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+            💡 הוסיפי דדליין רק אם יש תאריך אחרון אמיתי לסיום המשימה
           </p>
         )}
       </div>
