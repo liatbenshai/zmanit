@@ -89,16 +89,30 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
       if (saved) {
         try {
           const data = JSON.parse(saved);
-          if (data.startTime && !data.isInterrupted) {
+          
+          // 🔧 תיקון: בדיקה אם הטיימר מושהה
+          if (data.isPaused) {
+            // טיימר מושהה - שחזור מצב השהייה
+            setIsRunning(false);
+            setIsPaused(true);
+            setElapsedSeconds(0); // הזמן כבר נשמר ב-DB
+            setTotalInterruptionSeconds(data.totalInterruptionSeconds || 0);
+            setInterruptions(data.interruptions || []);
+            console.log('⏸️ טיימר מושהה שוחזר');
+            return;
+          }
+          
+          if (data.startTime && data.isRunning && !data.isInterrupted) {
             const start = new Date(data.startTime);
             const elapsed = Math.floor((new Date() - start) / 1000);
             if (elapsed > 0 && elapsed < 24 * 60 * 60) { // פחות מ-24 שעות
               setStartTime(start);
               setElapsedSeconds(elapsed);
               setIsRunning(true);
+              setIsPaused(false);
               setTotalInterruptionSeconds(data.totalInterruptionSeconds || 0);
               setInterruptions(data.interruptions || []);
-              // 🆕 שמירת מצב טיימר פעיל גם בשחזור
+              // שמירת מצב טיימר פעיל גם בשחזור
               localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
               console.log('🔄 טיימר שוחזר! נשמר:', currentTask?.id);
               toast.success(`⏰ טיימר חודש! עברו ${Math.floor(elapsed / 60)} דקות`);
@@ -216,8 +230,29 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     if (e) e.stopPropagation();
     setIsRunning(false);
     setIsPaused(true);
-    // 🆕 מחיקת מצב טיימר (מושהה = לא עובדים)
+    // מחיקת מצב טיימר פעיל
     localStorage.removeItem('zmanit_active_timer');
+    
+    // 🔧 שמירת מצב השהייה ל-localStorage
+    if (timerStorageKey) {
+      const data = {
+        startTime: null,
+        isRunning: false,
+        isPaused: true,
+        isInterrupted: false,
+        totalInterruptionSeconds,
+        interruptions
+      };
+      localStorage.setItem(timerStorageKey, JSON.stringify(data));
+    }
+    
+    // 🔧 שמירה ל-IdleDetector
+    localStorage.setItem('zmanit_focus_paused', JSON.stringify({
+      isPaused: true,
+      pausedAt: new Date().toISOString(),
+      taskId: currentTask?.id,
+      taskTitle: currentTask?.title
+    }));
     
     // ✅ שמירת הזמן שעבד עד עכשיו
     if (elapsedSeconds >= 60) {
@@ -238,10 +273,31 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   // המשך
   const resumeTimer = (e) => {
     if (e) e.stopPropagation();
+    const now = new Date();
+    setStartTime(now);
     setIsRunning(true);
     setIsPaused(false);
-    // 🆕 שמירת מצב טיימר פעיל
+    setElapsedSeconds(0); // מתחילים מחדש (הזמן הקודם כבר נשמר)
+    
+    // שמירת מצב טיימר פעיל
     localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
+    
+    // 🔧 שמירת מצב רץ ל-localStorage
+    if (timerStorageKey) {
+      const data = {
+        startTime: now.toISOString(),
+        isRunning: true,
+        isPaused: false,
+        isInterrupted: false,
+        totalInterruptionSeconds,
+        interruptions
+      };
+      localStorage.setItem(timerStorageKey, JSON.stringify(data));
+    }
+    
+    // מחיקת מצב השהייה
+    localStorage.removeItem('zmanit_focus_paused');
+    
     toast.success('▶ ממשיכים!');
   };
 
