@@ -805,9 +805,16 @@ function DayColumn({
   onSelectDay 
 }) {
   const blocks = day.blocks || [];
-  const googleBlocks = blocks.filter(b => b.isGoogleEvent);
-  const regularBlocks = blocks.filter(b => !b.isGoogleEvent && !b.isCompleted);
   const completedBlocks = blocks.filter(b => b.isCompleted);
+  
+  // 🔧 תיקון: מיון כל הבלוקים (גוגל + רגילים) לפי שעה
+  const activeBlocks = blocks
+    .filter(b => !b.isCompleted)
+    .sort((a, b) => {
+      const aTime = a.startTime?.split(':').map(Number) || [0, 0];
+      const bTime = b.startTime?.split(':').map(Number) || [0, 0];
+      return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
+    });
 
   // ✅ בדיקה אם הגרירה חוקית (לפני הדדליין)
   const isValidDropTarget = !draggedTask || 
@@ -878,26 +885,16 @@ function DayColumn({
           </div>
         ) : (
           <>
-            {/* אירועי גוגל */}
-            {googleBlocks.map((block, idx) => (
+            {/* 🔧 תיקון: כל האירועים והמשימות לפי סדר השעות */}
+            {activeBlocks.map((block, idx) => (
               <TaskBlock
-                key={block.id || `google-${idx}`}
+                key={block.id || `block-${idx}`}
                 block={block}
                 onEdit={() => block.task && onEditTask(block.task)}
-                compact
-              />
-            ))}
-            
-            {/* משימות רגילות */}
-            {regularBlocks.map((block, idx) => (
-              <TaskBlock
-                key={block.id || `regular-${idx}`}
-                block={block}
-                onEdit={() => block.task && onEditTask(block.task)}
-                onComplete={() => block.task && onComplete(block.task)}
-                onStartTimer={() => block.task && onStartTimer(block.task)}
-                onDragStart={() => block.task && onDragStart(block.task, block)}
-                draggable
+                onComplete={() => !block.isGoogleEvent && block.task && onComplete(block.task)}
+                onStartTimer={() => !block.isGoogleEvent && block.task && onStartTimer(block.task)}
+                onDragStart={() => !block.isGoogleEvent && block.task && onDragStart(block.task, block)}
+                draggable={!block.isGoogleEvent}
                 compact
               />
             ))}
@@ -1074,9 +1071,16 @@ function MobileDayView({
   
   const isToday = currentDay.date === todayStr;
   const blocks = currentDay.blocks || [];
-  const googleBlocks = blocks.filter(b => b.isGoogleEvent);
-  const regularBlocks = blocks.filter(b => !b.isGoogleEvent && !b.isCompleted);
   const completedBlocks = blocks.filter(b => b.isCompleted);
+  
+  // 🔧 תיקון: מיון כל הבלוקים (גוגל + רגילים) לפי שעה
+  const activeBlocks = blocks
+    .filter(b => !b.isCompleted)
+    .sort((a, b) => {
+      const aTime = a.startTime?.split(':').map(Number) || [0, 0];
+      const bTime = b.startTime?.split(':').map(Number) || [0, 0];
+      return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
+    });
 
   // החלקה בנייד
   const handleSwipe = (direction) => {
@@ -1165,31 +1169,16 @@ function MobileDayView({
           </div>
         ) : (
           <>
-            {/* אירועי גוגל */}
-            {googleBlocks.length > 0 && (
-              <div className="mb-4">
-                <div className="text-xs text-purple-600 font-medium mb-2">📅 אירועים קבועים</div>
-                {googleBlocks.map((block, idx) => (
+            {/* 🔧 תיקון: כל האירועים והמשימות לפי סדר השעות */}
+            {activeBlocks.length > 0 && (
+              <div className="mb-4 space-y-2">
+                {activeBlocks.map((block, idx) => (
                   <MobileTaskBlock
-                    key={block.id || `google-${idx}`}
+                    key={block.id || `block-${idx}`}
                     block={block}
                     onEdit={() => block.task && onEditTask(block.task)}
-                  />
-                ))}
-              </div>
-            )}
-            
-            {/* משימות */}
-            {regularBlocks.length > 0 && (
-              <div className="mb-4">
-                <div className="text-xs text-blue-600 font-medium mb-2">📝 משימות ({regularBlocks.length})</div>
-                {regularBlocks.map((block, idx) => (
-                  <MobileTaskBlock
-                    key={block.id || `task-${idx}`}
-                    block={block}
-                    onEdit={() => block.task && onEditTask(block.task)}
-                    onComplete={() => block.task && onComplete(block.task)}
-                    onStartTimer={() => block.task && onStartTimer(block.task)}
+                    onComplete={() => !block.isGoogleEvent && block.task && onComplete(block.task)}
+                    onStartTimer={() => !block.isGoogleEvent && block.task && onStartTimer(block.task)}
                   />
                 ))}
               </div>

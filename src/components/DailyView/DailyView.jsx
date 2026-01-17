@@ -984,7 +984,7 @@ function DailyView() {
   };
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
+    <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 overflow-x-hidden">
       <motion.div
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
