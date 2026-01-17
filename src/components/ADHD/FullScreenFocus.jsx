@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TASK_TYPES } from '../../config/taskTypes';
 import { formatDuration } from '../../config/workSchedule';
