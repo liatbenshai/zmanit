@@ -160,87 +160,8 @@ function FocusedDashboard() {
     });
   }, [todayTasks, currentTask]);
 
-  // בדיקת התראות
-  useEffect(() => {
-    const checkNotifications = () => {
-      const now = new Date();
-      const currentMinutes = now.getHours() * 60 + now.getMinutes();
-      
-      // 🔧 בדיקה איזה טיימר פעיל (אם בכלל)
-      const activeTimerId = localStorage.getItem('zmanit_active_timer');
-      
-      todayTasks.forEach(task => {
-        if (task.is_completed || !task.due_time) return;
-        
-        // 🔧 אם הטיימר רץ על המשימה הזו - לא לשלוח התראות "התחילי"
-        // (כי כבר עובדת עליה!)
-        if (activeTimerId === task.id) {
-          return;
-        }
-        
-        const [h, m] = task.due_time.split(':').map(Number);
-        const taskMinutes = h * 60 + (m || 0);
-        const diff = taskMinutes - currentMinutes;
-        
-        // התראה 5 דקות לפני
-        const warningKey = `warning-${task.id}`;
-        if (diff > 0 && diff <= 5 && !notifiedTasks.current.has(warningKey)) {
-          notifiedTasks.current.add(warningKey);
-          
-          // צליל
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.play().catch(() => {});
-          }
-          
-          // התראת מערכת
-          if (notificationsEnabled) {
-            new Notification('⏰ משימה מתחילה בקרוב', {
-              body: `${task.title} - בעוד ${diff} דקות`,
-              icon: '/icon.svg',
-              tag: `task-warning-${task.id}`,
-              requireInteraction: true
-            });
-          }
-          
-          // טוסט
-          toast(`⏰ ${task.title} מתחילה בעוד ${diff} דקות`, {
-            duration: 10000,
-            icon: '🔔'
-          });
-        }
-        
-        // התראה כשהגיע הזמן (או עברו עד 2 דקות)
-        const startKey = `start-${task.id}`;
-        if (diff <= 0 && diff >= -2 && !notifiedTasks.current.has(startKey)) {
-          notifiedTasks.current.add(startKey);
-          
-          if (soundEnabled && audioRef.current) {
-            audioRef.current.play().catch(() => {});
-          }
-          
-          // התראת מערכת
-          if (notificationsEnabled) {
-            new Notification('🚀 הגיע הזמן!', {
-              body: task.title,
-              icon: '/icon.svg',
-              tag: `task-start-${task.id}`,
-              requireInteraction: true
-            });
-          }
-          
-          toast.success(`🚀 הגיע הזמן: ${task.title}`, {
-            duration: 15000
-          });
-        }
-      });
-    };
-    
-    // בדיקה כל 15 שניות
-    checkNotifications();
-    const interval = setInterval(checkNotifications, 15000);
-    
-    return () => clearInterval(interval);
-  }, [todayTasks, notificationsEnabled, soundEnabled]);
+  // ✅ התראות מנוהלות על ידי UnifiedNotificationManager ב-App.jsx
+  // הסרנו את הלולאה הכפולה כאן למניעת התראות כפולות
 
   // סטטיסטיקות יום
   const dayStats = useMemo(() => {
