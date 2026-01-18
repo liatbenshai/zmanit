@@ -6,12 +6,37 @@
  * השירות מנהל את כל הטיימרים בפורמט אחיד
  */
 
-import { EventEmitter } from 'events';
+// מימוש פשוט של EventEmitter לדפדפן
+class SimpleEventEmitter {
+  constructor() { this._events = {}; }
+  on(event, listener) {
+    if (!this._events[event]) this._events[event] = [];
+    this._events[event].push(listener);
+    return this;
+  }
+  off(event, listener) {
+    if (!this._events[event]) return this;
+    this._events[event] = this._events[event].filter(l => l !== listener);
+    return this;
+  }
+  emit(event, ...args) {
+    if (!this._events[event]) return false;
+    this._events[event].forEach(listener => {
+      try { listener(...args); } catch (e) { console.error('Event listener error:', e); }
+    });
+    return true;
+  }
+  removeAllListeners(event) {
+    if (event) delete this._events[event];
+    else this._events = {};
+    return this;
+  }
+}
 
 /**
  * מחלקת שירות טיימרים
  */
-class TimerService extends EventEmitter {
+class TimerService extends SimpleEventEmitter {
   constructor() {
     super();
     

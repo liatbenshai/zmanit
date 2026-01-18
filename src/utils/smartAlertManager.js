@@ -472,7 +472,7 @@ export class SmartAlertManager {
     // ✅ שימוש ב-NotificationService במקום לשלוח ישירות
     // ה-NotificationService בודק בעצמו אם יש טיימר פעיל
     try {
-      const notificationServiceModule = await import('../../services/notificationService');
+      const notificationServiceModule = await import('../services/notificationService');
       const notificationService = notificationServiceModule.default;
       const { PRIORITY } = notificationServiceModule;
       
@@ -565,7 +565,7 @@ async function getTimerService() {
   if (timerServiceCache) return timerServiceCache;
   
   try {
-    const timerServiceModule = await import('../../services/timerService');
+    const timerServiceModule = await import('../services/timerService');
     timerServiceCache = timerServiceModule.default;
     return timerServiceCache;
   } catch (e) {
