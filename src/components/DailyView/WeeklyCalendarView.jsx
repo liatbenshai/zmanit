@@ -1,11 +1,12 @@
 import { useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { TASK_TYPES } from '../../config/taskTypes';
+import { useSettings } from '../../context/SettingsContext';
 
 /**
- * שעות העבודה
+ * ברירת מחדל לשעות העבודה (ישמשו רק אם אין הגדרות)
  */
-const WORK_HOURS = {
+const DEFAULT_WORK_HOURS = {
   start: 8,
   end: 16
 };
@@ -47,21 +48,44 @@ function getHebrewDate(date) {
  * תצוגת שבוע כיומן
  */
 function WeeklyCalendarView({ tasks, selectedDate, onSelectDate, onEditTask }) {
-  // ימות השבוע (ראשון עד חמישי - ימי עבודה)
+  // ✅ קבלת הגדרות משתמש
+  const { workDays, workHours } = useSettings();
+  
+  // ✅ חישוב שעות עבודה מההגדרות
+  const WORK_HOURS = useMemo(() => {
+    if (workHours?.dayStart && workHours?.dayEnd) {
+      return {
+        start: Math.floor(workHours.dayStart / 60),
+        end: Math.ceil(workHours.dayEnd / 60)
+      };
+    }
+    return DEFAULT_WORK_HOURS;
+  }, [workHours]);
+  
+  // ימות השבוע - לפי ימי עבודה מוגדרים
   const weekDays = useMemo(() => {
     const days = [];
     const startOfWeek = new Date(selectedDate);
     const dayOfWeek = startOfWeek.getDay();
     startOfWeek.setDate(startOfWeek.getDate() - dayOfWeek); // חזרה ליום ראשון
     
-    // רק ימי עבודה: ראשון עד חמישי (0-4)
-    for (let i = 0; i <= 4; i++) {
+    // ✅ רק ימי עבודה מופעלים (לפי הגדרות)
+    for (let i = 0; i <= 6; i++) {
+      // בדיקה אם היום מופעל בהגדרות
+      if (workDays && workDays[i] && !workDays[i].enabled) {
+        continue; // דילוג על ימים לא פעילים
+      }
+      // אם אין הגדרות - ברירת מחדל: א'-ה'
+      if (!workDays && i > 4) {
+        continue;
+      }
+      
       const day = new Date(startOfWeek);
       day.setDate(day.getDate() + i);
       days.push(day);
     }
     return days;
-  }, [selectedDate]);
+  }, [selectedDate, workDays]);
 
   // שעות העבודה
   const hours = useMemo(() => {
@@ -115,14 +139,17 @@ function WeeklyCalendarView({ tasks, selectedDate, onSelectDate, onEditTask }) {
     return Math.max(1, Math.ceil(duration / 60));
   };
 
-  // שמות הימים בעברית
-  const dayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי'];
+  // שמות הימים בעברית - מערך מלא
+  const allDayNames = ['ראשון', 'שני', 'שלישי', 'רביעי', 'חמישי', 'שישי', 'שבת'];
+  
+  // ✅ מספר העמודות דינמי לפי ימי עבודה
+  const numDays = weekDays.length;
 
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[700px]">
         {/* כותרת עם ימים */}
-        <div className="grid grid-cols-[60px_repeat(5,1fr)] border-b border-gray-200 dark:border-gray-700">
+        <div className={`grid border-b border-gray-200 dark:border-gray-700`} style={{ gridTemplateColumns: `60px repeat(${numDays}, 1fr)` }}>
           {/* פינה ריקה */}
           <div className="p-2 bg-gray-50 dark:bg-gray-800"></div>
           
@@ -130,6 +157,7 @@ function WeeklyCalendarView({ tasks, selectedDate, onSelectDate, onEditTask }) {
           {weekDays.map((day, index) => {
             const isTodayDay = isToday(day);
             const isSelected = getDateISO(day) === getDateISO(selectedDate);
+            const dayOfWeek = day.getDay(); // ✅ שם היום לפי היום בשבוע
             
             return (
               <button
@@ -144,7 +172,7 @@ function WeeklyCalendarView({ tasks, selectedDate, onSelectDate, onEditTask }) {
                 `}
               >
                 <div className="font-medium text-gray-900 dark:text-white">
-                  {dayNames[index]}
+                  {allDayNames[dayOfWeek]}
                 </div>
                 <div className={`text-lg font-bold ${isTodayDay ? 'text-blue-600 dark:text-blue-400' : 'text-gray-700 dark:text-gray-300'}`}>
                   {day.getDate()}
@@ -166,7 +194,8 @@ function WeeklyCalendarView({ tasks, selectedDate, onSelectDate, onEditTask }) {
         {hours.map((hour) => (
           <div
             key={hour}
-            className="grid grid-cols-[60px_repeat(5,1fr)] border-b border-gray-100 dark:border-gray-800 min-h-[60px]"
+            className="border-b border-gray-100 dark:border-gray-800 min-h-[60px]"
+            style={{ display: 'grid', gridTemplateColumns: `60px repeat(${numDays}, 1fr)` }}
           >
             {/* עמודת שעות */}
             <div className="p-2 text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-800 border-l border-gray-200 dark:border-gray-700 flex items-start justify-center">

@@ -4,6 +4,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import { useGoogleCalendar } from '../../hooks/useGoogleCalendar';
 import { useSchedule } from '../../hooks/useSchedule'; // ✅ לקבלת currentTime
+import { useSettings } from '../../context/SettingsContext'; // ✅ לקבלת שעות עבודה
 import { smartScheduleWeekV4 } from '../../utils/smartSchedulerV4'; // ✅ חישוב מקומי
 import { TASK_TYPES } from '../../config/taskTypes';
 import SimpleTaskForm from './SimpleTaskForm';
@@ -29,44 +30,100 @@ let draggedTaskData = null;
  */
 
 /**
- * שעות עבודה קבועות
+ * ערכי ברירת מחדל לשעות עבודה (ישמשו רק אם אין הגדרות)
  */
-const WORK_HOURS = {
+const DEFAULT_WORK_HOURS = {
   start: 8.5, // 08:30
   end: 16.25,  // 16:15
   totalMinutes: 7.75 * 60 // 465 דקות
 };
 
 /**
- * שעות בית/משפחה
+ * שעות בית/משפחה - ברירת מחדל
  */
-const HOME_HOURS = {
+const DEFAULT_HOME_HOURS = {
   start: 17, // 17:00
   end: 21,   // 21:00
   totalMinutes: 4 * 60 // 240 דקות
 };
 
 /**
- * שעות בית בסופ"ש (גמיש)
+ * שעות בית בסופ"ש (גמיש) - ברירת מחדל
  */
-const WEEKEND_HOME_HOURS = {
+const DEFAULT_WEEKEND_HOME_HOURS = {
   start: 8,  // 08:00
   end: 22,   // 22:00
   totalMinutes: 14 * 60 // 840 דקות
 };
 
 /**
- * קבלת שעות היום לפי תאריך
+ * המרת דקות משעת חצות לשעה עשרונית (510 -> 8.5)
  */
-function getDaySchedule(date) {
+function minutesToDecimalHour(minutes) {
+  return minutes / 60;
+}
+
+/**
+ * המרת דקות משעת חצות למחרוזת שעה (510 -> "08:30")
+ */
+function minutesToTimeStr(minutes) {
+  const hours = Math.floor(minutes / 60);
+  const mins = minutes % 60;
+  return `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+}
+
+/**
+ * קבלת שעות היום לפי תאריך - עם תמיכה בהגדרות משתמש
+ */
+function getDaySchedule(date, workDays = null, workHours = null) {
   const dayOfWeek = date.getDay();
   const isWeekend = dayOfWeek === 5 || dayOfWeek === 6; // שישי או שבת
   
+  // אם יש הגדרות משתמש - נשתמש בהן
+  if (workDays && workHours) {
+    const daySettings = workDays[dayOfWeek];
+    
+    // אם היום לא מופעל - זה יום בית
+    if (!daySettings?.enabled) {
+      return {
+        type: 'home',
+        label: 'שעות בית',
+        hours: DEFAULT_WEEKEND_HOME_HOURS,
+        startStr: '08:00',
+        endStr: '22:00',
+        isWorkDay: false,
+        isHomeDay: true
+      };
+    }
+    
+    // יום עבודה עם הגדרות מהמשתמש
+    const startMinutes = daySettings.hours?.start || workHours.dayStart || 510;
+    const endMinutes = daySettings.hours?.end || workHours.dayEnd || 975;
+    
+    const customWorkHours = {
+      start: minutesToDecimalHour(startMinutes),
+      end: minutesToDecimalHour(endMinutes),
+      totalMinutes: endMinutes - startMinutes
+    };
+    
+    return {
+      type: 'work',
+      label: 'שעות עבודה',
+      hours: customWorkHours,
+      startStr: minutesToTimeStr(startMinutes),
+      endStr: minutesToTimeStr(endMinutes),
+      isWorkDay: true,
+      isHomeDay: true,
+      homeHours: DEFAULT_HOME_HOURS
+    };
+  }
+  
+  // ברירת מחדל - ללא הגדרות
   if (isWeekend) {
     return {
       type: 'home',
       label: 'שעות בית',
-      hours: WEEKEND_HOME_HOURS,
+      hours: DEFAULT_WEEKEND_HOME_HOURS,
       startStr: '08:00',
       endStr: '22:00',
       isWorkDay: false,
@@ -78,12 +135,12 @@ function getDaySchedule(date) {
   return {
     type: 'work',
     label: 'שעות עבודה',
-    hours: WORK_HOURS,
+    hours: DEFAULT_WORK_HOURS,
     startStr: '08:30',
     endStr: '16:15',
     isWorkDay: true,
     isHomeDay: true,
-    homeHours: HOME_HOURS
+    homeHours: DEFAULT_HOME_HOURS
   };
 }
 
@@ -184,6 +241,12 @@ function GoogleIcon() {
 function DailyView() {
   const { user } = useAuth();
   const { tasks, loading, error, loadTasks, editTask, toggleComplete, addTask, dataVersion } = useTasks();
+  
+  // ✅ שימוש ב-useSettings לקבלת שעות עבודה מהגדרות המשתמש
+  const { workDays, workHours } = useSettings();
+  
+  // ✅ פונקציה עוזרת לקבלת לוח זמנים עם הגדרות המשתמש
+  const getScheduleForDate = (date) => getDaySchedule(date, workDays, workHours);
   
   // ✅ שימוש ב-useSchedule רק לקבלת currentTime
   const { 
@@ -434,7 +497,7 @@ function DailyView() {
       .reduce((sum, b) => sum + (b.task?.time_spent || b.timeSpent || 0), 0);
     
     // ✅ תיקון: שימוש בשעות דינמיות לפי היום
-    const daySchedule = getDaySchedule(selectedDate);
+    const daySchedule = getScheduleForDate(selectedDate);
     const dayHours = daySchedule.hours;
     
     const endOfDayMinutes = dayHours.end * 60;
@@ -675,7 +738,7 @@ function DailyView() {
         .filter(block => block && !block.isFromGoogle && !block.is_from_google && !block.isGoogleEvent);
       
       // חישוב זמנים חדשים
-      const daySchedule = getDaySchedule(selectedDate);
+      const daySchedule = getScheduleForDate(selectedDate);
       let nextStartMinutes = isViewingToday 
         ? currentTime.minutes 
         : daySchedule.hours.start * 60;
@@ -856,7 +919,7 @@ function DailyView() {
   };
   
   // ✅ תיקון: שימוש בשעות דינמיות לפי היום
-  const currentDaySchedule = getDaySchedule(selectedDate);
+  const currentDaySchedule = getScheduleForDate(selectedDate);
   let nextStartMinutes = isViewingToday ? currentTime.minutes : currentDaySchedule.hours.start * 60;
   
   const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
@@ -1046,7 +1109,7 @@ function DailyView() {
         <div className="flex items-center justify-center gap-2 mt-2">
           <p className="text-gray-500 dark:text-gray-400 text-sm">
             {(() => {
-              const schedule = getDaySchedule(selectedDate);
+              const schedule = getScheduleForDate(selectedDate);
               const effective = getEffectiveHoursForDate(selectedDate, schedule);
               return (
                 <>
@@ -1060,7 +1123,7 @@ function DailyView() {
           </p>
           <DayOverrideButton 
             date={selectedDate}
-            currentSchedule={getDaySchedule(selectedDate)}
+            currentSchedule={getScheduleForDate(selectedDate)}
             onScheduleChange={() => {
               setScheduleRefresh(prev => prev + 1);
               loadTasks();
@@ -1125,7 +1188,7 @@ function DailyView() {
         {rescheduleInfo && rescheduleInfo.tasksToMoveToTomorrow.length > 0 && (
           <div className="mt-3 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
             <div className="text-red-700 dark:text-red-400 text-sm font-medium mb-2">
-              ⚠️ לא יספיק! צריך {formatMinutes(rescheduleInfo.timeNeededToday + rescheduleInfo.tasksToMoveToTomorrow.reduce((sum, t) => sum + (t.estimated_duration || 30), 0))} אבל נשארו רק {formatMinutes(rescheduleInfo.remainingWorkToday)} ב{getDaySchedule(selectedDate).label}
+              ⚠️ לא יספיק! צריך {formatMinutes(rescheduleInfo.timeNeededToday + rescheduleInfo.tasksToMoveToTomorrow.reduce((sum, t) => sum + (t.estimated_duration || 30), 0))} אבל נשארו רק {formatMinutes(rescheduleInfo.remainingWorkToday)} ב{getScheduleForDate(selectedDate).label}
             </div>
             
             <div className="text-xs text-red-600 dark:text-red-300 mb-2">
@@ -1166,7 +1229,7 @@ function DailyView() {
         {rescheduleInfo && rescheduleInfo.tasksOverflowingEndOfDay && rescheduleInfo.tasksOverflowingEndOfDay.length > 0 && (
           <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700">
             <div className="text-orange-700 dark:text-orange-400 text-sm font-medium mb-2">
-              ⏰ {rescheduleInfo.tasksOverflowingEndOfDay.length} משימות חורגות מ-{getDaySchedule(selectedDate).endStr}!
+              ⏰ {rescheduleInfo.tasksOverflowingEndOfDay.length} משימות חורגות מ-{getScheduleForDate(selectedDate).endStr}!
             </div>
             
             <div className="text-xs text-orange-600 dark:text-orange-300 mb-2">
@@ -1180,7 +1243,7 @@ function DailyView() {
                     </span>
                     <span>{task.title}</span>
                     <span className="text-orange-500">
-                      (+{task.overflowMinutes} דק' אחרי {getDaySchedule(selectedDate).endStr})
+                      (+{task.overflowMinutes} דק' אחרי {getScheduleForDate(selectedDate).endStr})
                     </span>
                   </li>
                 ))}
@@ -1256,7 +1319,7 @@ function DailyView() {
           >
             <div className="h-full flex flex-col justify-between py-2 text-xs text-gray-500 dark:text-gray-400">
               {(() => {
-                const schedule = getDaySchedule(selectedDate);
+                const schedule = getScheduleForDate(selectedDate);
                 const startHour = schedule.hours.start;
                 const endHour = schedule.hours.end;
                 const totalHours = endHour - startHour;
