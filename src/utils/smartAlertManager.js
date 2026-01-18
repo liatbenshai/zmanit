@@ -468,41 +468,51 @@ export class SmartAlertManager {
     }
   }
   
-  sendSystemNotification(alert) {
-    // 🔧 בדיקה ספציפית: אם הטיימר רץ על המשימה הזו - לא לשלוח
-    const activeTimer = localStorage.getItem('zmanit_active_timer');
-    if (activeTimer && alert.taskId && activeTimer === alert.taskId) {
-      // בדיקה נוספת שהטיימר באמת רץ (לא בהשהיה)
-      const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
-      if (timerData) {
-        try {
-          const data = JSON.parse(timerData);
-          if (data.isRunning === true) {
-            console.log('🔇 smartAlertManager: טיימר רץ על המשימה הזו - לא שולח');
-            return;
-          }
-        } catch (e) {}
-      }
-    }
-    
-    if ('Notification' in window && Notification.permission === 'granted') {
-      const notification = new Notification(alert.title, {
-        body: alert.message,
-        icon: '/icon-192.png',
-        badge: '/icon-192.png',
-        tag: alert.id,
-        requireInteraction: alert.requiresResponse,
-        vibrate: alert.vibrate ? [200, 100, 200] : undefined,
-        dir: 'rtl',
-        lang: 'he'
-      });
+  async sendSystemNotification(alert) {
+    // ✅ שימוש ב-NotificationService במקום לשלוח ישירות
+    // ה-NotificationService בודק בעצמו אם יש טיימר פעיל
+    try {
+      const notificationServiceModule = await import('../../services/notificationService');
+      const notificationService = notificationServiceModule.default;
+      const { PRIORITY } = notificationServiceModule;
       
-      notification.onclick = () => {
-        window.focus();
-        if (this.callbacks.onPopup) {
-          this.callbacks.onPopup(alert);
-        }
-      };
+      await notificationService.send({
+        id: alert.id,
+        type: alert.type,
+        title: alert.title,
+        message: alert.message,
+        taskId: alert.taskId,
+        priority: alert.priority === ALERT_PRIORITY.CRITICAL ? PRIORITY.CRITICAL :
+                 alert.priority === ALERT_PRIORITY.HIGH ? PRIORITY.HIGH :
+                 alert.priority === ALERT_PRIORITY.MEDIUM ? PRIORITY.MEDIUM : PRIORITY.LOW,
+        showPopup: alert.showPopup,
+        blockingPopup: alert.blockingPopup,
+        actions: alert.actions,
+        minIntervalMinutes: 5,
+        key: `${alert.taskId}-${alert.type}`
+      });
+    } catch (err) {
+      console.error('❌ שגיאה בשליחת התראה דרך NotificationService:', err);
+      // fallback ללוגיקה ישנה
+      if ('Notification' in window && Notification.permission === 'granted') {
+        const notification = new Notification(alert.title, {
+          body: alert.message,
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+          tag: alert.id,
+          requireInteraction: alert.requiresResponse,
+          vibrate: alert.vibrate ? [200, 100, 200] : undefined,
+          dir: 'rtl',
+          lang: 'he'
+        });
+        
+        notification.onclick = () => {
+          window.focus();
+          if (this.callbacks.onPopup) {
+            this.callbacks.onPopup(alert);
+          }
+        };
+      }
     }
   }
   
@@ -545,42 +555,83 @@ function toLocalISODate(date) {
   return `${year}-${month}-${day}`;
 }
 
+// Cache של TimerService לטעינה אסינכרונית
+let timerServiceCache = null;
+
+/**
+ * טעינת TimerService (lazy loading)
+ */
+async function getTimerService() {
+  if (timerServiceCache) return timerServiceCache;
+  
+  try {
+    const timerServiceModule = await import('../../services/timerService');
+    timerServiceCache = timerServiceModule.default;
+    return timerServiceCache;
+  } catch (e) {
+    console.warn('⚠️ TimerService לא זמין:', e);
+    return null;
+  }
+}
+
 /**
  * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה ספציפית
- * תומך בשני סוגי טיימרים:
- * - MiniTimer: משתמש ב-isPaused
- * - TaskTimerWithInterruptions: משתמש ב-isInterrupted
+ * משתמש ב-TimerService (sync fallback)
  */
 function isTimerActive(taskId) {
   if (!taskId) return false;
+  
+  // ניסיון sync עם TimerService
+  try {
+    // אם TimerService כבר נטען
+    if (timerServiceCache) {
+      return timerServiceCache.isTaskTimerActive(taskId);
+    }
+  } catch (e) {
+    // המשך ל-fallback
+  }
+  
+  // Fallback ללוגיקה ישנה
   try {
     const key = `timer_v2_${taskId}`;
     const saved = localStorage.getItem(key);
     if (saved) {
       const data = JSON.parse(saved);
-      // פעיל = רץ, או מושהה (isPaused), או בהפרעה (isInterrupted)
       if (data.isRunning === true) return true;
       if (data.isPaused === true) return true;
       if (data.isInterrupted === true && data.startTime) return true;
-      // אם יש startTime ואין סימון שהטיימר נעצר לגמרי
       if (data.startTime && (data.isRunning !== false || data.isPaused || data.isInterrupted)) return true;
     }
   } catch (e) {}
+  
   return false;
 }
 
 /**
  * ✅ בדיקה אם יש טיימר פעיל (רץ או מושהה) על משימה כלשהי
+ * משתמש ב-TimerService (sync fallback)
  */
 function getActiveTaskIdFromStorage() {
+  // ניסיון sync עם TimerService
   try {
+    if (timerServiceCache) {
+      return timerServiceCache.getActiveTaskId();
+    }
+  } catch (e) {
+    // המשך ל-fallback
+  }
+  
+  // Fallback ללוגיקה ישנה
+  try {
+    const activeTimer = localStorage.getItem('zmanit_active_timer');
+    if (activeTimer) return activeTimer;
+    
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('timer_v2_')) {
         const saved = localStorage.getItem(key);
         if (saved) {
           const data = JSON.parse(saved);
-          // פעיל = רץ, או מושהה, או בהפרעה
           const isActive = data.isRunning === true || 
                            data.isPaused === true || 
                            (data.isInterrupted === true && data.startTime);
@@ -591,8 +642,12 @@ function getActiveTaskIdFromStorage() {
       }
     }
   } catch (e) {}
+  
   return null;
 }
+
+// טעינה אסינכרונית של TimerService
+getTimerService().catch(() => {});
 
 // ============================================
 // Singleton instance
