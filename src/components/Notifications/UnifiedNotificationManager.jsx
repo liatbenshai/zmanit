@@ -32,22 +32,39 @@ function toLocalISODate(date) {
  */
 function getActiveTaskId() {
   try {
+    // ✅ תיקון: בדיקה ראשית של המפתח הפשוט
+    const activeTimer = localStorage.getItem('zmanit_active_timer');
+    if (activeTimer) {
+      // וידוא שהטיימר באמת רץ
+      const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
+      if (timerData) {
+        const data = JSON.parse(timerData);
+        if (data.isRunning === true) {
+          console.log('🔔 [Notifications] טיימר פעיל נמצא:', activeTimer);
+          return activeTimer;
+        }
+      }
+    }
+    
+    // בדיקה משנית - סריקת כל מפתחות הטיימר
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key && key.startsWith('timer_v2_')) {
         const saved = localStorage.getItem(key);
         if (saved) {
           const data = JSON.parse(saved);
-          const isActive = data.isRunning === true || 
-                           data.isPaused === true || 
-                           (data.isInterrupted === true && data.startTime);
-          if (isActive) {
-            return key.replace('timer_v2_', '');
+          // ✅ תיקון: רק טיימר שרץ בפועל (לא בהשהיה)
+          if (data.isRunning === true) {
+            const taskId = key.replace('timer_v2_', '');
+            console.log('🔔 [Notifications] טיימר פעיל נמצא בסריקה:', taskId);
+            return taskId;
           }
         }
       }
     }
-  } catch (e) {}
+  } catch (e) {
+    console.error('🔔 [Notifications] שגיאה בבדיקת טיימר:', e);
+  }
   return null;
 }
 
@@ -133,27 +150,23 @@ export function useUnifiedNotifications() {
   
   // ✅ בדיקת משימות ושליחת התראות מתואמות
   const checkAndNotify = useCallback(() => {
-    // 🔧 תיקון: לא עוצרים אם אין הרשאה - פשוט לא שולחים Push
-    if (!tasks || tasks.length === 0) return;
+    if (!tasks || tasks.length === 0) {
+      console.log('🔔 [Notifications] אין משימות לבדיקה');
+      return;
+    }
     
     const hasPushPermission = permission === 'granted';
+    console.log('🔔 [Notifications] בודק התראות...', { 
+      tasksCount: tasks.length, 
+      hasPushPermission 
+    });
     
     const now = new Date();
     const today = toLocalISODate(now);
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     
-    // בדיקה אם יש טיימר פעיל
+    // בדיקה אם יש טיימר פעיל (רץ, לא בהשהיה)
     const activeTaskId = getActiveTaskId();
-    
-    // אם יש טיימר פעיל - לא שולחים התראות על משימות אחרות
-    if (activeTaskId) {
-      // רק התראות על המשימה הפעילה (זמן נגמר וכו')
-      const activeTask = tasks.find(t => t.id === activeTaskId);
-      if (activeTask) {
-        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
-      }
-      return;
-    }
     
     // בדיקת משימות של היום
     const todayTasks = tasks.filter(task => {
@@ -161,6 +174,10 @@ export function useUnifiedNotifications() {
       const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
       return taskDate === today && task.due_time;
     });
+    
+    console.log('🔔 [Notifications] משימות היום:', todayTasks.length, 
+      todayTasks.map(t => ({ title: t.title, time: t.due_time }))
+    );
     
     // ✅ יצירת בלוקים מתוזמנים עבור alertManager
     const scheduledBlocks = todayTasks.map(task => {
@@ -181,7 +198,21 @@ export function useUnifiedNotifications() {
     // ✅ קריאה ל-alertManager לבדיקת התראות חכמות
     alertManager.checkScheduledTasks(tasks, scheduledBlocks);
     
+    // ✅ שינוי: גם אם יש טיימר פעיל, נבדוק התראות על המשימה הפעילה
+    // אבל נשלח גם התראות על משימות אחרות שמתקרבות
+    if (activeTaskId) {
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      if (activeTask) {
+        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
+      }
+      // ✅ שינוי: לא יוצאים! ממשיכים לבדוק משימות אחרות
+    }
+    
+    // ✅ בדיקת כל משימות היום
     todayTasks.forEach(task => {
+      // דילוג על המשימה הפעילה (כבר בדקנו אותה)
+      if (task.id === activeTaskId) return;
+      
       checkTaskAlerts(task, currentMinutes, today, hasPushPermission);
     });
     
@@ -251,9 +282,19 @@ export function useUnifiedNotifications() {
     const taskMinutes = hour * 60 + (min || 0);
     const diff = taskMinutes - currentMinutes;
     
+    console.log('🔔 [Notifications] בודק משימה:', {
+      title: task.title,
+      time: task.due_time,
+      taskMinutes,
+      currentMinutes,
+      diff,
+      hasPushPermission
+    });
+    
     // 5 דקות לפני
     if (diff > 0 && diff <= 5) {
       if (canNotify(task.id, 'before', 5)) {
+        console.log('🔔 [Notifications] שולח התראה - 5 דקות לפני:', task.title);
         if (hasPushPermission) {
           sendNotification(`⏰ ${task.title}`, {
             body: `מתחיל בעוד ${diff} דקות (${task.due_time})`,
@@ -268,9 +309,10 @@ export function useUnifiedNotifications() {
       }
     }
     
-    // בדיוק בזמן
+    // בדיוק בזמן (חלון של 2 דקות)
     if (diff >= -1 && diff <= 1) {
       if (canNotify(task.id, 'onTime', 5)) {
+        console.log('🔔 [Notifications] שולח התראה - בדיוק בזמן:', task.title);
         if (hasPushPermission) {
           sendNotification(`🔔 ${task.title}`, {
             body: `הגיע הזמן להתחיל!`,
@@ -292,6 +334,7 @@ export function useUnifiedNotifications() {
       
       if (canNotify(task.id, 'late', 10)) {
         const lateMinutes = Math.abs(Math.round(diff));
+        console.log('🔔 [Notifications] שולח התראה - באיחור:', task.title, lateMinutes, 'דקות');
         if (hasPushPermission) {
           sendNotification(`⏰ ${task.title}`, {
             body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,

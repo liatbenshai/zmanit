@@ -49,8 +49,17 @@ export function sendLocalNotification(title, options = {}) {
   const activeTimer = localStorage.getItem('zmanit_active_timer');
   const taskId = options.taskId || options.data?.taskId;
   if (activeTimer && taskId && activeTimer === taskId) {
-    console.log('🔇 pushNotifications: טיימר רץ על המשימה הזו - לא שולח');
-    return null;
+    // בדיקה נוספת שהטיימר באמת רץ
+    const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
+    if (timerData) {
+      try {
+        const data = JSON.parse(timerData);
+        if (data.isRunning === true) {
+          console.log('🔇 pushNotifications: טיימר רץ על המשימה הזו - לא שולח');
+          return null;
+        }
+      } catch (e) {}
+    }
   }
 
   const defaultOptions = {

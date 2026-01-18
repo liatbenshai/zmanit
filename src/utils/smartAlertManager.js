@@ -472,8 +472,17 @@ export class SmartAlertManager {
     // 🔧 בדיקה ספציפית: אם הטיימר רץ על המשימה הזו - לא לשלוח
     const activeTimer = localStorage.getItem('zmanit_active_timer');
     if (activeTimer && alert.taskId && activeTimer === alert.taskId) {
-      console.log('🔇 smartAlertManager: טיימר רץ על המשימה הזו - לא שולח');
-      return;
+      // בדיקה נוספת שהטיימר באמת רץ (לא בהשהיה)
+      const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
+      if (timerData) {
+        try {
+          const data = JSON.parse(timerData);
+          if (data.isRunning === true) {
+            console.log('🔇 smartAlertManager: טיימר רץ על המשימה הזו - לא שולח');
+            return;
+          }
+        } catch (e) {}
+      }
     }
     
     if ('Notification' in window && Notification.permission === 'granted') {
