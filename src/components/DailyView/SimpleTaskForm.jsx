@@ -652,6 +652,13 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   const createTask = async (taskData, blocksForToday = null) => {
     setLoading(true);
     
+    // 🔍 DEBUG: בדיקת נתונים ב-createTask
+    console.log('📤 SimpleTaskForm.createTask - נתונים נשלחים:', {
+      estimated_duration: taskData.estimated_duration,
+      taskData,
+      blocksForToday
+    });
+    
     try {
       // ✅ חדש: אם זו משימה בלת"מ - דוחפים את כל המשימות האחרות קודם
       let tasksOverflow = [];
@@ -777,6 +784,11 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     }
 
     // משימה קצרה - יוצרים ישר
+    console.log('🚀 SimpleTaskForm - יוצר משימה:', {
+      calculatedDuration,
+      taskData,
+      blocksCount
+    });
     createTask(taskData, 1);
   };
 

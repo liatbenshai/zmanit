@@ -147,6 +147,13 @@ export function TaskProvider({ children }) {
    */
   const addTask = async (taskData) => {
     
+    // 🔍 DEBUG: בדיקת נתונים נכנסים
+    console.log('📥 addTask - נתונים שהתקבלו:', {
+      estimated_duration: taskData.estimated_duration,
+      estimatedDuration: taskData.estimatedDuration,
+      fullData: taskData
+    });
+    
     if (authLoading) {
       throw new Error('⏳ ממתין לאימות משתמש...');
     }
@@ -164,6 +171,9 @@ export function TaskProvider({ children }) {
     
     try {
       const duration = taskData.estimatedDuration || taskData.estimated_duration || 0;
+      
+      // 🔍 DEBUG: בדיקת duration
+      console.log('📊 addTask - duration מחושב:', duration);
       
       const taskToCreate = {
         user_id: userId,
