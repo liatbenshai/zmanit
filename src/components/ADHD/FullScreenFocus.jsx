@@ -92,7 +92,7 @@ export default function FullScreenFocus({
       if (saved) {
         try {
           const data = JSON.parse(saved);
-          if (data.startTime && data.isRunning && !data.isInterrupted) {
+          if (data.startTime && data.isRunning && !data.isInterrupted && !data.isPaused) {
             // יש טיימר רץ - ממשיכים מאיפה שהפסקנו!
             const start = new Date(data.startTime);
             const elapsed = Math.floor((new Date() - start) / 1000) - (data.totalInterruptionSeconds || 0);
@@ -106,11 +106,23 @@ export default function FullScreenFocus({
               console.log('🔄 FullScreenFocus - טיימר שוחזר! עברו:', Math.floor(elapsed / 60), 'דקות');
               return; // לא מתחילים מחדש
             }
-          } else if (data.isPaused) {
-            // טיימר מושהה - לא מתחילים אוטומטית
+          } else if (data.isPaused && data.startTime) {
+            // ✅ תיקון: טיימר מושהה - שחזור עם הזמן שעבר
+            const start = new Date(data.startTime);
+            // ✅ שימוש בזמן השמור אם קיים, אחרת חישוב
+            let elapsed;
+            if (data.elapsedAtPause !== undefined) {
+              elapsed = data.elapsedAtPause;
+            } else {
+              const pausedAt = data.pausedAt ? new Date(data.pausedAt) : new Date();
+              elapsed = Math.floor((pausedAt - start) / 1000) - (data.totalInterruptionSeconds || 0);
+            }
+            setStartTime(start);
+            setElapsedSeconds(Math.max(0, elapsed));
+            elapsedRef.current = Math.max(0, elapsed);
             setIsRunning(false);
             setIsPaused(true);
-            console.log('⏸️ FullScreenFocus - טיימר מושהה');
+            console.log('⏸️ FullScreenFocus - טיימר מושהה, עברו:', Math.floor(elapsed / 60), 'דקות');
             return;
           }
         } catch (err) {
@@ -254,13 +266,18 @@ export default function FullScreenFocus({
     setIsPaused(true);
     localStorage.removeItem('zmanit_active_timer');
     
-    // 🔧 שמירת מצב השהייה ב-localStorage לסנכרון
+    // 🔧 תיקון: שמירת מצב השהייה עם הזמן שעבר
+    const currentElapsed = elapsedRef.current > 0 ? elapsedRef.current : elapsedSeconds;
+    const pausedAt = new Date();
+    
     if (timerStorageKey) {
       const data = {
         startTime: startTime?.toISOString(),
         isRunning: false,
         isPaused: true,
         isInterrupted: false,
+        pausedAt: pausedAt.toISOString(),  // ✅ שמירת זמן ההשהיה
+        elapsedAtPause: currentElapsed,     // ✅ שמירת הזמן שעבר
         totalInterruptionSeconds: 0,
         interruptions: []
       };
@@ -270,13 +287,11 @@ export default function FullScreenFocus({
     // שמירת מצב השהייה ל-IdleDetector
     localStorage.setItem('zmanit_focus_paused', JSON.stringify({
       isPaused: true,
-      pausedAt: new Date().toISOString(),
+      pausedAt: pausedAt.toISOString(),
       taskId: task.id,
       taskTitle: task.title
     }));
     
-    // 🔧 תיקון: שימוש ב-elapsedSeconds כגיבוי
-    const currentElapsed = elapsedRef.current > 0 ? elapsedRef.current : elapsedSeconds;
     const minutesWorked = Math.floor(currentElapsed / 60);
     
     console.log('💾 FullScreenFocus handlePause - elapsedRef:', elapsedRef.current, 'elapsedSeconds:', elapsedSeconds, 'minutesWorked:', minutesWorked);
@@ -284,11 +299,9 @@ export default function FullScreenFocus({
     if (onPause && minutesWorked > 0) {
       await onPause(minutesWorked);
       console.log('💾 FullScreenFocus handlePause - נשמרו:', minutesWorked, 'דקות');
-      // 🆕 איפוס אחרי שמירה כדי לא לספור פעמיים
-      elapsedRef.current = 0;
-      setElapsedSeconds(0);
     }
     
+    // ✅ לא מאפסים את הטיימר - שומרים את הזמן שעבר לתצוגה
     toast('⏸️ מושהה');
   };
 

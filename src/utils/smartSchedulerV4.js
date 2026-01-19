@@ -618,6 +618,14 @@ function prioritizeTasks(tasks, todayISO) {
     if (a.due_date && !b.due_date) return -1;
     if (!a.due_date && b.due_date) return 1;
     
+    // ✅ 5. לפי שעה - משימות עם שעה מוקדמת יותר קודם!
+    if (a.due_time && b.due_time) {
+      return a.due_time.localeCompare(b.due_time);
+    }
+    // משימות עם שעה מוגדרת קודם למשימות בלי שעה
+    if (a.due_time && !b.due_time) return -1;
+    if (!a.due_time && b.due_time) return 1;
+    
     return 0;
   });
 }
