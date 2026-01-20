@@ -20,7 +20,7 @@ import InstallPrompt from './components/PWA/InstallPrompt';
 import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
-import FloatingNowWidget from './components/Productivity/FloatingNowWidget';
+// FloatingNowWidget הוסר
 import WhyNotStartedDetector from './components/Productivity/WhyNotStartedDetector';
 // ✅ מנהל התראות מאוחד - מחליף את NotificationChecker + OverdueTaskManager
 import UnifiedNotificationManager from './components/Notifications/UnifiedNotificationManager';
@@ -73,7 +73,7 @@ function App() {
       {user && <UrgentTaskButton />}
 
       {/* ווידג'ט צף "עכשיו" */}
-      {user && <FloatingNowWidget />}
+      {/* FloatingNowWidget הוסר */}
 
       {/* גלאי "למה לא התחלת?" */}
       {user && <WhyNotStartedDetector />}

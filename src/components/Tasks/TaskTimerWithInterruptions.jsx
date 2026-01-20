@@ -155,10 +155,22 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
       localStorage.setItem('zmanit_active_timer', taskId);
       console.log('🟢 טיימר רץ - נשמר:', taskId);
     } else if (!isRunning && !isPaused) {
+      // 🔧 תיקון: לא למחוק אם יש טיימר שמור שעדיין רץ
+      // (זה יכול לקרות כשהקומפוננטה נטענת מחדש וה-state עדיין לא שוחזר)
+      const savedTimer = timerStorageKey ? localStorage.getItem(timerStorageKey) : null;
+      if (savedTimer) {
+        try {
+          const data = JSON.parse(savedTimer);
+          if (data.isRunning && data.startTime) {
+            console.log('⏳ יש טיימר שמור שרץ - לא מוחקים');
+            return; // לא למחוק!
+          }
+        } catch (e) {}
+      }
       localStorage.removeItem('zmanit_active_timer');
       console.log('🔴 טיימר לא רץ - נמחק');
     }
-  }, [isRunning, currentTask?.id, task?.id, isPaused]);
+  }, [isRunning, currentTask?.id, task?.id, isPaused, timerStorageKey]);
 
   // טיימר ראשי
   useEffect(() => {
@@ -445,32 +457,39 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     isRunningRef.current = isRunning;
   }, [elapsedSeconds, isRunning]);
   
-  // ✅ שמירה כשעוברים משימה
+  // ✅ שמירה כשעוברים משימה (לא כשהקומפוננטה נהרסת!)
   useEffect(() => {
     const prevId = previousTaskIdRef.current;
     const newId = currentTask?.id;
     
-    if (prevId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
+    // 🔧 תיקון: רק אם באמת עוברים למשימה אחרת (לא undefined)
+    // אם newId הוא undefined, הקומפוננטה נהרסת - לא צריך לאפס
+    if (prevId && newId && prevId !== newId && isRunningRef.current && elapsedSecondsRef.current >= 60) {
       if (saveProgressRef.current) {
         saveProgressRef.current(true).catch(err => {
           console.warn('⚠️ שמירה בעת מעבר משימה נכשלה:', err);
         });
       }
       
-      // איפוס
+      // איפוס - רק אם באמת עוברים למשימה אחרת
       setIsRunning(false);
       setElapsedSeconds(0);
       setStartTime(null);
     }
     
-    previousTaskIdRef.current = newId;
+    // עדכון ה-ref רק אם יש ערך חדש
+    if (newId) {
+      previousTaskIdRef.current = newId;
+    }
   }, [currentTask?.id]);
   
-  // ✅ שמירה כשהקומפוננטה מתפרקת
+  // ✅ שמירה כשהקומפוננטה מתפרקת - בלי לאפס!
   useEffect(() => {
     return () => {
+      // 🔧 תיקון: שומרים את ההתקדמות אבל לא מאפסים את הטיימר
+      // כך שכשחוזרים למשימה, הטיימר ימשיך מאיפה שהפסיק
       if (isRunningRef.current && elapsedSecondsRef.current >= 60 && saveProgressRef.current) {
-        saveProgressRef.current(true).catch(err => {
+        saveProgressRef.current(false).catch(err => {  // false = לא לאפס!
           console.warn('⚠️ שמירה לפני unmount נכשלה:', err);
         });
       }
