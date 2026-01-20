@@ -314,15 +314,7 @@ function FloatingNowWidget() {
 
               {/* כפתורים */}
               <div className="flex gap-2">
-                {!isTimerRunning ? (
-                  <button
-                    onClick={handleStart}
-                    className="flex-1 py-3 bg-green-500 hover:bg-green-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"
-                  >
-                    <span>▶️</span>
-                    <span>התחילי</span>
-                  </button>
-                ) : (
+                {isTimerRunning && (
                   <button
                     onClick={handlePause}
                     className="flex-1 py-3 bg-yellow-500 hover:bg-yellow-600 text-white rounded-xl font-medium transition-colors flex items-center justify-center gap-2"

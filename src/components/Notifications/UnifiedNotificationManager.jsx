@@ -32,35 +32,11 @@ function toLocalISODate(date) {
  */
 function getActiveTaskId() {
   try {
-    // ✅ תיקון: בדיקה ראשית של המפתח הפשוט
+    // בדיקה פשוטה - אם יש zmanit_active_timer, יש טיימר פעיל
     const activeTimer = localStorage.getItem('zmanit_active_timer');
-    if (activeTimer) {
-      // וידוא שהטיימר באמת רץ
-      const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
-      if (timerData) {
-        const data = JSON.parse(timerData);
-        if (data.isRunning === true) {
-          console.log('🔔 [Notifications] טיימר פעיל נמצא:', activeTimer);
-          return activeTimer;
-        }
-      }
-    }
-    
-    // בדיקה משנית - סריקת כל מפתחות הטיימר
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('timer_v2_')) {
-        const saved = localStorage.getItem(key);
-        if (saved) {
-          const data = JSON.parse(saved);
-          // ✅ תיקון: רק טיימר שרץ בפועל (לא בהשהיה)
-          if (data.isRunning === true) {
-            const taskId = key.replace('timer_v2_', '');
-            console.log('🔔 [Notifications] טיימר פעיל נמצא בסריקה:', taskId);
-            return taskId;
-          }
-        }
-      }
+    if (activeTimer && activeTimer !== 'null' && activeTimer !== 'undefined') {
+      console.log('🔔 [Notifications] טיימר פעיל נמצא:', activeTimer);
+      return activeTimer;
     }
   } catch (e) {
     console.error('🔔 [Notifications] שגיאה בבדיקת טיימר:', e);
@@ -198,14 +174,16 @@ export function useUnifiedNotifications() {
     // ✅ קריאה ל-alertManager לבדיקת התראות חכמות
     alertManager.checkScheduledTasks(tasks, scheduledBlocks);
     
-    // ✅ שינוי: גם אם יש טיימר פעיל, נבדוק התראות על המשימה הפעילה
-    // אבל נשלח גם התראות על משימות אחרות שמתקרבות
+    // ✅ אם יש טיימר פעיל - לא מטרידים עם התראות על משימות אחרות!
     if (activeTaskId) {
       const activeTask = tasks.find(t => t.id === activeTaskId);
       if (activeTask) {
+        // רק בודקים התראות על המשימה הפעילה (כמו "הזמן עומד להיגמר")
         checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
       }
-      // ✅ שינוי: לא יוצאים! ממשיכים לבדוק משימות אחרות
+      // ✅ יוצאים! לא מטרידים כשעובדים
+      console.log('🔔 [Notifications] טיימר פעיל - לא שולחים התראות על משימות אחרות');
+      return;
     }
     
     // ✅ בדיקת כל משימות היום
