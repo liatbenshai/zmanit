@@ -10,7 +10,6 @@ import { useTasks } from '../../hooks/useTasks';
 import { useFiveMinuteRule } from '../Learning/FiveMinuteRule';
 import PreTaskCheckin from '../Learning/PreTaskCheckin'; // ✅ צ'ק-אין לפני משימה
 import { logTimerStop } from '../Learning/EscapeWindowDetector'; // ✅ רישום עצירות
-import { FullScreenFocus } from '../ADHD'; // 🆕 מסך מיקוד מלא
 import toast from 'react-hot-toast';
 
 /**
@@ -54,7 +53,6 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [startTime, setStartTime] = useState(null);
-  const [showFullScreen, setShowFullScreen] = useState(false); // 🆕 מסך מיקוד
   
   // ✅ כלל 5 הדקות
   const {
@@ -177,7 +175,7 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
   }, [isRunning, isPaused, task?.id]);
   
   // ===== פעולות =====
-  const startTimer = useCallback((openFullScreen = true) => {
+  const startTimer = useCallback(() => {
     const now = new Date();
     setStartTime(now);
     setIsRunning(true);
@@ -187,10 +185,6 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
     if (task?.id) {
       localStorage.setItem('zmanit_active_timer', task.id);
       console.log('🟢 MiniTimer התחיל - נשמר:', task.id);
-    }
-    // 🆕 פתיחת מסך מיקוד
-    if (openFullScreen) {
-      setShowFullScreen(true);
     }
     toast.success('▶️ התחלנו לעבוד!', { duration: 2000 });
   }, [task?.id]);
@@ -455,15 +449,6 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
           >
             ⏹️
           </button>
-          
-          {/* 🆕 חזרה למיקוד מלא */}
-          <button
-            onClick={() => setShowFullScreen(true)}
-            className="px-3 py-2 rounded-lg bg-purple-500 hover:bg-purple-600 text-white text-sm font-medium transition-colors"
-            title="חזרה למסך מיקוד מלא"
-          >
-            🎯
-          </button>
         </div>
         
         {/* סיום משימה */}
@@ -484,52 +469,6 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
           לפרטים מלאים →
         </button>
       )}
-      
-      {/* 🆕 מסך מיקוד מלא */}
-      <FullScreenFocus
-        isOpen={showFullScreen}
-        task={task}
-        onClose={() => setShowFullScreen(false)}
-        onComplete={async () => {
-          // 🔧 תיקון: לא קוראים ל-completeTask כי הזמן כבר נשמר דרך onTimeUpdate
-          // רק מסמנים כהושלם ומאפסים
-          localStorage.removeItem('zmanit_active_timer');
-          setShowFullScreen(false);
-          setIsRunning(false);
-          setIsPaused(false);
-          setElapsedSeconds(0);
-          
-          if (timerStorageKey) {
-            localStorage.removeItem(timerStorageKey);
-          }
-          
-          // סימון כהושלם
-          if (task && onComplete) {
-            onComplete(task);
-          }
-        }}
-        onPause={async (minutes, isAbsolute = false) => {
-          if (minutes > 0 && task) {
-            // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
-            const newTimeSpent = isAbsolute ? minutes : (task.time_spent || 0) + minutes;
-            await editTask(task.id, { time_spent: newTimeSpent });
-            // 🆕 עדכון state מקומי
-            setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-            console.log('💾 FullScreenFocus onPause - נשמרו:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '');
-          }
-        }}
-        onTimeUpdate={async (minutes, isAbsolute = false) => {
-          if (minutes > 0 && task) {
-            // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
-            const newTimeSpent = isAbsolute ? minutes : (task.time_spent || 0) + minutes;
-            await editTask(task.id, { time_spent: newTimeSpent });
-            // 🆕 עדכון state מקומי
-            setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-            console.log('💾 FullScreenFocus onTimeUpdate - נשמרו:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '');
-          }
-        }}
-        onAddTask={addTask}
-      />
     </motion.div>
   );
 }

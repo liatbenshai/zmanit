@@ -28,9 +28,6 @@ import { DeadlineConflictManager } from './components/Notifications/DeadlineConf
 import EndOfDaySummary from './components/Learning/EndOfDaySummary';
 import { useTasks } from './hooks/useTasks';
 
-// 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה
-import { AutoFocusManager } from './components/ADHD';
-
 /**
  * ✅ Wrapper לסיכום יומי
  */
@@ -92,9 +89,6 @@ function App() {
       
       {/* ✅ חדש: מנהל התנגשויות דדליין */}
       {user && <DeadlineConflictManager />}
-      
-      {/* 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה */}
-      {user && <AutoFocusManager />}
 
       {/* כותרת עליונה */}
       {user && <Header />}

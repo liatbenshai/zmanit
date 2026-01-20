@@ -201,7 +201,7 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
  * ✅ עם תמיכה בגרירה, משוב בסיום, והעברה למחר
  * ✅ כפתור התחל במיקוד
  */
-function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggable = false, onStartFocus }) {
+function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggable = false }) {
   const { toggleComplete, removeTask, editTask, tasks } = useTasks();
   const [showTimer, setShowTimer] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -678,20 +678,6 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
 
           {/* כפתורי פעולה */}
           <div className="flex items-center gap-1">
-            {/* ✅ כפתור התחל במיקוד */}
-            {!isCompleted && onStartFocus && !isTimerRunning && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStartFocus(currentTask);
-                }}
-                className="px-3 py-1.5 bg-blue-500 hover:bg-blue-600 text-white text-sm font-medium rounded-lg transition-colors"
-                title="התחל לעבוד במצב מיקוד"
-              >
-                ▶️ התחל
-              </button>
-            )}
-            
             {/* כפתור טיימר */}
             {!isCompleted && (
               <button

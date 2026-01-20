@@ -14,7 +14,6 @@ import { Link } from 'react-router-dom';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
-import FullScreenFocus from '../ADHD/FullScreenFocus';
 import SmartRecommendationsPanel from './SmartRecommendationsPanel';
 import DailyProgressCard from './DailyProgressCard';
 import Modal from '../UI/Modal';
@@ -67,7 +66,7 @@ const HEBREW_DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', '�
 // קומפוננטת משימה לדשבורד - עם כפתורים בולטים
 // ========================================
 
-function DashboardTaskCard({ task, onEdit, onStart, onComplete, onDefer, onDelete, isOverdue = false }) {
+function DashboardTaskCard({ task, onEdit, onComplete, onDefer, onDelete, isOverdue = false }) {
   const isCompleted = task.is_completed;
   const isUrgent = task.priority === 'urgent';
   
@@ -122,13 +121,13 @@ function DashboardTaskCard({ task, onEdit, onStart, onComplete, onDefer, onDelet
       {/* שורה תחתונה - כפתורי פעולה (תמיד נראים!) */}
       {!isCompleted && (
         <div className="flex items-center gap-2 pt-2 border-t border-gray-100 dark:border-gray-700">
-          <button
-            onClick={() => onStart(task)}
+          <Link
+            to="/daily"
             className="flex-1 py-2.5 bg-blue-500 hover:bg-blue-600 text-white font-medium rounded-lg transition-colors flex items-center justify-center gap-2"
           >
             <span>▶️</span>
-            <span>התחילי לעבוד</span>
-          </button>
+            <span>לתצוגה יומית</span>
+          </Link>
           <button
             onClick={() => onEdit(task)}
             className="px-4 py-2.5 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 rounded-lg transition-colors"
@@ -167,8 +166,6 @@ function SmartDashboard() {
   // State
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
-  const [showFocus, setShowFocus] = useState(false);
-  const [focusTask, setFocusTask] = useState(null);
   const [activeTimer, setActiveTimer] = useState(null);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [selectedDay, setSelectedDay] = useState(null); // לתצוגת משימות של יום ספציפי
@@ -323,13 +320,6 @@ function SmartDashboard() {
     setShowTaskForm(true);
   }, []);
 
-  const handleStart = useCallback((task) => {
-    console.log('🚀 handleStart called with task:', task);
-    setFocusTask(task);
-    setShowFocus(true);
-    console.log('🎯 showFocus set to true');
-  }, []);
-
   const handleDefer = useCallback(async (task) => {
     try {
       await editTask(task.id, { due_date: tomorrowISO, due_time: null });
@@ -360,42 +350,6 @@ function SmartDashboard() {
       toast.error('שגיאה');
     }
   }, [overdueTasks, editTask, todayISO]);
-
-  const handleTimeUpdate = useCallback(async (minutes, isAbsolute = false) => {
-    if (!focusTask) return;
-    try {
-      // 🔧 תיקון: אם isAbsolute=true, זה הזמן הכולל. אחרת - מוסיפים לקיים
-      const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
-      await updateTaskTime(focusTask.id, newTimeSpent);
-      setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-      console.log('💾 SmartDashboard - זמן עודכן:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '(יחסי)');
-    } catch (err) {
-      console.error('❌ שגיאה בשמירת זמן:', err);
-    }
-  }, [focusTask, updateTaskTime]);
-
-  const handleFocusComplete = useCallback(async () => {
-    if (!focusTask) return;
-    try {
-      await toggleComplete(focusTask.id);
-      setShowFocus(false);
-      setFocusTask(null);
-      toast.success('🎉 משימה הושלמה!');
-      loadTasks();
-    } catch (e) {
-      toast.error('שגיאה');
-    }
-  }, [focusTask, toggleComplete, loadTasks]);
-
-  const handleLogInterruption = useCallback(async (data) => {
-    if (!user?.id) return;
-    try {
-      await supabase.from('interruptions').insert({
-        user_id: user.id, type: data.type, description: data.description,
-        task_id: data.task_id, duration: data.duration || 0
-      });
-    } catch (e) {}
-  }, [user?.id]);
 
   // ========================================
   // רינדור
@@ -431,12 +385,6 @@ function SmartDashboard() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <button 
-                  onClick={() => handleStart(activeTimer)}
-                  className="px-4 py-2 bg-white/20 hover:bg-white/30 rounded-xl font-medium transition-colors"
-                >
-                  📺 מסך מיקוד
-                </button>
                 <button 
                   onClick={() => { localStorage.removeItem('zmanit_active_timer'); setActiveTimer(null); toast('⏹️ טיימר נעצר'); }}
                   className="px-3 py-2 bg-white/20 hover:bg-white/30 rounded-xl transition-colors"
@@ -520,7 +468,6 @@ function SmartDashboard() {
                       task={task}
                       isOverdue={true}
                       onEdit={handleEdit}
-                      onStart={handleStart}
                       onComplete={handleComplete}
                       onDefer={handleDefer}
                       onDelete={handleDelete}
@@ -559,7 +506,6 @@ function SmartDashboard() {
                       key={task.id}
                       task={task}
                       onEdit={handleEdit}
-                      onStart={handleStart}
                       onComplete={handleComplete}
                       onDefer={handleDefer}
                       onDelete={handleDelete}
@@ -574,7 +520,6 @@ function SmartDashboard() {
                           key={task.id}
                           task={task}
                           onEdit={handleEdit}
-                          onStart={handleStart}
                           onComplete={handleComplete}
                           onDefer={handleDefer}
                           onDelete={handleDelete}
@@ -824,18 +769,6 @@ function SmartDashboard() {
           onRefresh={loadTasks}
         />
       </Modal>
-
-      {/* מסך מיקוד */}
-      <FullScreenFocus
-        isOpen={showFocus}
-        onClose={() => setShowFocus(false)}
-        task={focusTask}
-        onComplete={handleFocusComplete}
-        onPause={handleTimeUpdate}
-        onTimeUpdate={handleTimeUpdate}
-        onAddTask={addTask}
-        onLogInterruption={handleLogInterruption}
-      />
     </div>
   );
 }

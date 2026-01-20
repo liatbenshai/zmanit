@@ -2,7 +2,6 @@
  * 🧠 מודול ADHD - כלים לבניית הרגלים ומיקוד
  * 
  * קומפוננטות מותאמות במיוחד למוח עם ADHD:
- * - מיקוד אוטומטי (נפתח כשמגיע זמן משימה)
  * - תצוגת משימה אחת (מפחיתה עומס)
  * - משוב "איך הלך?" (לומד הערכות זמן)
  * - כפתור "אני אבודה" (עזרה ברגעי עומס)
@@ -11,14 +10,6 @@
  * - אשף תכנון שבועי (שיבוץ אינטראקטיבי)
  * - כפתור "משימה לשבוע" (הוספה מהירה)
  */
-
-// 🎯 מיקוד אוטומטי - נפתח כשמגיע זמן משימה
-export { 
-  default as AutoFocusManager,
-  TaskFocusModal,
-  WhyNotStartedModal,
-  useTaskTimeMonitor 
-} from './AutoFocusManager';
 
 // תצוגת משימה אחת - מפחיתה עומס
 export { default as SingleTaskView } from './SingleTaskView';
@@ -52,6 +43,3 @@ export { default as AddWeekTaskButton } from './AddWeekTaskButton';
 
 // דיאלוג סיום טיימר - שואל מה קרה
 export { default as TimerEndDialog } from './TimerEndDialog';
-
-// מסך מיקוד מלא - נפתח כשלוחצים "התחל"
-export { default as FullScreenFocus } from './FullScreenFocus';

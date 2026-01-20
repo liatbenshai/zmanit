@@ -10,7 +10,6 @@ import { TASK_TYPES } from '../../config/taskTypes';
 import SimpleTaskForm from './SimpleTaskForm';
 import DailyTaskCard from './DailyTaskCard';
 import RescheduleModal from './RescheduleModal';
-import FullScreenFocus from '../ADHD/FullScreenFocus'; // ✅ תצוגה ממוקדת
 import DayOverrideButton, { getEffectiveHoursForDate } from './DayOverrideButton'; // ✅ דריסות יום
 import Modal from '../UI/Modal';
 import Button from '../UI/Button';
@@ -268,10 +267,6 @@ function DailyView() {
   
   // ✅ חדש: מעקב אחרי טיימרים פעילים
   const [activeTimers, setActiveTimers] = useState({});
-  
-  // ✅ תצוגה ממוקדת
-  const [focusTask, setFocusTask] = useState(null);
-  const [showFocus, setShowFocus] = useState(false);
   
   // ✅ רענון לוח זמנים אחרי דריסה
   const [scheduleRefresh, setScheduleRefresh] = useState(0);
@@ -537,59 +532,6 @@ function DailyView() {
     setShowTaskForm(false);
     setEditingTask(null);
     loadTasks();
-  };
-
-  // ✅ התחלת עבודה במצב מיקוד
-  const handleStartFocus = (task) => {
-    setFocusTask(task);
-    setShowFocus(true);
-  };
-
-  // ✅ עדכון זמן עבודה
-  const handleFocusTimeUpdate = async (minutes, isAbsolute = false) => {
-    if (!focusTask) return;
-    try {
-      // 🔧 תיקון: אם isAbsolute=true, זה הזמן הכולל. אחרת - מוסיפים לקיים
-      const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
-      await editTask(focusTask.id, { time_spent: newTimeSpent });
-      
-      // ✅ עדכון focusTask מקומית כדי שהזמן יישמר
-      setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-      
-      console.log('💾 DailyView - זמן עודכן:', newTimeSpent, 'דקות', isAbsolute ? '(מוחלט)' : '(יחסי)');
-    } catch (err) {
-      console.error('שגיאה בעדכון זמן:', err);
-    }
-  };
-
-  // ✅ סיום משימה מתצוגה ממוקדת
-  const handleFocusComplete = async () => {
-    if (!focusTask) return;
-    try {
-      await toggleComplete(focusTask.id);
-      setShowFocus(false);
-      setFocusTask(null);
-      toast.success('✅ כל הכבוד!');
-      loadTasks();
-    } catch (err) {
-      toast.error('שגיאה');
-    }
-  };
-
-  // ✅ תיעוד הפרעה
-  const handleLogInterruption = async (interruption) => {
-    if (!user) return;
-    try {
-      await supabase.from('interruptions').insert({
-        user_id: user.id,
-        type: interruption.type,
-        description: interruption.description,
-        task_id: interruption.task_id,
-        started_at: new Date().toISOString()
-      });
-    } catch (err) {
-      console.error('שגיאה בתיעוד הפרעה:', err);
-    }
   };
 
   const handleSyncWithGoogle = async () => {
@@ -1034,13 +976,6 @@ function DailyView() {
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}
         draggable={false}
-        onStartFocus={() => {
-          // מציאת המשימה המקורית
-          const originalTask = tasks.find(t => t.id === (block.taskId || block.id));
-          if (originalTask) {
-            handleStartFocus(originalTask);
-          }
-        }}
       />
     </motion.div>
   );
@@ -1452,23 +1387,6 @@ function DailyView() {
           onClick={() => setShowGoogleMenu(false)}
         />
       )}
-
-      {/* ✅ תצוגה ממוקדת */}
-      <FullScreenFocus
-        isOpen={showFocus}
-        task={focusTask}
-        onClose={() => {
-          setShowFocus(false);
-        }}
-        onComplete={handleFocusComplete}
-        onPause={handleFocusTimeUpdate}
-        onTimeUpdate={handleFocusTimeUpdate}
-        onAddTask={async (newTask) => {
-          await addTask(newTask);
-          loadTasks();
-        }}
-        onLogInterruption={handleLogInterruption}
-      />
     </div>
   );
 }

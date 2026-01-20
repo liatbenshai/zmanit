@@ -3,7 +3,6 @@ import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
-import FullScreenFocus from '../ADHD/FullScreenFocus';
 import { getDayOverrides } from '../DailyView/DayOverrideButton';
 import { WORK_HOURS } from '../../config/workSchedule';
 import toast from 'react-hot-toast';
@@ -74,10 +73,6 @@ function IdleDetector() {
   const [alertType, setAlertType] = useState('idle'); // 'idle' or 'paused'
   const [idleMinutes, setIdleMinutes] = useState(0);
   const [lastActivity, setLastActivity] = useState(new Date());
-  
-  // 🆕 State לפוקוס
-  const [showFocus, setShowFocus] = useState(false);
-  const [focusTask, setFocusTask] = useState(null);
   
   // 🆕 מציאת המשימה הבאה לעבודה
   const nextTask = useMemo(() => {
@@ -335,7 +330,7 @@ function IdleDetector() {
     setLastActivity(new Date());
     setIdleMinutes(0);
 
-    // 🆕 פתיחת משימה אם לחצו "חוזרת לעבודה"
+    // 🆕 ניווט לתצוגה יומית כשלוחצים "חוזרת לעבודה"
     if (reason.id === 'back_to_work') {
       // בדיקה אם יש משימה מושהית
       const pausedData = localStorage.getItem('zmanit_focus_paused');
@@ -344,25 +339,19 @@ function IdleDetector() {
           const { taskId } = JSON.parse(pausedData);
           const pausedTask = tasks?.find(t => t.id === taskId);
           if (pausedTask && !pausedTask.is_completed) {
-            // פתיחת המשימה המושהית
-            setFocusTask(pausedTask);
-            setShowFocus(true);
             toast.success('🔄 חוזרת למשימה שהפסקת!', { duration: 2000 });
+            navigate('/daily');
             return;
           }
         } catch (e) {}
       }
       
-      // אם אין משימה מושהית - פתיחת המשימה הבאה
+      // ניווט לתצוגה יומית
       if (nextTask) {
-        setFocusTask(nextTask);
-        setShowFocus(true);
-        toast.success(`🎯 מתחילה: ${nextTask.title}`, { duration: 2000 });
-        return;
+        toast.success(`🎯 בואי נעבוד על: ${nextTask.title}`, { duration: 2000 });
+      } else {
+        toast('📋 בואי נתכנן את היום!', { duration: 3000 });
       }
-      
-      // אם אין משימות - ניווט לתצוגה יומית
-      toast('📋 אין משימות מתוכננות - בואי נתכנן!', { duration: 3000 });
       navigate('/daily');
       return;
     }
@@ -373,32 +362,6 @@ function IdleDetector() {
     ];
     toast(encouragement, { duration: 3000 });
   }, [idleMinutes, alertType, user?.id, tasks, nextTask, navigate]);
-  
-  // 🆕 עדכון זמן עבודה
-  const handleFocusTimeUpdate = useCallback(async (minutes, isAbsolute = false) => {
-    if (!focusTask) return;
-    try {
-      // 🔧 תיקון: אם isAbsolute, זה הזמן הכולל
-      const newTimeSpent = isAbsolute ? minutes : (focusTask.time_spent || 0) + minutes;
-      await editTask(focusTask.id, { time_spent: newTimeSpent });
-      setFocusTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
-    } catch (err) {
-      console.error('שגיאה בעדכון זמן:', err);
-    }
-  }, [focusTask, editTask]);
-  
-  // 🆕 סיום משימה
-  const handleFocusComplete = useCallback(async () => {
-    if (!focusTask) return;
-    try {
-      await toggleComplete(focusTask.id);
-      setShowFocus(false);
-      setFocusTask(null);
-      toast.success('✅ כל הכבוד!');
-    } catch (err) {
-      toast.error('שגיאה');
-    }
-  }, [focusTask, toggleComplete]);
 
   // דחייה זמנית
   const handleSnooze = useCallback(() => {
@@ -414,7 +377,7 @@ function IdleDetector() {
     <AnimatePresence>
       {showAlert && (
         <>
-          {/* רקע כהה - מעל FullScreenFocus */}
+          {/* רקע כהה */}
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -550,20 +513,6 @@ function IdleDetector() {
           </motion.div>
         </>
       )}
-      
-      {/* 🆕 מסך מיקוד */}
-      <FullScreenFocus
-        isOpen={showFocus}
-        task={focusTask}
-        onClose={() => {
-          setShowFocus(false);
-          setFocusTask(null);
-        }}
-        onComplete={handleFocusComplete}
-        onPause={handleFocusTimeUpdate}
-        onTimeUpdate={handleFocusTimeUpdate}
-        onAddTask={addTask}
-      />
     </AnimatePresence>
   );
 }
