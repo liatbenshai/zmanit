@@ -182,8 +182,10 @@ export function calculateAutoReschedule(tasks, editTask) {
   
   // סינון משימות - רק משימות "רגילות", לא פרויקטים גדולים, לא הורים עם אינטרוולים
   // ✅ חדש: מפרידים בין עבודה לבית
+  // ✅ תיקון: מסננים גם לפי is_project ישירות!
   const todayTasks = tasks.filter(t => 
     !t.is_completed && 
+    !t.is_project &&  // ✅ תיקון: סינון ישיר של משימות הורה
     !isProjectTask(t) && 
     !isParentWithIntervals(t, tasks) && 
     (t.due_date === today || t.start_date === today)
@@ -195,6 +197,7 @@ export function calculateAutoReschedule(tasks, editTask) {
   
   const tomorrowTasks = tasks.filter(t => 
     !t.is_completed && 
+    !t.is_project &&  // ✅ תיקון: סינון ישיר של משימות הורה
     !isProjectTask(t) && 
     !isParentWithIntervals(t, tasks) && 
     (t.due_date === tomorrow || t.start_date === tomorrow)
