@@ -1,24 +1,56 @@
-=== עדכון zmanit - תיקון באגים חשובים ===
+=== עדכון zmanit - תיקון יסודי של טיימר והתראות ===
 
-מה תוקן בעדכון הזה:
+בדקתי את כל הקוד לעומק. הנה מה שתוקן:
 
-1. ✅ באג הזמנים - משימות עם שעה קבועה שומרות על הזמן שלהן!
+===== בעיה 1: הטיימר נעצר כשעוברים בין מסכים =====
 
-2. ✅ באג המשימות הארוכות - ההתראות מציגות רק את המקטעים,
-   לא את המשימה ההורית (120 דק')
+הסיבה: כשהקומפוננטה נטענת מחדש, היא מוחקת את zmanit_active_timer
+        לפני שהיא בודקת אם יש טיימר רץ על משימה אחרת.
 
-3. ✅ התראות - לא יקפצו התראות כשעובדים על משימה
+תיקון: עכשיו לפני מחיקה, בודקים אם יש טיימר רץ על *כל* משימה
+        (לא רק על המשימה הנוכחית)
 
-4. ✅ הוסר הווידג'ט הצף (הסגול) לגמרי
+קבצים:
+- TaskTimerWithInterruptions.jsx
+- MiniTimer.jsx
 
-5. ✅ הוסר מסך המיקוד השחור
 
-6. ✅ הוסר כפתור "התחל" מכרטיסי המשימות
+===== בעיה 2: התראות מגיעות כשעובדים =====
 
-7. ✅ באג הטיימר - הטיימר ממשיך לרוץ גם כשעוברים לדשבורד או ליום אחר!
-   (לפני התיקון: הטיימר נעצר כשעזבת את המשימה)
+הסיבה: הבדיקה לטיימר פעיל הייתה שגויה!
+        הקוד בדק: "אם הטיימר רץ על *המשימה הזו* - לא לשלוח"
+        אבל היה צריך: "אם יש טיימר רץ על *משימה כלשהי* - לא לשלוח על אחרות"
 
-=== הוראות ===
+תיקון: שיניתי את הלוגיקה ב-3 מקומות:
+- NotificationContext.jsx - התראות מהדפדפן
+- pushNotifications.js - התראות Push
+- smartAlertManager.js - התראות חכמות (fallback)
+- UnifiedNotificationManager.jsx - הזזתי את הבדיקה לפני alertManager
+
+
+===== בעיה 3: סנכרון בין דשבורד לתצוגה יומית =====
+
+הסיבה: חישוב שגוי של הזמן שעבר בדשבורד
+        (data.startTime הוא string, לא timestamp)
+
+תיקון: new Date(data.startTime).getTime() במקום data.startTime
+
+קבצים:
+- SmartDashboard.jsx
+
+
+===== קבצים בעדכון (7 קבצים) =====
+
+src/components/Tasks/TaskTimerWithInterruptions.jsx
+src/components/Dashboard/MiniTimer.jsx
+src/components/Dashboard/SmartDashboard.jsx
+src/components/Notifications/UnifiedNotificationManager.jsx
+src/context/NotificationContext.jsx
+src/services/pushNotifications.js
+src/utils/smartAlertManager.js
+
+
+===== הוראות =====
 
 העלי את כל הקבצים שבזיפ הזה לפרויקט ב-GitHub
 (שמרי על מבנה התיקיות!)

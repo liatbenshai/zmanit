@@ -165,7 +165,22 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
       localStorage.setItem('zmanit_active_timer', task.id);
       console.log('🟢 MiniTimer useEffect - נשמר:', task.id);
     } else if (!isRunning && !isPaused) {
-      // רק אם הטיימר לא רץ ולא מושהה - נמחק
+      // 🔧 תיקון: בדיקה אם יש טיימר רץ על משימה אחרת לפני מחיקה
+      const currentActiveTimer = localStorage.getItem('zmanit_active_timer');
+      if (currentActiveTimer && currentActiveTimer !== task?.id) {
+        // יש טיימר על משימה אחרת - לא מוחקים
+        const activeTimerData = localStorage.getItem(`timer_v2_${currentActiveTimer}`);
+        if (activeTimerData) {
+          try {
+            const data = JSON.parse(activeTimerData);
+            if (data.isRunning && data.startTime) {
+              console.log('⏳ MiniTimer: יש טיימר אחר שרץ - לא מוחקים');
+              return;
+            }
+          } catch (e) {}
+        }
+      }
+      // רק אם הטיימר הנוכחי הוא שלנו ואנחנו לא רצים - מוחקים
       const current = localStorage.getItem('zmanit_active_timer');
       if (current === task?.id) {
         localStorage.removeItem('zmanit_active_timer');

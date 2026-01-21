@@ -285,7 +285,10 @@ function SmartDashboard() {
             if (saved) {
               const data = JSON.parse(saved);
               if (data.isRunning && data.startTime) {
-                setElapsedSeconds(Math.floor((Date.now() - data.startTime) / 1000));
+                // 🔧 תיקון: המרה נכונה של startTime מ-string ל-Date
+                const startTime = new Date(data.startTime).getTime();
+                const totalInterruption = (data.totalInterruptionSeconds || 0) * 1000;
+                setElapsedSeconds(Math.floor((Date.now() - startTime - totalInterruption) / 1000));
               }
             }
           } catch (e) {}

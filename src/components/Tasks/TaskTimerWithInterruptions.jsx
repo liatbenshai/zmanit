@@ -155,22 +155,28 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
       localStorage.setItem('zmanit_active_timer', taskId);
       console.log('🟢 טיימר רץ - נשמר:', taskId);
     } else if (!isRunning && !isPaused) {
-      // 🔧 תיקון: לא למחוק אם יש טיימר שמור שעדיין רץ
-      // (זה יכול לקרות כשהקומפוננטה נטענת מחדש וה-state עדיין לא שוחזר)
-      const savedTimer = timerStorageKey ? localStorage.getItem(timerStorageKey) : null;
-      if (savedTimer) {
-        try {
-          const data = JSON.parse(savedTimer);
-          if (data.isRunning && data.startTime) {
-            console.log('⏳ יש טיימר שמור שרץ - לא מוחקים');
-            return; // לא למחוק!
-          }
-        } catch (e) {}
+      // 🔧 תיקון חשוב: לפני שמוחקים, בודקים אם יש טיימר רץ על משימה כלשהי
+      // (לא רק על המשימה הנוכחית)
+      const currentActiveTimer = localStorage.getItem('zmanit_active_timer');
+      if (currentActiveTimer) {
+        // בדיקה אם הטיימר הפעיל באמת רץ
+        const activeTimerData = localStorage.getItem(`timer_v2_${currentActiveTimer}`);
+        if (activeTimerData) {
+          try {
+            const data = JSON.parse(activeTimerData);
+            if (data.isRunning && data.startTime) {
+              console.log('⏳ יש טיימר אחר שרץ - לא מוחקים:', currentActiveTimer);
+              return; // לא למחוק!
+            }
+          } catch (e) {}
+        }
       }
+      
+      // רק אם אין טיימר רץ - מוחקים
       localStorage.removeItem('zmanit_active_timer');
-      console.log('🔴 טיימר לא רץ - נמחק');
+      console.log('🔴 אין טיימר פעיל - נמחק');
     }
-  }, [isRunning, currentTask?.id, task?.id, isPaused, timerStorageKey]);
+  }, [isRunning, currentTask?.id, task?.id, isPaused]);
 
   // טיימר ראשי
   useEffect(() => {

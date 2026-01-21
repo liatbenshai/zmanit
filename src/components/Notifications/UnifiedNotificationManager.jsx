@@ -155,7 +155,19 @@ export function useUnifiedNotifications() {
       todayTasks.map(t => ({ title: t.title, time: t.due_time }))
     );
     
-    // ✅ יצירת בלוקים מתוזמנים עבור alertManager
+    // ✅ בדיקה אם יש טיימר פעיל - לפני הכל!
+    if (activeTaskId) {
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      if (activeTask) {
+        // רק בודקים התראות על המשימה הפעילה (כמו "הזמן עומד להיגמר")
+        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
+      }
+      // ✅ יוצאים! לא מטרידים כשעובדים - גם לא קוראים ל-alertManager
+      console.log('🔔 [Notifications] טיימר פעיל - לא שולחים התראות על משימות אחרות');
+      return;
+    }
+    
+    // ✅ יצירת בלוקים מתוזמנים עבור alertManager (רק אם אין טיימר פעיל)
     const scheduledBlocks = todayTasks.map(task => {
       const [h, m] = (task.due_time || '09:00').split(':').map(Number);
       const startMinute = h * 60 + (m || 0);
@@ -171,20 +183,8 @@ export function useUnifiedNotifications() {
       };
     });
     
-    // ✅ קריאה ל-alertManager לבדיקת התראות חכמות
+    // ✅ קריאה ל-alertManager לבדיקת התראות חכמות (רק אם אין טיימר!)
     alertManager.checkScheduledTasks(tasks, scheduledBlocks);
-    
-    // ✅ אם יש טיימר פעיל - לא מטרידים עם התראות על משימות אחרות!
-    if (activeTaskId) {
-      const activeTask = tasks.find(t => t.id === activeTaskId);
-      if (activeTask) {
-        // רק בודקים התראות על המשימה הפעילה (כמו "הזמן עומד להיגמר")
-        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
-      }
-      // ✅ יוצאים! לא מטרידים כשעובדים
-      console.log('🔔 [Notifications] טיימר פעיל - לא שולחים התראות על משימות אחרות');
-      return;
-    }
     
     // ✅ בדיקת כל משימות היום
     todayTasks.forEach(task => {

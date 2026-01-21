@@ -493,8 +493,23 @@ export class SmartAlertManager {
       });
     } catch (err) {
       console.error('❌ שגיאה בשליחת התראה דרך NotificationService:', err);
-      // fallback ללוגיקה ישנה
+      // fallback ללוגיקה ישנה - עם בדיקת טיימר פעיל
       if ('Notification' in window && Notification.permission === 'granted') {
+        // 🔧 תיקון: בדיקה אם יש טיימר פעיל לפני שליחת התראה
+        const activeTimer = localStorage.getItem('zmanit_active_timer');
+        if (activeTimer && alert.taskId && activeTimer !== alert.taskId) {
+          const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
+          if (timerData) {
+            try {
+              const data = JSON.parse(timerData);
+              if (data.isRunning === true) {
+                console.log('🔇 smartAlertManager fallback: טיימר רץ - לא שולח');
+                return;
+              }
+            } catch (e) {}
+          }
+        }
+        
         const notification = new Notification(alert.title, {
           body: alert.message,
           icon: '/icon-192.png',

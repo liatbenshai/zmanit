@@ -53,17 +53,22 @@ function sendLocalNotification(title, options = {}) {
   if (!isNotificationSupported()) return null;
   if (Notification.permission !== 'granted') return null;
   
-  // 🔧 בדיקה ספציפית: אם הטיימר רץ על המשימה הזו - לא לשלוח
+  // 🔧 תיקון: אם יש טיימר רץ על משימה כלשהי - לא לשלוח התראות על משימות אחרות
   const activeTimer = localStorage.getItem('zmanit_active_timer');
-  if (activeTimer && options.taskId && activeTimer === options.taskId) {
-    // בדיקה נוספת שהטיימר באמת רץ
+  if (activeTimer) {
+    // בדיקה שהטיימר באמת רץ
     const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
     if (timerData) {
       try {
         const data = JSON.parse(timerData);
         if (data.isRunning === true) {
-          console.log('🔇 NotificationContext: טיימר רץ על המשימה הזו - לא שולח');
-          return null;
+          // טיימר רץ - בודקים אם זו התראה על המשימה הפעילה או לא
+          if (options.taskId && activeTimer !== options.taskId) {
+            // התראה על משימה אחרת - לא שולחים!
+            console.log('🔇 NotificationContext: טיימר רץ - לא שולח התראה על משימה אחרת');
+            return null;
+          }
+          // אם אין taskId או שזו המשימה הפעילה - ממשיכים (יכול להיות "הזמן עומד להיגמר")
         }
       } catch (e) {}
     }
