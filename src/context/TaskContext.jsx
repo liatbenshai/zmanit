@@ -27,6 +27,66 @@ export const TaskContext = createContext(null);
 const INTERVAL_DURATION = 45;
 
 /**
+ * ✅ חישוב הזמן הפנוי הבא להיום
+ * מחזיר שעה בפורמט HH:MM
+ */
+function calculateNextAvailableTime(tasks, duration = 30) {
+  const now = new Date();
+  const todayISO = now.toISOString().split('T')[0];
+  const currentMinutes = now.getHours() * 60 + now.getMinutes();
+  
+  // שעות עבודה
+  const scheduleStart = 8.5 * 60;  // 08:30
+  const scheduleEnd = 16 * 60;     // 16:00
+  
+  // פונקציית עזר - המרת דקות לפורמט HH:MM
+  const minutesToTime = (minutes) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+  
+  // מציאת כל המשימות להיום עם שעה
+  const todayTasks = (tasks || []).filter(t => 
+    (t.due_date === todayISO || !t.due_date) && 
+    !t.is_completed && 
+    t.due_time
+  );
+  
+  if (todayTasks.length === 0) {
+    // אין משימות - מתחילים עכשיו או מתחילת שעות העבודה
+    const startMinutes = Math.max(currentMinutes, scheduleStart);
+    const roundedMinutes = Math.ceil(startMinutes / 5) * 5;
+    return minutesToTime(roundedMinutes);
+  }
+  
+  // מציאת זמן הסיום של המשימה האחרונה
+  let latestEndMinutes = currentMinutes;
+  
+  for (const t of todayTasks) {
+    const [h, m] = t.due_time.split(':').map(Number);
+    const taskStart = h * 60 + (m || 0);
+    const taskEnd = taskStart + (t.estimated_duration || 30);
+    if (taskEnd > latestEndMinutes) {
+      latestEndMinutes = taskEnd;
+    }
+  }
+  
+  // הוספת 5 דקות הפסקה
+  const newStartMinutes = latestEndMinutes + 5;
+  
+  // עיגול ל-5 דקות
+  const roundedMinutes = Math.ceil(newStartMinutes / 5) * 5;
+  
+  // אם עברנו את שעות העבודה - מחזירים null (לא לשבץ אוטומטית)
+  if (roundedMinutes >= scheduleEnd) {
+    return null;
+  }
+  
+  return minutesToTime(roundedMinutes);
+}
+
+/**
  * ספק משימות
  */
 export function TaskProvider({ children }) {
@@ -156,6 +216,7 @@ export function TaskProvider({ children }) {
     console.log('📥 addTask - נתונים שהתקבלו:', {
       estimated_duration: taskData.estimated_duration,
       estimatedDuration: taskData.estimatedDuration,
+      due_time: taskData.due_time,
       fullData: taskData
     });
     
@@ -175,10 +236,24 @@ export function TaskProvider({ children }) {
     }
     
     try {
-      const duration = taskData.estimatedDuration || taskData.estimated_duration || 0;
+      const duration = taskData.estimatedDuration || taskData.estimated_duration || 30;
       
       // 🔍 DEBUG: בדיקת duration
       console.log('📊 addTask - duration מחושב:', duration);
+      
+      // ✅ חישוב due_date ברירת מחדל
+      const now = new Date();
+      const todayISO = now.toISOString().split('T')[0];
+      const dueDate = taskData.dueDate || taskData.due_date || todayISO;
+      
+      // ✅ חישוב due_time אוטומטי אם לא נשלח
+      let dueTime = taskData.dueTime || taskData.due_time || null;
+      
+      if (!dueTime && dueDate === todayISO) {
+        // מחשבים את הזמן הבא הפנוי על בסיס tasks הנוכחי
+        dueTime = calculateNextAvailableTime(tasks, duration);
+        console.log('⏰ addTask - זמן מחושב אוטומטית:', dueTime);
+      }
       
       const taskToCreate = {
         user_id: userId,
@@ -186,8 +261,8 @@ export function TaskProvider({ children }) {
         description: taskData.description?.trim() || null,
         quadrant: taskData.quadrant || 1,
         start_date: taskData.startDate || taskData.start_date || null,
-        due_date: taskData.dueDate || taskData.due_date || null,
-        due_time: taskData.dueTime || taskData.due_time || null,
+        due_date: dueDate,
+        due_time: dueTime,
         reminder_minutes: taskData.reminderMinutes || taskData.reminder_minutes ? parseInt(taskData.reminderMinutes || taskData.reminder_minutes) : null,
         estimated_duration: duration || null,
         task_type: taskData.taskType || taskData.task_type || 'other',
@@ -205,9 +280,12 @@ export function TaskProvider({ children }) {
         
         const { parentTask, intervals } = await createTaskWithIntervals(taskToCreate);
         
+        // ✅ עדכון מיידי של ה-state
+        setTasks(prev => [...prev, parentTask, ...intervals]);
+        setDataVersion(v => v + 1);
         
-        // טעינה מחדש
-        await loadTasks();
+        // טעינה מחדש ברקע
+        loadTasks();
         return parentTask;
       }
       
@@ -218,7 +296,14 @@ export function TaskProvider({ children }) {
         throw new Error('❌ המשימה לא נוצרה');
       }
       
-      await loadTasks();
+      // ✅ עדכון מיידי של ה-state לפני loadTasks
+      // ככה משימות נוספות יראו את המשימה החדשה
+      setTasks(prev => [...prev, newTask]);
+      setDataVersion(v => v + 1);
+      
+      // טעינה מחדש ברקע (לסנכרון מלא)
+      loadTasks();
+      
       return newTask;
       
     } catch (err) {
@@ -262,37 +347,48 @@ export function TaskProvider({ children }) {
   // תמיכה גם ב-snake_case וגם ב-camelCase לשמות משתנים
   const editTask = async (taskId, updates) => {
     try {
-      // חישוב ערכים עם תמיכה בשני הפורמטים
-      const startDate = updates.startDate ?? updates.start_date ?? null;
-      const dueDate = updates.dueDate ?? updates.due_date ?? null;
-      const dueTime = updates.dueTime ?? updates.due_time ?? null;
-      const estimatedDuration = updates.estimatedDuration ?? updates.estimated_duration ?? null;
-      const reminderMinutes = updates.reminderMinutes ?? updates.reminder_minutes ?? null;
-      const taskType = updates.taskType ?? updates.task_type ?? null;
-      const taskParameter = updates.taskParameter ?? updates.task_parameter ?? null;
+      // 🔧 תיקון: שולחים רק שדות שבאמת נשלחו, לא ממירים undefined ל-null
+      const updatePayload = {};
       
-      // 🔧 העברת כל השדות - לא רק חלק
-      const updatePayload = {
-        ...updates, // כל השדות המקוריים
-        title: updates.title,
-        description: updates.description || null,
-        estimated_duration: estimatedDuration ? parseInt(estimatedDuration) : null,
-        quadrant: updates.quadrant,
-        start_date: startDate,
-        due_date: dueDate,
-        due_time: dueTime,
-        reminder_minutes: reminderMinutes ? parseInt(reminderMinutes) : null,
-        task_type: taskType,
-        task_parameter: taskParameter ? parseInt(taskParameter) : null,
-        priority: updates.priority || 'normal'
-      };
+      // שדות שנשלחו בכל שם אפשרי
+      if (updates.title !== undefined) updatePayload.title = updates.title;
+      if (updates.description !== undefined) updatePayload.description = updates.description || null;
+      if (updates.quadrant !== undefined) updatePayload.quadrant = updates.quadrant;
+      if (updates.priority !== undefined) updatePayload.priority = updates.priority;
       
-      // הסרת שדות undefined
-      Object.keys(updatePayload).forEach(key => {
-        if (updatePayload[key] === undefined) {
-          delete updatePayload[key];
-        }
-      });
+      // תאריכים וזמנים - תמיכה בשני הפורמטים
+      if (updates.start_date !== undefined || updates.startDate !== undefined) {
+        updatePayload.start_date = updates.start_date ?? updates.startDate ?? null;
+      }
+      if (updates.due_date !== undefined || updates.dueDate !== undefined) {
+        updatePayload.due_date = updates.due_date ?? updates.dueDate ?? null;
+      }
+      if (updates.due_time !== undefined || updates.dueTime !== undefined) {
+        updatePayload.due_time = updates.due_time ?? updates.dueTime ?? null;
+      }
+      
+      // שדות נוספים
+      if (updates.estimated_duration !== undefined || updates.estimatedDuration !== undefined) {
+        const dur = updates.estimated_duration ?? updates.estimatedDuration;
+        updatePayload.estimated_duration = dur ? parseInt(dur) : null;
+      }
+      if (updates.reminder_minutes !== undefined || updates.reminderMinutes !== undefined) {
+        const rem = updates.reminder_minutes ?? updates.reminderMinutes;
+        updatePayload.reminder_minutes = rem ? parseInt(rem) : null;
+      }
+      if (updates.task_type !== undefined || updates.taskType !== undefined) {
+        updatePayload.task_type = updates.task_type ?? updates.taskType;
+      }
+      if (updates.task_parameter !== undefined || updates.taskParameter !== undefined) {
+        const param = updates.task_parameter ?? updates.taskParameter;
+        updatePayload.task_parameter = param ? parseInt(param) : null;
+      }
+      if (updates.is_completed !== undefined) updatePayload.is_completed = updates.is_completed;
+      if (updates.completed_at !== undefined) updatePayload.completed_at = updates.completed_at;
+      if (updates.time_spent !== undefined) updatePayload.time_spent = updates.time_spent;
+      if (updates.is_fixed !== undefined) updatePayload.is_fixed = updates.is_fixed;
+      
+      console.log('📝 editTask - שולח עדכון:', { taskId, updatePayload });
       
       const updatedTask = await updateTask(taskId, updatePayload);
       

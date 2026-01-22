@@ -1,23 +1,26 @@
-=== עדכון מלא ===
+=== עדכון מלא - תיקון תזמון וגרירה ===
 
 === תיקונים עיקריים ===
 
-1. ✅ תזמון אוטומטי - משימות לא יקבלו יותר אותו זמן!
-   - due_date ברירת מחדל = היום
-   - חישוב זמן מתחשב בכל המשימות
-   - הסרת שדה category שלא קיים בטבלה
+1. ✅ משימות חדשות - כל אחת תקבל זמן שונה!
+   - חישוב due_time ב-addTask (לא בטופס)
+   - עדכון מיידי של state אחרי הוספה
+   - משימה חדשה רואה את המשימות הקודמות
 
-2. ✅ התראות
-   - כפתור X לסגירת פופאפ
-   - Push notification כשפופאפ קופץ
-   - קריאת זמן מהטיימר (לא מה-DB)
+2. ✅ גרירת משימות - הזמנים נשמרים!
+   - editTask לא מוחק שדות שלא נשלחו
+   - task_type לא משתנה בגרירה
+
+3. ✅ התראות
+   - כפתור X לסגירה
+   - Push notification עם פופאפ
 
 === קבצים (6) ===
 
-1. SmartDashboard.jsx - דשבורד חדש
-2. SimpleTaskForm.jsx - תיקון תזמון אוטומטי
-3. DailyView.jsx - תיקון 08:00
-4. UnifiedNotificationManager.jsx - תיקון התראות
-5. TaskContext.jsx - תיקון שמירה
-6. smartSchedulerV4.js - תיקון due_time
+SmartDashboard.jsx
+SimpleTaskForm.jsx
+DailyView.jsx
+UnifiedNotificationManager.jsx
+TaskContext.jsx - תיקון חשוב!
+smartSchedulerV4.js
 
