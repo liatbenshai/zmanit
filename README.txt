@@ -1,31 +1,32 @@
-=== עדכון zmanit - תיקון שעות בתצוגה יומית ===
+=== עדכון zmanit - תיקון התראות מעבר בין משימות ===
 
-הבעיה: כשעדכנת שעה למשימה, התצוגה היומית המשיכה 
-להציג את השעה הישנה (מחושבת אוטומטית)
+הבעיה: לא קיבלת התראות על "עברת את הזמן" ו"צריך לעבור למשימה"
 
-הסיבה: smartSchedulerV4 חיפש סלוט "פנוי" והתעלם 
-מה-due_time שהגדרת
+הסיבה: חסמתי את alertManager כשיש טיימר פעיל,
+אבל alertManager הוא זה שבודק התראות מעבר!
+
+התיקון: alertManager נקרא תמיד. הוא כבר יודע:
+- לשלוח התראות על המשימה הפעילה (endingSoon, transition)
+- לא לשלוח התראות על משימות אחרות כשעובדים
 
 ===== קבצים =====
 
-1. src/utils/smartSchedulerV4.js - 🆕 התיקון העיקרי!
-   אם יש due_time - המשימה תוצג בזמן שהגדרת
+1. src/components/Notifications/UnifiedNotificationManager.jsx
+   🆕 תיקון: alertManager נקרא תמיד
 
-2. src/context/TaskContext.jsx
-   תיקון איפוס שדות
+2. src/utils/smartSchedulerV4.js
+   תיקון: due_time נכבד בתצוגה יומית
 
-3. src/components/Dashboard/SmartDashboard.jsx
-   סנכרון זמן
+3. src/context/TaskContext.jsx
+   תיקון: איפוס שדות
 
-4. src/components/Notifications/UnifiedNotificationManager.jsx
-   התראות מעודכנות לזמנים חדשים
+4. src/components/Dashboard/SmartDashboard.jsx
+   תיקון: סנכרון זמן
 
-===== מה התיקון עושה =====
+===== מה עובד עכשיו =====
 
-לפני: הגדרת due_time=14:00, אבל התצוגה הציגה 09:35
-אחרי: הגדרת due_time=14:00, התצוגה מציגה 14:00
-
-===== הוראות =====
-
-העלי את 4 הקבצים ל-GitHub
+✅ התראה "5 דקות לסיום המשימה"
+✅ התראה "עברת את הזמן - צריך לעבור למשימה הבאה"
+✅ התראה "הגיע הזמן למשימה X" (רק כשלא עובדים)
+✅ שעות נכונות בתצוגה יומית
 

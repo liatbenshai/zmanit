@@ -193,19 +193,7 @@ export function useUnifiedNotifications() {
       todayTasks.map(t => ({ title: t.title, time: t.due_time }))
     );
     
-    // ✅ אם יש טיימר פעיל - לא מטרידים עם התראות על משימות אחרות!
-    if (activeTaskId) {
-      const activeTask = tasks.find(t => t.id === activeTaskId);
-      if (activeTask) {
-        // רק בודקים התראות על המשימה הפעילה (כמו "הזמן עומד להיגמר")
-        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
-      }
-      // ✅ יוצאים! לא מטרידים כשעובדים - לא קוראים ל-alertManager בכלל!
-      console.log('🔔 [Notifications] טיימר פעיל - לא שולחים התראות על משימות אחרות');
-      return;
-    }
-    
-    // ✅ יצירת בלוקים מתוזמנים עבור alertManager (רק אם אין טיימר פעיל!)
+    // ✅ יצירת בלוקים מתוזמנים עבור alertManager
     const scheduledBlocks = todayTasks.map(task => {
       const [h, m] = (task.due_time || '09:00').split(':').map(Number);
       const startMinute = h * 60 + (m || 0);
@@ -221,10 +209,24 @@ export function useUnifiedNotifications() {
       };
     });
     
-    // ✅ קריאה ל-alertManager לבדיקת התראות חכמות (רק אם אין טיימר!)
+    // ✅ תמיד קוראים ל-alertManager - הוא יודע לבדוק:
+    // - התראות למשימה הפעילה (endingSoon, transition)
+    // - הוא לא שולח התראות על משימות אחרות כשיש טיימר פעיל
     alertManager.checkScheduledTasks(tasks, scheduledBlocks);
     
-    // ✅ בדיקת כל משימות היום
+    // ✅ אם יש טיימר פעיל - בודקים גם לפי time_spent (לא רק לפי לוח זמנים)
+    if (activeTaskId) {
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      if (activeTask) {
+        // בדיקת התראות לפי time_spent vs estimated_duration
+        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
+      }
+      // לא בודקים התראות על משימות אחרות כשעובדים
+      console.log('🔔 [Notifications] טיימר פעיל - לא שולחים התראות על משימות אחרות');
+      return;
+    }
+    
+    // ✅ בדיקת כל משימות היום (רק אם אין טיימר פעיל)
     todayTasks.forEach(task => {
       checkTaskAlerts(task, currentMinutes, today, hasPushPermission);
     });
