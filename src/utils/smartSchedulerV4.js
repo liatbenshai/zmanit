@@ -296,12 +296,52 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
       const dayStart = isHome ? (day.homeDayStart || 17 * 60) : (day.dayStart || config.defaultDayStart);
       const dayEnd = isHome ? (day.homeDayEnd || 21 * 60) : (day.dayEnd || config.defaultDayEnd);
       
-      // ✅ תיקון: אם יש due_time, משתמשים בו כזמן התחלה!
+      // ✅ תיקון: אם יש due_time, משתמשים בו כזמן התחלה קבוע!
       let requestedStart = null;
+      let isFixedTime = false;
       if (task.due_time && day.date === task.due_date) {
         requestedStart = timeToMinutes(task.due_time);
+        isFixedTime = true; // 🔧 משימה עם שעה קבועה - לא לשנות!
       }
       const currentStart = requestedStart || dayNextAvailable.get(day.date) || dayStart;
+      
+      // 🔧 תיקון: אם יש due_time קבוע - יוצרים בלוק בזמן המבוקש בלי לחפש סלוט פנוי
+      if (isFixedTime && requestedStart !== null) {
+        const duration = Math.min(remainingDuration, config.blockDuration);
+        const block = {
+          id: `${task.id}-block-${blocksCreated + 1}`,
+          taskId: task.id,
+          task: task,
+          type: task.task_type || 'other',
+          taskType: task.task_type || 'other',
+          category: task.category || (isHome ? 'home' : 'work'),
+          priority: task.priority || 'normal',
+          title: task.title,
+          startMinute: requestedStart,
+          endMinute: requestedStart + duration,
+          startTime: minutesToTime(requestedStart),
+          endTime: minutesToTime(requestedStart + duration),
+          duration: duration,
+          dayDate: day.date,
+          isFixed: true, // 🔧 סימון שזו משימה עם שעה קבועה
+          isHomeTask: isHome,
+          blockType: BLOCK_TYPES.FIXED_TASK,
+          canMove: true,
+          canResize: true,
+          blockIndex: blocksCreated + 1,
+          totalBlocks: Math.ceil(totalDuration / config.blockDuration)
+        };
+        
+        day.blocks.push(block);
+        day.totalScheduledMinutes += duration;
+        remainingDuration -= duration;
+        blocksCreated++;
+        
+        // עדכון הזמן הבא הפנוי
+        dayNextAvailable.set(day.date, requestedStart + duration + config.breakDuration);
+        continue; // לעבור ליום הבא
+      }
+      
       const freeSlots = findFreeSlotsForDayWithRange(day, currentStart, dayEnd, config, isHome);
       
       for (const slot of freeSlots) {
