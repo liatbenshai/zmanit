@@ -360,8 +360,9 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
   }
   
   // מציאת המשימה האחרונה להיום
+  // ✅ תיקון: כוללים גם משימות בלי due_date (נחשבות להיום)
   const todayTasks = (tasks || []).filter(t => 
-    t.due_date === todayISO && 
+    (t.due_date === todayISO || !t.due_date) && 
     !t.is_completed && 
     t.due_time
   );
@@ -746,7 +747,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       task_type: formData.taskType,
       estimated_duration: calculatedDuration,
       start_date: formData.startDate || null,
-      due_date: formData.dueDate || null,
+      // ✅ תיקון: ברירת מחדל לתאריך היום אם לא נבחר
+      due_date: formData.dueDate || defaultDate || getLocalDateISO(new Date()),
       due_time: autoDueTime,  // ✅ שימוש בזמן המחושב
       deadline_date: formData.deadlineDate || null,  // 🆕 דדליין תאריך
       deadline_time: formData.deadlineTime || null,  // 🆕 דדליין שעה
@@ -756,8 +758,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       recording_duration: hasSourceField(formData.taskType) && formData.sourceValue 
         ? parseFloat(formData.sourceValue) 
         : null,
-      page_count: null, // לא בשימוש יותר - הכל ב-recording_duration
-      category: selectedCategory  // ✅ חדש: הוספת הקטגוריה
+      page_count: null // לא בשימוש יותר - הכל ב-recording_duration
+      // category הוסר - העמודה לא קיימת בטבלה
     };
 
     // עריכה - פשוט מעדכן

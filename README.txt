@@ -1,27 +1,23 @@
-=== עדכון מלא - דשבורד + תיקון התראות ===
+=== עדכון מלא ===
 
-=== קבצים (5) ===
+=== תיקונים עיקריים ===
 
-1. src/components/Dashboard/SmartDashboard.jsx
-   🆕 דשבורד חדש מעוצב
+1. ✅ תזמון אוטומטי - משימות לא יקבלו יותר אותו זמן!
+   - due_date ברירת מחדל = היום
+   - חישוב זמן מתחשב בכל המשימות
+   - הסרת שדה category שלא קיים בטבלה
 
-2. src/components/Notifications/UnifiedNotificationManager.jsx
-   🐛 תיקון התראות!
-   - קורא את הזמן מהטיימר (localStorage) במקום מה-DB
-   - מתריע 5 דקות לפני סיום הזמן
-   - מתריע כשהזמן נגמר
-   - התראות כל 3-5 דקות (לא פעם בשעה)
+2. ✅ התראות
+   - כפתור X לסגירת פופאפ
+   - Push notification כשפופאפ קופץ
+   - קריאת זמן מהטיימר (לא מה-DB)
 
-3. src/components/DailyView/DailyView.jsx
-   🐛 תיקון: משימות לא חוזרות ל-08:00
+=== קבצים (6) ===
 
-4. src/utils/smartSchedulerV4.js
-   🐛 תיקון: due_time נכבד
-
-5. src/context/TaskContext.jsx
-   🐛 תיקון: שמירת שדות
-
-=== התקנה ===
-
-החליפי את 5 הקבצים במיקומים המתאימים.
+1. SmartDashboard.jsx - דשבורד חדש
+2. SimpleTaskForm.jsx - תיקון תזמון אוטומטי
+3. DailyView.jsx - תיקון 08:00
+4. UnifiedNotificationManager.jsx - תיקון התראות
+5. TaskContext.jsx - תיקון שמירה
+6. smartSchedulerV4.js - תיקון due_time
 

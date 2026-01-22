@@ -192,8 +192,8 @@ export function TaskProvider({ children }) {
         estimated_duration: duration || null,
         task_type: taskData.taskType || taskData.task_type || 'other',
         task_parameter: taskData.taskParameter || taskData.task_parameter ? parseInt(taskData.taskParameter || taskData.task_parameter) : null,
-        priority: taskData.priority || 'normal',
-        category: taskData.category || 'work'
+        priority: taskData.priority || 'normal'
+        // category הוסר - העמודה לא קיימת בטבלה
       };
       
       if (!taskToCreate.title || taskToCreate.title.length === 0) {

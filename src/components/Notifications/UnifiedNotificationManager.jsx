@@ -527,12 +527,34 @@ function getAlertIcon(type) {
  */
 export function UnifiedNotificationManager() {
   const { activeAlert, isAlertVisible, handleAlertAction, dismissAlert } = useUnifiedNotifications();
+  const { sendNotification, permission } = useNotifications();
+  
+  // 🔧 שליחת push notification כשפופאפ קופץ
+  useEffect(() => {
+    if (isAlertVisible && activeAlert && permission === 'granted') {
+      sendNotification(activeAlert.title, {
+        body: activeAlert.message,
+        tag: `alert-${activeAlert.id}`,
+        requireInteraction: true
+      });
+    }
+  }, [isAlertVisible, activeAlert, sendNotification, permission]);
   
   // פופאפ חוסם להתראות קריטיות
   if (isAlertVisible && activeAlert?.blockingPopup) {
     return (
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[9999] p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6 text-center animate-bounce-in">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl max-w-md w-full p-6 text-center animate-bounce-in relative">
+          
+          {/* 🔧 כפתור X לסגירה */}
+          <button
+            onClick={dismissAlert}
+            className="absolute top-3 left-3 w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 dark:bg-gray-700 dark:hover:bg-gray-600 text-gray-500 dark:text-gray-400 transition-colors"
+            title="סגור"
+          >
+            ✕
+          </button>
+          
           {/* כותרת */}
           <div className="text-4xl mb-4">
             {getAlertIcon(activeAlert.type)}
