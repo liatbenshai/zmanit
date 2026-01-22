@@ -29,14 +29,26 @@ function toLocalISODate(date) {
 
 /**
  * בדיקה אם יש טיימר פעיל על משימה כלשהי
+ * 🔧 תיקון: בודקים גם אם הטיימר באמת רץ, לא רק אם יש ID
  */
 function getActiveTaskId() {
   try {
-    // בדיקה פשוטה - אם יש zmanit_active_timer, יש טיימר פעיל
     const activeTimer = localStorage.getItem('zmanit_active_timer');
     if (activeTimer && activeTimer !== 'null' && activeTimer !== 'undefined') {
-      console.log('🔔 [Notifications] טיימר פעיל נמצא:', activeTimer);
-      return activeTimer;
+      // 🔧 חשוב: בודקים אם הטיימר באמת רץ!
+      const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
+      if (timerData) {
+        try {
+          const data = JSON.parse(timerData);
+          // רק אם הטיימר באמת רץ (לא מושהה, לא נעצר)
+          if (data.isRunning === true && data.startTime) {
+            console.log('🔔 [Notifications] טיימר פעיל ורץ:', activeTimer);
+            return activeTimer;
+          }
+        } catch (e) {}
+      }
+      // אין נתוני טיימר או הטיימר לא רץ - מנקים
+      console.log('🔔 [Notifications] יש ID אבל הטיימר לא רץ');
     }
   } catch (e) {
     console.error('🔔 [Notifications] שגיאה בבדיקת טיימר:', e);
@@ -155,19 +167,7 @@ export function useUnifiedNotifications() {
       todayTasks.map(t => ({ title: t.title, time: t.due_time }))
     );
     
-    // ✅ בדיקה אם יש טיימר פעיל - לפני הכל!
-    if (activeTaskId) {
-      const activeTask = tasks.find(t => t.id === activeTaskId);
-      if (activeTask) {
-        // רק בודקים התראות על המשימה הפעילה (כמו "הזמן עומד להיגמר")
-        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
-      }
-      // ✅ יוצאים! לא מטרידים כשעובדים - גם לא קוראים ל-alertManager
-      console.log('🔔 [Notifications] טיימר פעיל - לא שולחים התראות על משימות אחרות');
-      return;
-    }
-    
-    // ✅ יצירת בלוקים מתוזמנים עבור alertManager (רק אם אין טיימר פעיל)
+    // ✅ יצירת בלוקים מתוזמנים עבור alertManager
     const scheduledBlocks = todayTasks.map(task => {
       const [h, m] = (task.due_time || '09:00').split(':').map(Number);
       const startMinute = h * 60 + (m || 0);
@@ -183,8 +183,20 @@ export function useUnifiedNotifications() {
       };
     });
     
-    // ✅ קריאה ל-alertManager לבדיקת התראות חכמות (רק אם אין טיימר!)
+    // ✅ קריאה ל-alertManager לבדיקת התראות חכמות
     alertManager.checkScheduledTasks(tasks, scheduledBlocks);
+    
+    // ✅ אם יש טיימר פעיל - לא מטרידים עם התראות על משימות אחרות!
+    if (activeTaskId) {
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      if (activeTask) {
+        // רק בודקים התראות על המשימה הפעילה (כמו "הזמן עומד להיגמר")
+        checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
+      }
+      // ✅ יוצאים! לא מטרידים כשעובדים
+      console.log('🔔 [Notifications] טיימר פעיל - לא שולחים התראות על משימות אחרות');
+      return;
+    }
     
     // ✅ בדיקת כל משימות היום
     todayTasks.forEach(task => {

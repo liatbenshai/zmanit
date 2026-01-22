@@ -1,57 +1,37 @@
-=== עדכון zmanit - תיקון יסודי של טיימר והתראות ===
+=== עדכון zmanit - תיקון קריטי! ===
 
-בדקתי את כל הקוד לעומק. הנה מה שתוקן:
+מצאתי את הבעיה האמיתית!
 
-===== בעיה 1: הטיימר נעצר כשעוברים בין מסכים =====
+===== הבעיה העיקרית =====
 
-הסיבה: כשהקומפוננטה נטענת מחדש, היא מוחקת את zmanit_active_timer
-        לפני שהיא בודקת אם יש טיימר רץ על משימה אחרת.
+קובץ: TaskContext.jsx
+שורות: 118-123 (המקור)
 
-תיקון: עכשיו לפני מחיקה, בודקים אם יש טיימר רץ על *כל* משימה
-        (לא רק על המשימה הנוכחית)
+כשעדכנת משימה, ה-realtime של Supabase שלח UPDATE.
+הקוד הישן עשה:
 
-קבצים:
-- TaskTimerWithInterruptions.jsx
-- MiniTimer.jsx
+  { ...payload.new, time_spent: payload.new.time_spent || 0 }
 
+זה החליף את כל המשימה עם מה שהגיע מהשרת!
+אם payload.new לא הכיל estimated_duration, quadrant, due_time - הם נמחקו!
 
-===== בעיה 2: התראות מגיעות כשעובדים =====
+===== התיקון =====
 
-הסיבה: הבדיקה לטיימר פעיל הייתה שגויה!
-        הקוד בדק: "אם הטיימר רץ על *המשימה הזו* - לא לשלוח"
-        אבל היה צריך: "אם יש טיימר רץ על *משימה כלשהי* - לא לשלוח על אחרות"
+עכשיו הקוד עושה:
 
-תיקון: שיניתי את הלוגיקה ב-3 מקומות:
-- NotificationContext.jsx - התראות מהדפדפן
-- pushNotifications.js - התראות Push
-- smartAlertManager.js - התראות חכמות (fallback)
-- UnifiedNotificationManager.jsx - הזזתי את הבדיקה לפני alertManager
+  { 
+    ...t,              // קודם - שומרים על כל השדות הקיימים
+    ...payload.new,    // אחרי - מעדכנים רק מה שהגיע
+    time_spent: payload.new.time_spent ?? t.time_spent ?? 0
+  }
 
+===== קבצים בעדכון =====
 
-===== בעיה 3: סנכרון בין דשבורד לתצוגה יומית =====
-
-הסיבה: חישוב שגוי של הזמן שעבר בדשבורד
-        (data.startTime הוא string, לא timestamp)
-
-תיקון: new Date(data.startTime).getTime() במקום data.startTime
-
-קבצים:
-- SmartDashboard.jsx
-
-
-===== קבצים בעדכון (7 קבצים) =====
-
-src/components/Tasks/TaskTimerWithInterruptions.jsx
-src/components/Dashboard/MiniTimer.jsx
-src/components/Dashboard/SmartDashboard.jsx
-src/components/Notifications/UnifiedNotificationManager.jsx
-src/context/NotificationContext.jsx
-src/services/pushNotifications.js
-src/utils/smartAlertManager.js
-
+1. src/context/TaskContext.jsx - התיקון העיקרי!
+2. src/components/Dashboard/SmartDashboard.jsx - חישוב זמן
+3. src/components/Notifications/UnifiedNotificationManager.jsx - בדיקת טיימר
 
 ===== הוראות =====
 
-העלי את כל הקבצים שבזיפ הזה לפרויקט ב-GitHub
-(שמרי על מבנה התיקיות!)
+העלי את 3 הקבצים ל-GitHub
 

@@ -279,25 +279,26 @@ function SmartDashboard() {
       if (activeTaskId && tasks) {
         const task = tasks.find(t => t.id === activeTaskId);
         if (task) {
-          setActiveTimer(task);
           try {
             const saved = localStorage.getItem(`timer_v2_${activeTaskId}`);
             if (saved) {
               const data = JSON.parse(saved);
+              // 🔧 תיקון: בדיקה שהטיימר באמת רץ + המרה נכונה של startTime
               if (data.isRunning && data.startTime) {
-                // 🔧 תיקון: המרה נכונה של startTime מ-string ל-Date
                 const startTime = new Date(data.startTime).getTime();
                 const totalInterruption = (data.totalInterruptionSeconds || 0) * 1000;
-                setElapsedSeconds(Math.floor((Date.now() - startTime - totalInterruption) / 1000));
+                const elapsed = Math.floor((Date.now() - startTime - totalInterruption) / 1000);
+                setElapsedSeconds(elapsed);
+                setActiveTimer(task);
+                return;
               }
             }
           } catch (e) {}
-        } else {
-          setActiveTimer(null);
         }
-      } else {
-        setActiveTimer(null);
       }
+      // אין טיימר פעיל
+      setActiveTimer(null);
+      setElapsedSeconds(0);
     };
     
     checkActiveTimer();

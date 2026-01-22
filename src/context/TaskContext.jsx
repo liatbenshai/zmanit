@@ -116,9 +116,14 @@ export function TaskProvider({ children }) {
               break;
               
             case 'UPDATE':
+              // 🔧 תיקון קריטי: שומרים על השדות הקיימים ורק מעדכנים מה שהשתנה
               setTasks(prev => prev.map(t => 
                 t.id === payload.new.id 
-                  ? { ...payload.new, time_spent: payload.new.time_spent || 0 }
+                  ? { 
+                      ...t,                    // שומרים על כל השדות הקיימים
+                      ...payload.new,          // מעדכנים רק מה שהגיע מהשרת
+                      time_spent: payload.new.time_spent ?? t.time_spent ?? 0
+                    }
                   : t
               ));
               break;
