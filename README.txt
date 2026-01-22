@@ -1,32 +1,55 @@
-=== עדכון zmanit - תיקון התראות מעבר בין משימות ===
+=== תיקון מקיף - סנכרון זמנים והתראות ===
 
-הבעיה: לא קיבלת התראות על "עברת את הזמן" ו"צריך לעבור למשימה"
+הבעיות שזוהו ותוקנו:
 
-הסיבה: חסמתי את alertManager כשיש טיימר פעיל,
-אבל alertManager הוא זה שבודק התראות מעבר!
+===== בעיה 1: התצוגה היומית הציגה שעות שונות מהדשבורד =====
 
-התיקון: alertManager נקרא תמיד. הוא כבר יודע:
-- לשלוח התראות על המשימה הפעילה (endingSoon, transition)
-- לא לשלוח התראות על משימות אחרות כשעובדים
+הסיבה: smartSchedulerV4 חישב זמנים חדשים במקום להשתמש ב-due_time מה-DB
 
-===== קבצים =====
+תיקון ב-smartSchedulerV4.js:
+- אם למשימה יש due_time, כל הבלוקים שלה יוצגו ברצף מאותה שעה
+- לא עוד חיפוש "סלוט פנוי" למשימות עם שעה קבועה
 
-1. src/components/Notifications/UnifiedNotificationManager.jsx
-   🆕 תיקון: alertManager נקרא תמיד
+תיקון ב-DailyView.jsx:
+- העברת due_time מקורי (block.task?.due_time) במקום block.startTime
 
-2. src/utils/smartSchedulerV4.js
-   תיקון: due_time נכבד בתצוגה יומית
+===== בעיה 2: התראות לא בזמנים הנכונים =====
 
-3. src/context/TaskContext.jsx
-   תיקון: איפוס שדות
+ההתראות משתמשות ב-task.due_time ישירות מ-DB (וזה נכון!).
+הבעיה הייתה ש-alertManager נחסם כשיש טיימר פעיל.
 
-4. src/components/Dashboard/SmartDashboard.jsx
-   תיקון: סנכרון זמן
+תיקון ב-UnifiedNotificationManager.jsx:
+- alertManager נקרא תמיד, גם כשיש טיימר
+- הוא יודע לשלוח התראות על המשימה הפעילה
 
-===== מה עובד עכשיו =====
+===== בעיה 3: איפוס שדות =====
 
-✅ התראה "5 דקות לסיום המשימה"
-✅ התראה "עברת את הזמן - צריך לעבור למשימה הבאה"
-✅ התראה "הגיע הזמן למשימה X" (רק כשלא עובדים)
-✅ שעות נכונות בתצוגה יומית
+תיקון ב-TaskContext.jsx:
+- realtime UPDATE שומר על שדות קיימים
+- changeQuadrant ו-toggleComplete שומרים על שדות
+
+===== קבצים (5) =====
+
+1. src/utils/smartSchedulerV4.js
+   - תיקון שעות: due_time נכבד לכל הבלוקים
+
+2. src/components/DailyView/DailyView.jsx
+   - תיקון: העברת due_time מקורי ל-DailyTaskCard
+
+3. src/components/Notifications/UnifiedNotificationManager.jsx
+   - תיקון: alertManager נקרא תמיד
+
+4. src/context/TaskContext.jsx
+   - תיקון: שמירת שדות בעדכון
+
+5. src/components/Dashboard/SmartDashboard.jsx
+   - תיקון: סנכרון זמן נכון
+
+===== מה אמור לעבוד =====
+
+✅ התצוגה היומית מציגה אותן שעות כמו הדשבורד
+✅ שינוי שעה מתעדכן בכל המקומות
+✅ התראות בזמנים הנכונים
+✅ התראה "עברת את הזמן" כשטיימר רץ
+✅ משימות לא מתאפסות
 

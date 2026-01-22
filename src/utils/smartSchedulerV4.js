@@ -305,41 +305,49 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
       }
       const currentStart = requestedStart || dayNextAvailable.get(day.date) || dayStart;
       
-      // 🔧 תיקון: אם יש due_time קבוע - יוצרים בלוק בזמן המבוקש בלי לחפש סלוט פנוי
+      // 🔧 תיקון מלא: אם יש due_time קבוע - יוצרים את כל הבלוקים ברצף מאותה שעה
       if (isFixedTime && requestedStart !== null) {
-        const duration = Math.min(remainingDuration, config.blockDuration);
-        const block = {
-          id: `${task.id}-block-${blocksCreated + 1}`,
-          taskId: task.id,
-          task: task,
-          type: task.task_type || 'other',
-          taskType: task.task_type || 'other',
-          category: task.category || (isHome ? 'home' : 'work'),
-          priority: task.priority || 'normal',
-          title: task.title,
-          startMinute: requestedStart,
-          endMinute: requestedStart + duration,
-          startTime: minutesToTime(requestedStart),
-          endTime: minutesToTime(requestedStart + duration),
-          duration: duration,
-          dayDate: day.date,
-          isFixed: true, // 🔧 סימון שזו משימה עם שעה קבועה
-          isHomeTask: isHome,
-          blockType: BLOCK_TYPES.FIXED_TASK,
-          canMove: true,
-          canResize: true,
-          blockIndex: blocksCreated + 1,
-          totalBlocks: Math.ceil(totalDuration / config.blockDuration)
-        };
+        let blockStart = requestedStart;
         
-        day.blocks.push(block);
-        day.totalScheduledMinutes += duration;
-        remainingDuration -= duration;
-        blocksCreated++;
+        // יוצרים את כל הבלוקים של המשימה ברצף
+        while (remainingDuration > 0) {
+          const duration = Math.min(remainingDuration, config.blockDuration);
+          const block = {
+            id: `${task.id}-block-${blocksCreated + 1}`,
+            taskId: task.id,
+            task: task,
+            type: task.task_type || 'other',
+            taskType: task.task_type || 'other',
+            category: task.category || (isHome ? 'home' : 'work'),
+            priority: task.priority || 'normal',
+            title: task.title,
+            startMinute: blockStart,
+            endMinute: blockStart + duration,
+            startTime: minutesToTime(blockStart),
+            endTime: minutesToTime(blockStart + duration),
+            duration: duration,
+            dayDate: day.date,
+            isFixed: true, // 🔧 סימון שזו משימה עם שעה קבועה
+            isHomeTask: isHome,
+            blockType: BLOCK_TYPES.FIXED_TASK,
+            canMove: true,
+            canResize: true,
+            blockIndex: blocksCreated + 1,
+            totalBlocks: Math.ceil(totalDuration / config.blockDuration)
+          };
+          
+          day.blocks.push(block);
+          day.totalScheduledMinutes += duration;
+          remainingDuration -= duration;
+          blocksCreated++;
+          
+          // הבלוק הבא מתחיל מיד אחרי (עם הפסקה קטנה)
+          blockStart = blockStart + duration + config.breakDuration;
+        }
         
-        // עדכון הזמן הבא הפנוי
-        dayNextAvailable.set(day.date, requestedStart + duration + config.breakDuration);
-        continue; // לעבור ליום הבא
+        // עדכון הזמן הבא הפנוי ביום
+        dayNextAvailable.set(day.date, blockStart);
+        break; // סיימנו עם המשימה הזו - יוצאים מלולאת הימים
       }
       
       const freeSlots = findFreeSlotsForDayWithRange(day, currentStart, dayEnd, config, isHome);

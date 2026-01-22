@@ -977,7 +977,7 @@ function DailyView() {
           time_spent: block.timeSpent || 0,
           is_completed: block.isCompleted,
           task_type: block.taskType,
-          due_time: block.startTime,
+          due_time: block.task?.due_time || block.startTime, // 🔧 תיקון: due_time מקורי מה-DB
           priority: block.priority || 'normal',
           blockIndex: block.blockIndex,
           totalBlocks: block.totalBlocks,
@@ -1358,7 +1358,7 @@ function DailyView() {
                         time_spent: block.timeSpent || 0,
                         is_completed: true,
                         task_type: block.taskType,
-                        due_time: block.startTime,
+                        due_time: block.task?.due_time || block.startTime, // 🔧 תיקון
                         startTime: block.startTime,
                         endTime: block.endTime
                       }} 
