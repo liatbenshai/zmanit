@@ -1,42 +1,49 @@
-=== עדכון zmanit - בדיקה יסודית ===
+=== עדכון zmanit - בדיקה סופית ומקיפה ===
 
-בדקתי את כל הקוד. הנה מה שמצאתי ותיקנתי:
+בדקתי את כל הקוד. הנה כל התיקונים:
 
-===== בעיה מרכזית: איפוס שדות בעדכון =====
+===== 1. איפוס שדות - TaskContext.jsx =====
 
-ב-TaskContext.jsx היו 3 מקומות שהחליפו את כל המשימה
-במקום לעדכן רק את השדות שהשתנו:
+3 מקומות החליפו את כל המשימה במקום לעדכן שדות:
 
-1. שורה 118-128: realtime UPDATE handler
+א. שורה 118-128: realtime UPDATE
    לפני: { ...payload.new }
    אחרי: { ...t, ...payload.new }
 
-2. שורה 336: changeQuadrant
-   לפני: t.id === taskId ? updatedTask : t
-   אחרי: t.id === taskId ? { ...t, ...updatedTask } : t
+ב. שורה 336: changeQuadrant  
+   לפני: updatedTask
+   אחרי: { ...t, ...updatedTask }
 
-3. שורה 444: toggleComplete
-   לפני: t.id === taskId ? updatedTask : t
-   אחרי: t.id === taskId ? { ...t, ...updatedTask } : t
+ג. שורה 444: toggleComplete
+   לפני: updatedTask
+   אחרי: { ...t, ...updatedTask }
 
-===== תיקון נוסף: התראות =====
+===== 2. התראות - UnifiedNotificationManager.jsx =====
 
-UnifiedNotificationManager.jsx - getActiveTaskId
-בדיקה שהטיימר באמת רץ (isRunning === true)
-ולא רק שיש ID ב-localStorage
+א. getActiveTaskId (שורות 30-56)
+   לפני: החזיר ID אם היה ערך ב-localStorage
+   אחרי: בודק שהטיימר באמת רץ (isRunning === true)
 
-===== תיקון נוסף: סנכרון דשבורד =====
+ב. סדר הבדיקות (שורות 155-200)
+   לפני: קרא ל-alertManager ואז בדק טיימר
+   אחרי: בודק טיימר קודם, alertManager רק אם אין טיימר
 
-SmartDashboard.jsx - חישוב זמן
-new Date(data.startTime).getTime() במקום data.startTime
+===== 3. סנכרון דשבורד - SmartDashboard.jsx =====
+
+שורה 288: חישוב זמן
+   לפני: Date.now() - data.startTime (string!)
+   אחרי: Date.now() - new Date(data.startTime).getTime()
 
 ===== קבצים =====
 
-1. src/context/TaskContext.jsx - 3 תיקונים קריטיים!
-2. src/components/Dashboard/SmartDashboard.jsx
+1. src/context/TaskContext.jsx
+2. src/components/Dashboard/SmartDashboard.jsx  
 3. src/components/Notifications/UnifiedNotificationManager.jsx
 
-===== הוראות =====
+===== מה זה פותר =====
 
-העלי את 3 הקבצים ל-GitHub
+✅ משימות לא יאופסו כשמשנים משימה אחרת
+✅ time_spent, estimated_duration, quadrant יישמרו
+✅ התראות לא יופיעו כשעובדים על משימה
+✅ סנכרון בין דשבורד לתצוגה יומית
 
