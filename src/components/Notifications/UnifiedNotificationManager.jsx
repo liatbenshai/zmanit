@@ -119,6 +119,7 @@ export function useUnifiedNotifications() {
   }, []);
   
   // ✅ בדיקה אם ניתן לשלוח התראה (מניעת כפילויות)
+  // 🔧 תיקון: כשמשימה מתעדכנת (זמן חדש), מאפשרים התראה חדשה
   const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
     const now = Date.now();
     const key = `${taskId}-${type}`;
@@ -135,6 +136,31 @@ export function useUnifiedNotifications() {
     const key = `${taskId}-${type}`;
     lastNotifiedRef.current[key] = Date.now();
   }, []);
+  
+  // 🔧 חדש: ניקוי התראות למשימה כשהיא מתעדכנת
+  const clearNotificationsForTask = useCallback((taskId) => {
+    const keysToDelete = Object.keys(lastNotifiedRef.current).filter(key => 
+      key.startsWith(`${taskId}-`)
+    );
+    keysToDelete.forEach(key => delete lastNotifiedRef.current[key]);
+    console.log('🔔 [Notifications] ניקוי התראות למשימה:', taskId);
+  }, []);
+  
+  // 🔧 מאזינים לשינויים ב-tasks ומנקים התראות למשימות שהשתנו
+  const prevTasksRef = useRef({});
+  useEffect(() => {
+    if (!tasks) return;
+    
+    tasks.forEach(task => {
+      const prev = prevTasksRef.current[task.id];
+      // אם הזמן השתנה - מנקים את ההתראות
+      if (prev && prev.due_time !== task.due_time) {
+        clearNotificationsForTask(task.id);
+        console.log('🔔 [Notifications] זמן משימה השתנה:', task.title, prev.due_time, '->', task.due_time);
+      }
+      prevTasksRef.current[task.id] = { due_time: task.due_time };
+    });
+  }, [tasks, clearNotificationsForTask]);
   
   // ✅ בדיקת משימות ושליחת התראות מתואמות
   const checkAndNotify = useCallback(() => {
