@@ -333,7 +333,8 @@ export function TaskProvider({ children }) {
   const changeQuadrant = async (taskId, newQuadrant) => {
     try {
       const updatedTask = await moveTask(taskId, newQuadrant);
-      setTasks(prev => prev.map(t => t.id === taskId ? updatedTask : t));
+      // 🔧 תיקון: שומרים על השדות הקיימים
+      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, ...updatedTask } : t));
       return updatedTask;
     } catch (err) {
       console.error('שגיאה בהעברת משימה:', err);
@@ -440,8 +441,9 @@ export function TaskProvider({ children }) {
       // משימה רגילה (לא אינטרוול)
       const updatedTask = await toggleTaskComplete(taskId, newCompleteStatus);
       
+      // 🔧 תיקון: שומרים על השדות הקיימים
       setTasks(prev => {
-        const updated = prev.map(t => t.id === taskId ? updatedTask : t);
+        const updated = prev.map(t => t.id === taskId ? { ...t, ...updatedTask } : t);
         return updated;
       });
       

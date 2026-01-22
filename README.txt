@@ -1,35 +1,40 @@
-=== עדכון zmanit - תיקון קריטי! ===
+=== עדכון zmanit - בדיקה יסודית ===
 
-מצאתי את הבעיה האמיתית!
+בדקתי את כל הקוד. הנה מה שמצאתי ותיקנתי:
 
-===== הבעיה העיקרית =====
+===== בעיה מרכזית: איפוס שדות בעדכון =====
 
-קובץ: TaskContext.jsx
-שורות: 118-123 (המקור)
+ב-TaskContext.jsx היו 3 מקומות שהחליפו את כל המשימה
+במקום לעדכן רק את השדות שהשתנו:
 
-כשעדכנת משימה, ה-realtime של Supabase שלח UPDATE.
-הקוד הישן עשה:
+1. שורה 118-128: realtime UPDATE handler
+   לפני: { ...payload.new }
+   אחרי: { ...t, ...payload.new }
 
-  { ...payload.new, time_spent: payload.new.time_spent || 0 }
+2. שורה 336: changeQuadrant
+   לפני: t.id === taskId ? updatedTask : t
+   אחרי: t.id === taskId ? { ...t, ...updatedTask } : t
 
-זה החליף את כל המשימה עם מה שהגיע מהשרת!
-אם payload.new לא הכיל estimated_duration, quadrant, due_time - הם נמחקו!
+3. שורה 444: toggleComplete
+   לפני: t.id === taskId ? updatedTask : t
+   אחרי: t.id === taskId ? { ...t, ...updatedTask } : t
 
-===== התיקון =====
+===== תיקון נוסף: התראות =====
 
-עכשיו הקוד עושה:
+UnifiedNotificationManager.jsx - getActiveTaskId
+בדיקה שהטיימר באמת רץ (isRunning === true)
+ולא רק שיש ID ב-localStorage
 
-  { 
-    ...t,              // קודם - שומרים על כל השדות הקיימים
-    ...payload.new,    // אחרי - מעדכנים רק מה שהגיע
-    time_spent: payload.new.time_spent ?? t.time_spent ?? 0
-  }
+===== תיקון נוסף: סנכרון דשבורד =====
 
-===== קבצים בעדכון =====
+SmartDashboard.jsx - חישוב זמן
+new Date(data.startTime).getTime() במקום data.startTime
 
-1. src/context/TaskContext.jsx - התיקון העיקרי!
-2. src/components/Dashboard/SmartDashboard.jsx - חישוב זמן
-3. src/components/Notifications/UnifiedNotificationManager.jsx - בדיקת טיימר
+===== קבצים =====
+
+1. src/context/TaskContext.jsx - 3 תיקונים קריטיים!
+2. src/components/Dashboard/SmartDashboard.jsx
+3. src/components/Notifications/UnifiedNotificationManager.jsx
 
 ===== הוראות =====
 
