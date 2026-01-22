@@ -867,18 +867,24 @@ function DailyView() {
   const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
     const duration = block.duration || 30;
     
-    // ✅ תיקון חשוב: אם למשימה יש due_time קבוע - לא משנים את הזמן שלה!
-    const taskDueTime = block.task?.due_time;
+    // ✅ תיקון מלא: בדיקת due_time מכל המקורות האפשריים
+    const taskId = block.taskId || block.task?.id || block.id;
+    const originalTask = tasks.find(t => t.id === taskId);
+    const taskDueTime = originalTask?.due_time || block.task?.due_time;
     const hasFixedTime = taskDueTime && taskDueTime !== '';
     
     // אם יש טיימר רץ על המשימה - גם לא משנים
-    const taskId = block.taskId || block.task?.id || block.id;
     const hasActiveTimer = isTimerRunning(taskId);
     
     let startMinutes, endMinutes;
     
-    if (hasFixedTime || hasActiveTimer) {
-      // ✅ שומרים על הזמן המקורי
+    if (hasFixedTime) {
+      // ✅ שומרים על הזמן המקורי מה-due_time
+      const [h, m] = taskDueTime.split(':').map(Number);
+      startMinutes = h * 60 + (m || 0);
+      endMinutes = startMinutes + duration;
+    } else if (hasActiveTimer) {
+      // טיימר רץ - שומרים על הזמן הנוכחי
       const originalStart = block.startTime?.split(':').map(Number) || [0, 0];
       startMinutes = originalStart[0] * 60 + (originalStart[1] || 0);
       endMinutes = startMinutes + duration;

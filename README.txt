@@ -1,55 +1,44 @@
-=== תיקון מקיף - סנכרון זמנים והתראות ===
+=== תיקון קריטי - משימות לא חוזרות ל-08:00 ===
 
-הבעיות שזוהו ותוקנו:
+הבעיה: כש"נגמר הזמן" של משימה, המשימות הבאות חזרו לשעה 08:00
+במקום להישאר בשעות שהוגדרו להן.
 
-===== בעיה 1: התצוגה היומית הציגה שעות שונות מהדשבורד =====
+הסיבה: הקוד ב-DailyView.jsx בדק `block.task?.due_time` אבל
+block.task לא תמיד הכיל את המשימה המקורית עם ה-due_time.
 
-הסיבה: smartSchedulerV4 חישב זמנים חדשים במקום להשתמש ב-due_time מה-DB
+===== התיקון העיקרי (DailyView.jsx שורה 870) =====
 
-תיקון ב-smartSchedulerV4.js:
-- אם למשימה יש due_time, כל הבלוקים שלה יוצגו ברצף מאותה שעה
-- לא עוד חיפוש "סלוט פנוי" למשימות עם שעה קבועה
+לפני:
+const taskDueTime = block.task?.due_time;
 
-תיקון ב-DailyView.jsx:
-- העברת due_time מקורי (block.task?.due_time) במקום block.startTime
+אחרי:
+const originalTask = tasks.find(t => t.id === taskId);
+const taskDueTime = originalTask?.due_time || block.task?.due_time;
 
-===== בעיה 2: התראות לא בזמנים הנכונים =====
-
-ההתראות משתמשות ב-task.due_time ישירות מ-DB (וזה נכון!).
-הבעיה הייתה ש-alertManager נחסם כשיש טיימר פעיל.
-
-תיקון ב-UnifiedNotificationManager.jsx:
-- alertManager נקרא תמיד, גם כשיש טיימר
-- הוא יודע לשלוח התראות על המשימה הפעילה
-
-===== בעיה 3: איפוס שדות =====
-
-תיקון ב-TaskContext.jsx:
-- realtime UPDATE שומר על שדות קיימים
-- changeQuadrant ו-toggleComplete שומרים על שדות
+עכשיו הקוד מחפש את המשימה המקורית ב-tasks 
+ולוקח משם את due_time - אם יש due_time, השעה נשמרת!
 
 ===== קבצים (5) =====
 
-1. src/utils/smartSchedulerV4.js
-   - תיקון שעות: due_time נכבד לכל הבלוקים
+1. src/components/DailyView/DailyView.jsx
+   🆕 תיקון קריטי: בדיקת due_time מהמשימה המקורית
 
-2. src/components/DailyView/DailyView.jsx
-   - תיקון: העברת due_time מקורי ל-DailyTaskCard
+2. src/utils/smartSchedulerV4.js  
+   תיקון: due_time נכבד לכל הבלוקים
 
 3. src/components/Notifications/UnifiedNotificationManager.jsx
-   - תיקון: alertManager נקרא תמיד
+   alertManager נקרא תמיד
 
 4. src/context/TaskContext.jsx
-   - תיקון: שמירת שדות בעדכון
+   שמירת שדות בעדכון
 
 5. src/components/Dashboard/SmartDashboard.jsx
-   - תיקון: סנכרון זמן נכון
+   סנכרון זמן
 
 ===== מה אמור לעבוד =====
 
-✅ התצוגה היומית מציגה אותן שעות כמו הדשבורד
-✅ שינוי שעה מתעדכן בכל המקומות
+✅ משימות עם due_time נשארות בשעה שלהן - לא חוזרות ל-08:00
+✅ התצוגה היומית והדשבורד מציגים אותן שעות
 ✅ התראות בזמנים הנכונים
-✅ התראה "עברת את הזמן" כשטיימר רץ
-✅ משימות לא מתאפסות
+✅ "עברת את הזמן" מציג את המשימה הבאה בשעה הנכונה
 
