@@ -1,44 +1,38 @@
-=== תיקון קריטי - משימות לא חוזרות ל-08:00 ===
+=== עדכון מלא - דשבורד חדש + תיקוני באגים ===
 
-הבעיה: כש"נגמר הזמן" של משימה, המשימות הבאות חזרו לשעה 08:00
-במקום להישאר בשעות שהוגדרו להן.
+=== קבצים (5) ===
 
-הסיבה: הקוד ב-DailyView.jsx בדק `block.task?.due_time` אבל
-block.task לא תמיד הכיל את המשימה המקורית עם ה-due_time.
+1. src/components/Dashboard/SmartDashboard.jsx
+   🆕 דשבורד חדש מעוצב!
 
-===== התיקון העיקרי (DailyView.jsx שורה 870) =====
+2. src/components/DailyView/DailyView.jsx
+   🐛 תיקון: משימות לא חוזרות ל-08:00
 
-לפני:
-const taskDueTime = block.task?.due_time;
+3. src/utils/smartSchedulerV4.js
+   🐛 תיקון: due_time נכבד
 
-אחרי:
-const originalTask = tasks.find(t => t.id === taskId);
-const taskDueTime = originalTask?.due_time || block.task?.due_time;
+4. src/components/Notifications/UnifiedNotificationManager.jsx
+   🐛 תיקון: התראות
 
-עכשיו הקוד מחפש את המשימה המקורית ב-tasks 
-ולוקח משם את due_time - אם יש due_time, השעה נשמרת!
+5. src/context/TaskContext.jsx
+   🐛 תיקון: שמירת שדות
 
-===== קבצים (5) =====
+=== דשבורד חדש - מה יש ===
 
-1. src/components/DailyView/DailyView.jsx
-   🆕 תיקון קריטי: בדיקת due_time מהמשימה המקורית
+✅ עיצוב צבעוני וכיפי
+✅ רספונסיבי לנייד
+✅ משפט מוטיבציה יומי
+✅ כרטיס סיכום עם אחוז התקדמות
+✅ הוספת משימה מהירה (כרטיס ירוק)
+✅ הוספה מפורטת עם מודל
+✅ סטטיסטיקות: זמן, רצף, ממוצע
+✅ מד פרודוקטיביות/דחיינות
+✅ גרף שבועי עם אימוג'י ואחוזים
+✅ הערות יומיות
+✅ המשימה הבאה
+✅ ניווט תחתון
 
-2. src/utils/smartSchedulerV4.js  
-   תיקון: due_time נכבד לכל הבלוקים
+=== התקנה ===
 
-3. src/components/Notifications/UnifiedNotificationManager.jsx
-   alertManager נקרא תמיד
-
-4. src/context/TaskContext.jsx
-   שמירת שדות בעדכון
-
-5. src/components/Dashboard/SmartDashboard.jsx
-   סנכרון זמן
-
-===== מה אמור לעבוד =====
-
-✅ משימות עם due_time נשארות בשעה שלהן - לא חוזרות ל-08:00
-✅ התצוגה היומית והדשבורד מציגים אותן שעות
-✅ התראות בזמנים הנכונים
-✅ "עברת את הזמן" מציג את המשימה הבאה בשעה הנכונה
+החליפי את 5 הקבצים במיקומים המתאימים.
 
