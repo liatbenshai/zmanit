@@ -1,39 +1,25 @@
-=== עדכון מלא - דשבורד חדש מעוצב ===
+=== עדכון מלא - דשבורד + תיקון התראות ===
 
 === קבצים (5) ===
 
 1. src/components/Dashboard/SmartDashboard.jsx
-   🆕 דשבורד חדש מעוצב לגמרי!
+   🆕 דשבורד חדש מעוצב
 
-2. src/components/DailyView/DailyView.jsx
+2. src/components/Notifications/UnifiedNotificationManager.jsx
+   🐛 תיקון התראות!
+   - קורא את הזמן מהטיימר (localStorage) במקום מה-DB
+   - מתריע 5 דקות לפני סיום הזמן
+   - מתריע כשהזמן נגמר
+   - התראות כל 3-5 דקות (לא פעם בשעה)
+
+3. src/components/DailyView/DailyView.jsx
    🐛 תיקון: משימות לא חוזרות ל-08:00
 
-3. src/utils/smartSchedulerV4.js
+4. src/utils/smartSchedulerV4.js
    🐛 תיקון: due_time נכבד
-
-4. src/components/Notifications/UnifiedNotificationManager.jsx
-   🐛 תיקון: התראות
 
 5. src/context/TaskContext.jsx
    🐛 תיקון: שמירת שדות
-
-=== דשבורד חדש - מה כולל ===
-
-✅ עיצוב צבעוני וכיפי
-✅ רספונסיבי לנייד ולמחשב
-✅ משפט מוטיבציה יומי
-✅ כרטיס סיכום עם עיגול התקדמות
-✅ הוספה + הערות זה ליד זה
-✅ שתי משימות הבאות זה ליד זה
-✅ סטטיסטיקות: זמן, רצף, ממוצע
-✅ מד פרודוקטיביות/דחיינות
-✅ גרף שבועי צבעוני עם:
-   - תאריכים
-   - אחוזים גדולים
-   - עמודות צבעוניות
-   - כפתור לתצוגה שבועית
-✅ ניווט תחתון עם 5 אייקונים:
-   ראשי | יומי | שבועי | משימות | הגדרות
 
 === התקנה ===
 

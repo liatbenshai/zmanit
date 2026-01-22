@@ -57,6 +57,33 @@ function getActiveTaskId() {
 }
 
 /**
+ * 🔧 חדש: קריאת הזמן שעבר מהטיימר (מ-localStorage)
+ * מחזיר את הזמן בדקות
+ */
+function getElapsedTimeFromTimer(taskId) {
+  try {
+    const timerData = localStorage.getItem(`timer_v2_${taskId}`);
+    if (!timerData) return 0;
+    
+    const data = JSON.parse(timerData);
+    let totalMs = data.accumulatedTime || data.elapsed || 0;
+    
+    // אם הטיימר רץ עכשיו, מוסיפים את הזמן מאז startTime
+    if (data.isRunning && data.startTime) {
+      const startTime = new Date(data.startTime).getTime();
+      const now = Date.now();
+      totalMs += (now - startTime);
+    }
+    
+    // המרה לדקות
+    return Math.floor(totalMs / 60000);
+  } catch (e) {
+    console.error('🔔 [Notifications] שגיאה בקריאת זמן טיימר:', e);
+    return 0;
+  }
+}
+
+/**
  * Hook מאוחד לניהול התראות
  */
 export function useUnifiedNotifications() {
@@ -234,18 +261,31 @@ export function useUnifiedNotifications() {
   }, [tasks, permission, canNotify, markNotified, sendNotification]);
   
   // ✅ בדיקת התראות למשימה פעילה (עם טיימר)
+  // 🔧 תיקון: קורא את הזמן מהטיימר ב-localStorage, לא מה-DB
   const checkActiveTaskAlerts = useCallback((task, currentMinutes, hasPushPermission = false) => {
     const estimated = task.estimated_duration || 0;
-    const timeSpent = task.time_spent || 0;
     
-    if (estimated <= 0) return;
+    if (estimated <= 0) {
+      console.log('🔔 [Notifications] משימה בלי זמן מוגדר:', task.title);
+      return;
+    }
     
-    const remaining = estimated - timeSpent;
+    // 🔧 קורא את הזמן שעבר מהטיימר (לא מה-DB!)
+    const timeSpentMinutes = getElapsedTimeFromTimer(task.id);
+    const remaining = estimated - timeSpentMinutes;
+    
+    console.log('🔔 [Notifications] בדיקת משימה פעילה:', {
+      title: task.title,
+      estimated,
+      timeSpentMinutes,
+      remaining,
+      hasPushPermission
+    });
     
     // 5 דקות לסיום
-    if (remaining > 0 && remaining <= 5 && remaining > 2) {
-      if (canNotify(task.id, 'endingSoon', 5)) {
-        // 🔧 שולח Push רק אם יש הרשאה
+    if (remaining > 0 && remaining <= 5) {
+      if (canNotify(task.id, 'endingSoon', 3)) { // כל 3 דקות
+        console.log('🔔 [Notifications] שולח התראה - 5 דקות לסיום:', task.title);
         if (hasPushPermission) {
           sendNotification(`⏳ ${task.title}`, {
             body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
@@ -262,8 +302,9 @@ export function useUnifiedNotifications() {
     }
     
     // הזמן נגמר
-    if (remaining <= 0 && remaining > -2) {
-      if (canNotify(task.id, 'timeUp', 60)) { // פעם בשעה
+    if (remaining <= 0) {
+      if (canNotify(task.id, 'timeUp', 5)) { // כל 5 דקות
+        console.log('🔔 [Notifications] שולח התראה - הזמן נגמר:', task.title);
         if (hasPushPermission) {
           sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
             body: 'הזמן המוקצב הסתיים',
