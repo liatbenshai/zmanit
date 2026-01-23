@@ -183,12 +183,154 @@ export function useUnifiedNotifications() {
       // אם הזמן השתנה - מנקים את ההתראות
       if (prev && prev.due_time !== task.due_time) {
         clearNotificationsForTask(task.id);
-        console.log('🔔 [Notifications] זמן משימה השתנה:', task.title, prev.due_time, '->', task.due_time);
       }
       prevTasksRef.current[task.id] = { due_time: task.due_time };
     });
   }, [tasks, clearNotificationsForTask]);
   
+  // ✅ בדיקת התראות למשימה פעילה (עם טיימר)
+  const checkActiveTaskAlerts = useCallback((task, currentMinutes, hasPushPermission = false) => {
+    const estimated = task.estimated_duration || 0;
+    
+    if (estimated <= 0) return;
+    
+    const timeSpentMinutes = getElapsedTimeFromTimer(task.id);
+    const remaining = estimated - timeSpentMinutes;
+    
+    // 5 דקות לסיום
+    if (remaining > 0 && remaining <= 5) {
+      if (canNotify(task.id, 'endingSoon', 3)) {
+        if (hasPushPermission) {
+          sendNotification(`⏳ ${task.title}`, {
+            body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
+            tag: `task-ending-${task.id}`
+          });
+        }
+        toast(`⏳ נשארו ${remaining} דקות ל-${task.title}`, {
+          duration: 5000,
+          icon: '⏰'
+        });
+        markNotified(task.id, 'endingSoon');
+      }
+    }
+    
+    // הזמן נגמר
+    if (remaining <= 0) {
+      if (canNotify(task.id, 'timeUp', 5)) {
+        if (hasPushPermission) {
+          sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
+            body: 'הזמן המוקצב הסתיים',
+            tag: `task-timeup-${task.id}`,
+            requireInteraction: true
+          });
+        }
+        markNotified(task.id, 'timeUp');
+        
+        toast.error(`🔔 הזמן נגמר: ${task.title}`, {
+          duration: 8000,
+          icon: '⏰'
+        });
+      }
+    }
+  }, [canNotify, markNotified, sendNotification]);
+  
+  // ✅ בדיקת התראות למשימה (ללא טיימר)
+  const checkTaskAlerts = useCallback((task, currentMinutes, today, hasPushPermission = false) => {
+    if (!task.due_time) return;
+    if (task.was_deferred) return;
+    
+    const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
+    if (taskDate !== today) return;
+    
+    const [hour, min] = task.due_time.split(':').map(Number);
+    const taskStartMinutes = hour * 60 + (min || 0);
+    const taskDuration = task.estimated_duration || 30;
+    const taskEndMinutes = taskStartMinutes + taskDuration;
+    
+    const diffFromStart = taskStartMinutes - currentMinutes;
+    const diffFromEnd = taskEndMinutes - currentMinutes;
+    
+    // 5 דקות לפני התחלה
+    if (diffFromStart > 0 && diffFromStart <= 5) {
+      if (canNotify(task.id, 'before', 5)) {
+        if (hasPushPermission) {
+          sendNotification(`⏰ ${task.title}`, {
+            body: `מתחיל בעוד ${diffFromStart} דקות (${task.due_time})`,
+            tag: `task-before-${task.id}`
+          });
+        }
+        markNotified(task.id, 'before');
+        
+        toast(`⏰ ${task.title} מתחיל בעוד ${diffFromStart} דקות`, {
+          duration: 5000
+        });
+      }
+    }
+    
+    // בדיוק בזמן ההתחלה
+    if (diffFromStart >= -1 && diffFromStart <= 1) {
+      if (canNotify(task.id, 'onTime', 5)) {
+        if (hasPushPermission) {
+          sendNotification(`🔔 ${task.title}`, {
+            body: `הגיע הזמן להתחיל!`,
+            tag: `task-ontime-${task.id}`
+          });
+        }
+        markNotified(task.id, 'onTime');
+        
+        toast.success(`🔔 הגיע הזמן להתחיל: ${task.title}`, {
+          duration: 8000
+        });
+      }
+    }
+    
+    // באיחור - התחלה עברה
+    if (diffFromStart < -2 && diffFromStart > -30) {
+      if (task.time_spent && task.time_spent > 0) return;
+      
+      if (canNotify(task.id, 'late', 10)) {
+        const lateMinutes = Math.abs(Math.round(diffFromStart));
+        if (hasPushPermission) {
+          sendNotification(`⏰ ${task.title}`, {
+            body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
+            tag: `task-late-${task.id}`
+          });
+        }
+        markNotified(task.id, 'late');
+        
+        toast(`⏰ ${task.title} - באיחור של ${lateMinutes} דקות`, {
+          duration: 5000,
+          icon: '⚠️'
+        });
+      }
+    }
+    
+    // משימה שעבר זמן הסיום שלה ולא סומנה כהושלמה
+    if (diffFromEnd < 0 && diffFromEnd > -60) {
+      const timeSpent = task.time_spent || 0;
+      const completionRatio = timeSpent / taskDuration;
+      
+      if (completionRatio < 0.5) {
+        if (canNotify(task.id, 'overdue-end', 15)) {
+          const overdueMinutes = Math.abs(Math.round(diffFromEnd));
+          
+          if (hasPushPermission) {
+            sendNotification(`🔴 ${task.title} - מה קורה?`, {
+              body: `המשימה הייתה אמורה להסתיים לפני ${overdueMinutes} דקות`,
+              tag: `task-overdue-end-${task.id}`,
+              requireInteraction: true
+            });
+          }
+          markNotified(task.id, 'overdue-end');
+          
+          toast.error(`🔴 "${task.title}" הייתה אמורה להסתיים לפני ${overdueMinutes} דקות`, {
+            duration: 10000
+          });
+        }
+      }
+    }
+  }, [canNotify, markNotified, sendNotification]);
+
   // ✅ בדיקת משימות ושליחת התראות מתואמות
   const checkAndNotify = useCallback(() => {
     if (!tasks || tasks.length === 0) {
@@ -330,172 +472,6 @@ export function useUnifiedNotifications() {
     });
     
   }, [tasks, permission, canNotify, markNotified, sendNotification, checkActiveTaskAlerts, checkTaskAlerts]);
-  
-  // ✅ בדיקת התראות למשימה פעילה (עם טיימר)
-  // 🔧 תיקון: קורא את הזמן מהטיימר ב-localStorage, לא מה-DB
-  const checkActiveTaskAlerts = useCallback((task, currentMinutes, hasPushPermission = false) => {
-    const estimated = task.estimated_duration || 0;
-    
-    if (estimated <= 0) {
-      console.log('🔔 [Notifications] משימה בלי זמן מוגדר:', task.title);
-      return;
-    }
-    
-    // 🔧 קורא את הזמן שעבר מהטיימר (לא מה-DB!)
-    const timeSpentMinutes = getElapsedTimeFromTimer(task.id);
-    const remaining = estimated - timeSpentMinutes;
-    
-    console.log('🔔 [Notifications] בדיקת משימה פעילה:', {
-      title: task.title,
-      estimated,
-      timeSpentMinutes,
-      remaining,
-      hasPushPermission
-    });
-    
-    // 5 דקות לסיום
-    if (remaining > 0 && remaining <= 5) {
-      if (canNotify(task.id, 'endingSoon', 3)) { // כל 3 דקות
-        console.log('🔔 [Notifications] שולח התראה - 5 דקות לסיום:', task.title);
-        if (hasPushPermission) {
-          sendNotification(`⏳ ${task.title}`, {
-            body: `נשארו ${remaining} דקות לסיום הזמן המוקצב!`,
-            tag: `task-ending-${task.id}`
-          });
-        }
-        // 🔧 תמיד מציג toast
-        toast(`⏳ נשארו ${remaining} דקות ל-${task.title}`, {
-          duration: 5000,
-          icon: '⏰'
-        });
-        markNotified(task.id, 'endingSoon');
-      }
-    }
-    
-    // הזמן נגמר
-    if (remaining <= 0) {
-      if (canNotify(task.id, 'timeUp', 5)) { // כל 5 דקות
-        console.log('🔔 [Notifications] שולח התראה - הזמן נגמר:', task.title);
-        if (hasPushPermission) {
-          sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
-            body: 'הזמן המוקצב הסתיים',
-            tag: `task-timeup-${task.id}`,
-            requireInteraction: true
-          });
-        }
-        markNotified(task.id, 'timeUp');
-        
-        // 🔧 תמיד מציג toast בתוך האפליקציה
-        toast.error(`🔔 הזמן נגמר: ${task.title}`, {
-          duration: 8000,
-          icon: '⏰'
-        });
-      }
-    }
-  }, [canNotify, markNotified, sendNotification]);
-  
-  // ✅ בדיקת התראות למשימה (ללא טיימר)
-  const checkTaskAlerts = useCallback((task, currentMinutes, today, hasPushPermission = false) => {
-    if (!task.due_time) return;
-    
-    // ✅ לא להתריע על משימות שנדחו בגלל בלת"מ
-    if (task.was_deferred) return;
-    
-    // ✅ וידוא שהמשימה באמת מתוכננת להיום
-    const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
-    if (taskDate !== today) return;
-    
-    const [hour, min] = task.due_time.split(':').map(Number);
-    const taskStartMinutes = hour * 60 + (min || 0);
-    const taskDuration = task.estimated_duration || 30;
-    const taskEndMinutes = taskStartMinutes + taskDuration;
-    
-    const diffFromStart = taskStartMinutes - currentMinutes;
-    const diffFromEnd = taskEndMinutes - currentMinutes;
-    
-    // 5 דקות לפני התחלה
-    if (diffFromStart > 0 && diffFromStart <= 5) {
-      if (canNotify(task.id, 'before', 5)) {
-        if (hasPushPermission) {
-          sendNotification(`⏰ ${task.title}`, {
-            body: `מתחיל בעוד ${diffFromStart} דקות (${task.due_time})`,
-            tag: `task-before-${task.id}`
-          });
-        }
-        markNotified(task.id, 'before');
-        
-        toast(`⏰ ${task.title} מתחיל בעוד ${diffFromStart} דקות`, {
-          duration: 5000
-        });
-      }
-    }
-    
-    // בדיוק בזמן ההתחלה (חלון של 2 דקות)
-    if (diffFromStart >= -1 && diffFromStart <= 1) {
-      if (canNotify(task.id, 'onTime', 5)) {
-        if (hasPushPermission) {
-          sendNotification(`🔔 ${task.title}`, {
-            body: `הגיע הזמן להתחיל!`,
-            tag: `task-ontime-${task.id}`
-          });
-        }
-        markNotified(task.id, 'onTime');
-        
-        toast.success(`🔔 הגיע הזמן להתחיל: ${task.title}`, {
-          duration: 8000
-        });
-      }
-    }
-    
-    // באיחור - התחלה עברה (עד 30 דקות)
-    if (diffFromStart < -2 && diffFromStart > -30) {
-      // לא מתריעים אם כבר עבדו על המשימה
-      if (task.time_spent && task.time_spent > 0) return;
-      
-      if (canNotify(task.id, 'late', 10)) {
-        const lateMinutes = Math.abs(Math.round(diffFromStart));
-        if (hasPushPermission) {
-          sendNotification(`⏰ ${task.title}`, {
-            body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
-            tag: `task-late-${task.id}`
-          });
-        }
-        markNotified(task.id, 'late');
-        
-        toast(`⏰ ${task.title} - באיחור של ${lateMinutes} דקות`, {
-          duration: 5000,
-          icon: '⚠️'
-        });
-      }
-    }
-    
-    // ✅ חדש: משימה שעבר זמן הסיום שלה ולא סומנה כהושלמה
-    if (diffFromEnd < 0 && diffFromEnd > -60) {
-      // לא עבדו עליה בכלל או עבדו רק חלקית
-      const timeSpent = task.time_spent || 0;
-      const completionRatio = timeSpent / taskDuration;
-      
-      // אם לא עבדו בכלל או פחות מ-50%
-      if (completionRatio < 0.5) {
-        if (canNotify(task.id, 'overdue-end', 15)) {
-          const overdueMinutes = Math.abs(Math.round(diffFromEnd));
-          
-          if (hasPushPermission) {
-            sendNotification(`🔴 ${task.title} - מה קורה?`, {
-              body: `המשימה הייתה אמורה להסתיים לפני ${overdueMinutes} דקות`,
-              tag: `task-overdue-end-${task.id}`,
-              requireInteraction: true
-            });
-          }
-          markNotified(task.id, 'overdue-end');
-          
-          toast.error(`🔴 "${task.title}" הייתה אמורה להסתיים לפני ${overdueMinutes} דקות`, {
-            duration: 10000
-          });
-        }
-      }
-    }
-  }, [canNotify, markNotified, sendNotification]);
   
   // ✅ הפעלת בדיקה תקופתית
   useEffect(() => {
