@@ -8,6 +8,11 @@
  * 3. OverdueTaskManager - פופאפים למשימות באיחור
  * 
  * פותר את בעיית ההתראות הכפולות והלא מתואמות!
+ * 
+ * ✅ שיפורים:
+ * - פופאפ חוסם לדחיינות (לא רק toast)
+ * - התראות קוליות
+ * - בדיקת Push notifications
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -88,12 +93,15 @@ function getElapsedTimeFromTimer(taskId) {
  */
 export function useUnifiedNotifications() {
   const { tasks } = useTasks();
-  const { permission, sendNotification } = useNotifications();
+  const { permission, sendNotification, playSound, requestPermission } = useNotifications();
   
   // מצב התראות
   const [activeAlert, setActiveAlert] = useState(null);
   const [alertQueue, setAlertQueue] = useState([]);
   const [isAlertVisible, setIsAlertVisible] = useState(false);
+  
+  // ✅ חדש: מצב פופאפ דחיינות
+  const [procrastinationPopup, setProcrastinationPopup] = useState(null);
   
   // refs למניעת התראות כפולות
   const lastNotifiedRef = useRef({});
@@ -113,6 +121,13 @@ export function useUnifiedNotifications() {
       onPopup: (alert) => {
         console.log('🔔 פופאפ חדש:', alert.type, alert.title);
         
+        // ✅ השמעת צליל להתראות קריטיות
+        if (alert.priority === ALERT_PRIORITY.CRITICAL) {
+          playSound('warning');
+        } else if (alert.priority === ALERT_PRIORITY.HIGH) {
+          playSound('default');
+        }
+        
         // הצגת פופאפ
         if (alert.blockingPopup) {
           setActiveAlert(alert);
@@ -127,7 +142,7 @@ export function useUnifiedNotifications() {
     return () => {
       alertManager.stopMonitoring();
     };
-  }, []);
+  }, [playSound]);
   
   // ✅ הצגת התראה כ-toast
   const showToastAlert = useCallback((alert) => {
@@ -347,17 +362,16 @@ export function useUnifiedNotifications() {
     // בדיקה אם יש טיימר פעיל (רץ, לא בהשהיה)
     const activeTaskId = getActiveTaskId();
     
-    // ✅ חדש: בדיקת שעות עבודה (08:30-16:15, ימים א-ה)
+    // ✅ בדיקת שעות עבודה (08:30-16:15, ימים א-ה)
     const isWorkDay = dayOfWeek >= 0 && dayOfWeek <= 4; // ראשון עד חמישי
     const workStart = 8.5 * 60;  // 08:30
     const workEnd = 16.25 * 60;  // 16:15
     const isWorkHours = isWorkDay && currentMinutes >= workStart && currentMinutes <= workEnd;
     
-    // ✅ חדש: פופאפ אם אנחנו בשעות עבודה ואין טיימר רץ
+    // ✅ פופאפ חוסם אם אנחנו בשעות עבודה ואין טיימר רץ
     if (isWorkHours && !activeTaskId) {
       // בדיקה שלא נשלחה התראה ב-10 דקות האחרונות
       if (canNotify('work-hours', 'no-timer', 10)) {
-        console.log('🔔 [Notifications] בשעות עבודה ללא טיימר פעיל!');
         
         // בדיקה אם יש משימות מתוכננות היום שעדיין לא הושלמו
         const pendingTasks = tasks.filter(t => 
@@ -372,10 +386,14 @@ export function useUnifiedNotifications() {
             .sort((a, b) => a.due_time.localeCompare(b.due_time))
             .find(t => {
               const [h, m] = t.due_time.split(':').map(Number);
-              return (h * 60 + (m || 0)) >= currentMinutes - 30; // משימות מלפני חצי שעה ומעלה
+              return (h * 60 + (m || 0)) >= currentMinutes - 30;
             });
           
           if (nextTask) {
+            // ✅ השמעת צליל אזהרה
+            playSound('warning');
+            
+            // ✅ Push notification
             if (hasPushPermission) {
               sendNotification('⏰ את בשעות העבודה!', {
                 body: `המשימה הבאה: ${nextTask.title} (${nextTask.due_time})`,
@@ -384,9 +402,18 @@ export function useUnifiedNotifications() {
               });
             }
             
-            toast(`⏰ את בשעות העבודה! המשימה הבאה: ${nextTask.title}`, {
-              duration: 8000,
-              icon: '🎯'
+            // ✅ פופאפ חוסם במקום toast
+            setProcrastinationPopup({
+              type: 'no-timer',
+              title: '⏰ את בשעות העבודה!',
+              message: `אין טיימר פעיל. המשימה הבאה: "${nextTask.title}" (${nextTask.due_time})`,
+              taskId: nextTask.id,
+              taskTitle: nextTask.title,
+              actions: [
+                { id: 'start_task', label: '▶️ התחל משימה', primary: true },
+                { id: 'snooze_10', label: '⏱️ הזכר בעוד 10 דק׳' },
+                { id: 'dismiss', label: '❌ סגור' }
+              ]
             });
             
             markNotified('work-hours', 'no-timer');
@@ -395,7 +422,7 @@ export function useUnifiedNotifications() {
       }
     }
     
-    // ✅ חדש: בדיקת משימה מושהית יותר מידי זמן
+    // ✅ בדיקת משימה מושהית יותר מידי זמן
     const pausedTimerData = localStorage.getItem('zmanit_focus_paused');
     if (pausedTimerData && isWorkHours) {
       try {
@@ -407,6 +434,9 @@ export function useUnifiedNotifications() {
           const pausedTask = tasks.find(t => t.id === pausedData.taskId);
           const taskTitle = pausedTask?.title || 'משימה';
           
+          // ✅ השמעת צליל אזהרה
+          playSound('warning');
+          
           if (hasPushPermission) {
             sendNotification(`⏸️ ${taskTitle} מושהית`, {
               body: `המשימה מושהית כבר ${pausedMinutes} דקות. להמשיך לעבוד?`,
@@ -415,8 +445,18 @@ export function useUnifiedNotifications() {
             });
           }
           
-          toast.error(`⏸️ "${taskTitle}" מושהית כבר ${pausedMinutes} דקות!`, {
-            duration: 8000
+          // ✅ פופאפ חוסם במקום toast
+          setProcrastinationPopup({
+            type: 'paused-too-long',
+            title: `⏸️ ${taskTitle} מושהית`,
+            message: `המשימה מושהית כבר ${pausedMinutes} דקות. להמשיך לעבוד?`,
+            taskId: pausedData.taskId,
+            taskTitle: taskTitle,
+            actions: [
+              { id: 'resume_task', label: '▶️ המשך עבודה', primary: true },
+              { id: 'switch_task', label: '🔄 עבור למשימה אחרת' },
+              { id: 'snooze_10', label: '⏱️ הזכר בעוד 10 דק׳' }
+            ]
           });
           
           markNotified('paused-timer', 'too-long');
@@ -471,7 +511,7 @@ export function useUnifiedNotifications() {
       checkTaskAlerts(task, currentMinutes, today, hasPushPermission);
     });
     
-  }, [tasks, permission, canNotify, markNotified, sendNotification, checkActiveTaskAlerts, checkTaskAlerts]);
+  }, [tasks, permission, canNotify, markNotified, sendNotification, playSound, checkActiveTaskAlerts, checkTaskAlerts]);
   
   // ✅ הפעלת בדיקה תקופתית
   useEffect(() => {
@@ -507,6 +547,50 @@ export function useUnifiedNotifications() {
       }
     }
   }, [alertQueue, showToastAlert]);
+  
+  // ✅ סגירת פופאפ דחיינות
+  const dismissProcrastinationPopup = useCallback(() => {
+    setProcrastinationPopup(null);
+  }, []);
+  
+  // ✅ טיפול בפעולה על פופאפ דחיינות
+  const handleProcrastinationAction = useCallback((actionId) => {
+    const popup = procrastinationPopup;
+    
+    switch (actionId) {
+      case 'start_task':
+      case 'resume_task':
+        // שמור את ה-taskId ב-localStorage לפתיחה ב-DailyView
+        if (popup?.taskId) {
+          localStorage.setItem('start_task_id', popup.taskId);
+        }
+        window.location.href = '/daily';
+        break;
+        
+      case 'switch_task':
+        window.location.href = '/daily';
+        break;
+        
+      case 'snooze_10':
+        toast('⏱️ נזכיר בעוד 10 דקות', { duration: 2000 });
+        // איפוס ה-canNotify כך שההתראה תופיע שוב בעוד 10 דקות
+        if (popup?.type === 'no-timer') {
+          lastNotifiedRef.current['work-hours-no-timer'] = Date.now() - (5 * 60 * 1000); // 5 דק' במקום 10
+        } else if (popup?.type === 'paused-too-long') {
+          lastNotifiedRef.current['paused-timer-too-long'] = Date.now() - (5 * 60 * 1000);
+        }
+        break;
+        
+      case 'dismiss':
+        // סתם סגירה
+        break;
+        
+      default:
+        break;
+    }
+    
+    dismissProcrastinationPopup();
+  }, [procrastinationPopup, dismissProcrastinationPopup]);
   
   // ✅ טיפול בפעולה על התראה
   const handleAlertAction = useCallback((actionId) => {
@@ -563,7 +647,11 @@ export function useUnifiedNotifications() {
     alertQueue,
     dismissAlert,
     handleAlertAction,
-    checkAndNotify
+    checkAndNotify,
+    // ✅ חדש: פופאפ דחיינות
+    procrastinationPopup,
+    dismissProcrastinationPopup,
+    handleProcrastinationAction
   };
 }
 
@@ -592,8 +680,16 @@ function getAlertIcon(type) {
  * יש להוסיף ל-App.jsx במקום NotificationChecker
  */
 export function UnifiedNotificationManager() {
-  const { activeAlert, isAlertVisible, handleAlertAction, dismissAlert } = useUnifiedNotifications();
-  const { sendNotification, permission } = useNotifications();
+  const { 
+    activeAlert, 
+    isAlertVisible, 
+    handleAlertAction, 
+    dismissAlert,
+    procrastinationPopup,
+    dismissProcrastinationPopup,
+    handleProcrastinationAction
+  } = useUnifiedNotifications();
+  const { sendNotification, permission, playSound, requestPermission } = useNotifications();
   
   // 🔧 שליחת push notification כשפופאפ קופץ
   useEffect(() => {
@@ -605,6 +701,53 @@ export function UnifiedNotificationManager() {
       });
     }
   }, [isAlertVisible, activeAlert, sendNotification, permission]);
+  
+  // ✅ פופאפ דחיינות (בשעות עבודה ללא טיימר / משימה מושהית)
+  if (procrastinationPopup) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 text-center animate-bounce-in relative border-4 border-orange-400">
+          
+          {/* אייקון */}
+          <div className="text-5xl mb-4 animate-pulse">
+            {procrastinationPopup.type === 'no-timer' ? '⏰' : '⏸️'}
+          </div>
+          
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-3">
+            {procrastinationPopup.title}
+          </h2>
+          
+          <p className="text-gray-600 dark:text-gray-300 mb-6 text-lg">
+            {procrastinationPopup.message}
+          </p>
+          
+          {/* כפתורי פעולה */}
+          <div className="flex flex-col gap-3">
+            {procrastinationPopup.actions?.map((action) => (
+              <button
+                key={action.id}
+                onClick={() => handleProcrastinationAction(action.id)}
+                className={`
+                  w-full py-3 px-4 rounded-xl font-medium transition-all text-lg
+                  ${action.primary 
+                    ? 'bg-orange-500 hover:bg-orange-600 text-white shadow-lg' 
+                    : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
+                  }
+                `}
+              >
+                {action.label}
+              </button>
+            ))}
+          </div>
+          
+          {/* הודעת עידוד */}
+          <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
+            💪 את יכולה לעשות את זה!
+          </p>
+        </div>
+      </div>
+    );
+  }
   
   // פופאפ חוסם להתראות קריטיות
   if (isAlertVisible && activeAlert?.blockingPopup) {
