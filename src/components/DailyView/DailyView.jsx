@@ -444,6 +444,65 @@ function DailyView() {
 
   const isViewingToday = getDateISO(selectedDate) === currentTime.dateISO;
   
+  // ✅ בדיקת בעיות בלוח הזמנים (חפיפות, חריגות)
+  const scheduleWarnings = useMemo(() => {
+    if (!tasks || tasks.length === 0) return { overlaps: [], overflows: [] };
+    
+    const dateISO = getDateISO(selectedDate);
+    const todayTasks = tasks.filter(t => 
+      t.due_date === dateISO && 
+      !t.is_completed && 
+      t.due_time
+    );
+    
+    if (todayTasks.length < 1) return { overlaps: [], overflows: [] };
+    
+    // בדיקת חפיפות
+    const overlaps = [];
+    for (let i = 0; i < todayTasks.length; i++) {
+      for (let j = i + 1; j < todayTasks.length; j++) {
+        const task1 = todayTasks[i];
+        const task2 = todayTasks[j];
+        
+        const [h1, m1] = task1.due_time.split(':').map(Number);
+        const [h2, m2] = task2.due_time.split(':').map(Number);
+        
+        const start1 = h1 * 60 + (m1 || 0);
+        const end1 = start1 + (task1.estimated_duration || 30);
+        const start2 = h2 * 60 + (m2 || 0);
+        const end2 = start2 + (task2.estimated_duration || 30);
+        
+        // בדיקת חפיפה
+        if (start1 < end2 && end1 > start2) {
+          overlaps.push({
+            task1: task1.title,
+            task2: task2.title,
+            time: task1.due_time === task2.due_time ? task1.due_time : `${task1.due_time}/${task2.due_time}`
+          });
+        }
+      }
+    }
+    
+    // בדיקת חריגה מסוף היום
+    const daySchedule = getDaySchedule(selectedDate, workDays, workHours);
+    const dayEndMinutes = daySchedule.hours.end * 60;
+    
+    const overflows = todayTasks.filter(task => {
+      const [h, m] = task.due_time.split(':').map(Number);
+      const endMinutes = h * 60 + (m || 0) + (task.estimated_duration || 30);
+      return endMinutes > dayEndMinutes;
+    }).map(task => ({
+      title: task.title,
+      overflowMinutes: (() => {
+        const [h, m] = task.due_time.split(':').map(Number);
+        const endMinutes = h * 60 + (m || 0) + (task.estimated_duration || 30);
+        return endMinutes - dayEndMinutes;
+      })()
+    }));
+    
+    return { overlaps, overflows };
+  }, [tasks, selectedDate, workDays, workHours]);
+  
   const timeStats = useMemo(() => {
     const blocks = selectedDayData.blocks || [];
     
@@ -586,9 +645,57 @@ function DailyView() {
     }
 
     try {
-      await editTask(draggedTaskData.id, {
+      // ✅ בדיקת חפיפות עם משימות אחרות
+      const draggedTaskId = draggedTaskData.id || draggedTaskData.taskId;
+      const draggedTask = tasks.find(t => t.id === draggedTaskId);
+      const duration = draggedTask?.estimated_duration || draggedTaskData.duration || 30;
+      
+      const [dropHour, dropMin] = dragOverTime.split(':').map(Number);
+      const dropStartMinutes = dropHour * 60 + dropMin;
+      const dropEndMinutes = dropStartMinutes + duration;
+      
+      // בדיקת חפיפה עם משימות אחרות באותו יום
+      const dateISO = getDateISO(selectedDate);
+      const otherTasksToday = tasks.filter(t => 
+        t.due_date === dateISO && 
+        t.id !== draggedTaskId && 
+        !t.is_completed &&
+        t.due_time
+      );
+      
+      const conflicts = [];
+      for (const task of otherTasksToday) {
+        const [h, m] = task.due_time.split(':').map(Number);
+        const taskStart = h * 60 + (m || 0);
+        const taskEnd = taskStart + (task.estimated_duration || 30);
+        
+        // בדיקת חפיפה
+        if (dropStartMinutes < taskEnd && dropEndMinutes > taskStart) {
+          conflicts.push(task.title);
+        }
+      }
+      
+      if (conflicts.length > 0) {
+        toast.error(`⚠️ חפיפה עם: ${conflicts.slice(0, 2).join(', ')}${conflicts.length > 2 ? '...' : ''}`, {
+          duration: 4000
+        });
+      }
+      
+      // בדיקה אם חורג מסוף היום
+      const daySchedule = getScheduleForDate(selectedDate);
+      const dayEndMinutes = daySchedule.hours.end * 60;
+      
+      if (dropEndMinutes > dayEndMinutes) {
+        const overflowMinutes = dropEndMinutes - dayEndMinutes;
+        toast.error(`⚠️ המשימה תסתיים ${overflowMinutes} דק' אחרי סוף היום!`, {
+          duration: 4000
+        });
+      }
+      
+      // ✅ עדכון רק due_time ו-due_date - לא משנים שום דבר אחר!
+      await editTask(draggedTaskId, {
         due_time: dragOverTime,
-        due_date: getDateISO(selectedDate)
+        due_date: dateISO
       });
       
       toast.success(`המשימה הועברה לשעה ${dragOverTime}`);
@@ -625,6 +732,7 @@ function DailyView() {
   };
 
   // ✅ תיקון: עדכון due_time בדאטאבייס אחרי שינוי סדר - כדי שההתראות יעבדו נכון!
+  // ⚠️ חשוב: מעדכנים רק את due_time, לא משנים estimated_duration או task_type!
   const handleReorderDrop = async (e, toIndex, blocksArray) => {
     e.preventDefault();
     e.stopPropagation();
@@ -681,25 +789,63 @@ function DailyView() {
       
       // חישוב זמנים חדשים
       const daySchedule = getScheduleForDate(selectedDate);
+      const dayEndMinutes = daySchedule.hours.end * 60;
       let nextStartMinutes = isViewingToday 
         ? currentTime.minutes 
         : daySchedule.hours.start * 60;
       
+      // ✅ חדש: בדיקת בעיות בלוח הזמנים
+      const scheduleProblems = [];
+      let totalScheduledMinutes = 0;
+      
       // עדכון כל משימה עם הזמן החדש שלה
       for (const block of regularBlocksInNewOrder) {
-        const duration = block.duration || block.estimated_duration || 30;
+        // ✅ תיקון: קבלת duration מהמשימה המקורית ב-DB
+        const taskId = block.taskId || block.id;
+        const originalTask = tasks.find(t => t.id === taskId);
+        const duration = originalTask?.estimated_duration || block.duration || block.estimated_duration || 30;
+        
         const startMinutes = findFreeSlot(nextStartMinutes, duration);
+        const endMinutes = startMinutes + duration;
         const hours = Math.floor(startMinutes / 60);
         const mins = startMinutes % 60;
         const newDueTime = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
         
-        const taskId = block.taskId || block.id;
+        // ✅ בדיקה אם המשימה חורגת מסוף היום
+        if (endMinutes > dayEndMinutes) {
+          const overflowMinutes = endMinutes - dayEndMinutes;
+          scheduleProblems.push({
+            taskId,
+            title: block.title,
+            type: 'overflow',
+            overflowMinutes,
+            suggestedTime: newDueTime
+          });
+        }
+        
+        // ✅ עדכון רק due_time - לא משנים שום דבר אחר!
         await editTask(taskId, { due_time: newDueTime });
         
-        nextStartMinutes = startMinutes + duration + 5; // 5 דקות הפסקה
+        totalScheduledMinutes += duration;
+        nextStartMinutes = endMinutes + 5; // 5 דקות הפסקה
       }
       
-      toast.success('🔄 הסדר והזמנים עודכנו');
+      // ✅ התראות על בעיות בלוח הזמנים
+      if (scheduleProblems.length > 0) {
+        const overflowTasks = scheduleProblems.filter(p => p.type === 'overflow');
+        if (overflowTasks.length === 1) {
+          toast.error(`⚠️ "${overflowTasks[0].title}" חורגת מסוף היום ב-${overflowTasks[0].overflowMinutes} דק'`, {
+            duration: 5000
+          });
+        } else if (overflowTasks.length > 1) {
+          toast.error(`⚠️ ${overflowTasks.length} משימות חורגות מסוף היום!`, {
+            duration: 5000
+          });
+        }
+      } else {
+        toast.success('🔄 הסדר והזמנים עודכנו');
+      }
+      
       await loadTasks(); // רענון הנתונים
     } catch (err) {
       console.error('שגיאה בעדכון זמנים:', err);
@@ -865,11 +1011,12 @@ function DailyView() {
   let nextStartMinutes = isViewingToday ? currentTime.minutes : currentDaySchedule.hours.start * 60;
   
   const rescheduledRegularBlocks = sortedRegularBlocks.map(block => {
-    const duration = block.duration || 30;
-    
-    // ✅ תיקון מלא: בדיקת due_time מכל המקורות האפשריים
+    // ✅ תיקון: קבלת duration מהמשימה המקורית ב-DB
     const taskId = block.taskId || block.task?.id || block.id;
     const originalTask = tasks.find(t => t.id === taskId);
+    const duration = originalTask?.estimated_duration || block.duration || 30;
+    
+    // ✅ תיקון מלא: בדיקת due_time מהמשימה המקורית
     const taskDueTime = originalTask?.due_time || block.task?.due_time;
     const hasFixedTime = taskDueTime && taskDueTime !== '';
     
@@ -976,25 +1123,36 @@ function DailyView() {
       )}
 
       <DailyTaskCard 
-        task={{
-          id: block.taskId || block.id,
-          title: block.title,
-          estimated_duration: block.duration,
-          time_spent: block.timeSpent || 0,
-          is_completed: block.isCompleted,
-          task_type: block.taskType,
-          due_time: block.task?.due_time || block.startTime, // 🔧 תיקון: due_time מקורי מה-DB
-          priority: block.priority || 'normal',
-          blockIndex: block.blockIndex,
-          totalBlocks: block.totalBlocks,
-          startTime: block.startTime,
-          endTime: block.endTime,
-          originalStartTime: block.originalStartTime,
-          originalEndTime: block.originalEndTime,
-          isPostponed: block.isPostponed,
-          isRescheduled: block.isRescheduled,
-          isRunning: block.isRunning
-        }} 
+        task={(() => {
+          // ✅ תיקון מלא: קבלת כל הנתונים מהמשימה המקורית ב-DB
+          const taskId = block.taskId || block.id;
+          const originalTask = tasks.find(t => t.id === taskId);
+          
+          return {
+            id: taskId,
+            title: originalTask?.title || block.title,
+            estimated_duration: originalTask?.estimated_duration || block.duration || block.estimated_duration,
+            time_spent: originalTask?.time_spent || block.timeSpent || 0,
+            is_completed: originalTask?.is_completed || block.isCompleted,
+            task_type: originalTask?.task_type || block.taskType || block.task?.task_type,
+            due_time: originalTask?.due_time || block.task?.due_time,
+            due_date: originalTask?.due_date || block.task?.due_date,
+            priority: originalTask?.priority || block.priority || 'normal',
+            quadrant: originalTask?.quadrant || block.quadrant,
+            description: originalTask?.description || block.description,
+            parent_task_id: originalTask?.parent_task_id || block.parentId,
+            // נתוני התצוגה (מחושבים)
+            blockIndex: block.blockIndex,
+            totalBlocks: block.totalBlocks,
+            startTime: block.startTime,
+            endTime: block.endTime,
+            originalStartTime: block.originalStartTime,
+            originalEndTime: block.originalEndTime,
+            isPostponed: block.isPostponed,
+            isRescheduled: block.isRescheduled,
+            isRunning: block.isRunning
+          };
+        })()} 
         onEdit={() => handleEditTask(block)}
         onUpdate={loadTasks}
         showTime={true}
@@ -1245,6 +1403,68 @@ function DailyView() {
           </div>
         )}
       </motion.div>
+
+      {/* ⚠️ התראות על בעיות בלוח הזמנים */}
+      {(scheduleWarnings.overlaps.length > 0 || scheduleWarnings.overflows.length > 0) && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="mb-4 space-y-2"
+        >
+          {/* התראה על חפיפות */}
+          {scheduleWarnings.overlaps.length > 0 && (
+            <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-700">
+              <div className="flex items-center gap-2 text-red-700 dark:text-red-400 font-medium text-sm mb-2">
+                <span>⚠️</span>
+                <span>
+                  {scheduleWarnings.overlaps.length === 1 
+                    ? 'נמצאה חפיפה בין משימות!' 
+                    : `נמצאו ${scheduleWarnings.overlaps.length} חפיפות בין משימות!`
+                  }
+                </span>
+              </div>
+              <div className="text-xs text-red-600 dark:text-red-300 space-y-1">
+                {scheduleWarnings.overlaps.slice(0, 3).map((overlap, i) => (
+                  <div key={i}>
+                    • "{overlap.task1}" ו-"{overlap.task2}" ({overlap.time})
+                  </div>
+                ))}
+                {scheduleWarnings.overlaps.length > 3 && (
+                  <div className="text-red-500">...ועוד {scheduleWarnings.overlaps.length - 3}</div>
+                )}
+              </div>
+              <p className="text-xs text-red-500 dark:text-red-400 mt-2">
+                💡 גררי משימות כדי לשנות את הסדר
+              </p>
+            </div>
+          )}
+          
+          {/* התראה על חריגות מסוף היום */}
+          {scheduleWarnings.overflows.length > 0 && (
+            <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-700">
+              <div className="flex items-center gap-2 text-orange-700 dark:text-orange-400 font-medium text-sm mb-2">
+                <span>⏰</span>
+                <span>
+                  {scheduleWarnings.overflows.length === 1 
+                    ? 'משימה אחת חורגת מסוף היום!' 
+                    : `${scheduleWarnings.overflows.length} משימות חורגות מסוף היום!`
+                  }
+                </span>
+              </div>
+              <div className="text-xs text-orange-600 dark:text-orange-300 space-y-1">
+                {scheduleWarnings.overflows.slice(0, 3).map((overflow, i) => (
+                  <div key={i}>
+                    • "{overflow.title}" (+{overflow.overflowMinutes} דק')
+                  </div>
+                ))}
+              </div>
+              <p className="text-xs text-orange-500 dark:text-orange-400 mt-2">
+                💡 העבירי משימות למחר או הארכי את יום העבודה
+              </p>
+            </div>
+          )}
+        </motion.div>
+      )}
 
       <motion.div
         initial={{ opacity: 0 }}

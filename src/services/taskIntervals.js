@@ -135,8 +135,10 @@ export async function createTaskWithIntervals(task) {
     // תאריך עתידי - מתחילים בתחילת הטווח
     currentTime = { hours: Math.floor(dayStartHour), minutes: (dayStartHour % 1) * 60 };
   } else if (task.due_time) {
-    // יש שעה מוגדרת
+    // ✅ תיקון: יש שעה מוגדרת - זו שעת ההתחלה של האינטרוול הראשון
+    // האינטרוולים הבאים יהיו ברצף אחריו
     currentTime = parseTime(task.due_time);
+    console.log('📅 שעת התחלה מוגדרת:', task.due_time, '- אינטרוולים יהיו ברצף מכאן');
   } else {
     // היום - מתחילים מהשעה הנוכחית + עיגול ל-5 דקות
     currentTime = { 
