@@ -17,9 +17,6 @@ import Input from '../UI/Input';
 import Button from '../UI/Button';
 import { getSuggestedEstimate } from '../../utils/taskLearning';
 
-// 🔍 DEBUG: גרסה - אם את רואה את זה בקונסול, הקובץ החדש נטען!
-console.log('📦 SimpleTaskForm.jsx גרסה DEBUG-V3 נטענה!');
-
 /**
  * ✅ תיקון: קבלת תאריך בפורמט ISO מקומי (לא UTC!)
  */
@@ -324,68 +321,45 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const dayOfWeek = now.getDay();
   
-  // 🔍 DEBUG
-  console.log('📅 calculateNewTaskDueTime נקראת:', {
-    tasksCount: tasks?.length || 0,
-    taskType,
-    dueDate,
-    estimatedDuration,
-    scheduleType,
-    todayISO
-  });
-  
-  // פונקציית עזר - המרת דקות לפורמט HH:MM
   const minutesToTime = (minutes) => {
     const h = Math.floor(minutes / 60);
     const m = minutes % 60;
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
   
-  // ✅ קביעת שעות לפי סוג הלוח זמנים
   const isHomeTask = scheduleType === 'home' || scheduleType === 'family';
   const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
   
-  // ✅ שעות התחלה לפי סוג
   let scheduleStart, scheduleEnd;
   if (isHomeTask) {
     if (isWeekend) {
-      scheduleStart = 8 * 60;   // 08:00 בסופ"ש
-      scheduleEnd = 22 * 60;    // 22:00
+      scheduleStart = 8 * 60;
+      scheduleEnd = 22 * 60;
     } else {
-      scheduleStart = 17 * 60;  // 17:00
-      scheduleEnd = 21 * 60;    // 21:00
+      scheduleStart = 17 * 60;
+      scheduleEnd = 21 * 60;
     }
   } else {
-    scheduleStart = 8.5 * 60;   // 08:30
-    scheduleEnd = 16.25 * 60;   // 16:15
+    scheduleStart = 8.5 * 60;
+    scheduleEnd = 16.25 * 60;
   }
   
-  // אם זו משימה בלת"מ - מתחילה עכשיו
   if (taskType === 'unexpected') {
-    // עיגול ל-5 דקות הקרובות
     const roundedMinutes = Math.ceil(currentMinutes / 5) * 5;
     return minutesToTime(roundedMinutes);
   }
   
-  // ✅ תיקון: קובעים את התאריך לבדיקה
   const targetDate = dueDate || todayISO;
   const isTargetToday = targetDate === todayISO;
   
-  // ✅ מציאת כל המשימות ביום היעד (לא רק היום)
+  // סינון משימות - לא כולל משימות הוריות (is_project)
   const targetDayTasks = (tasks || []).filter(t => 
     t.due_date === targetDate && 
     !t.is_completed && 
-    t.due_time
+    t.due_time &&
+    !t.is_project
   );
   
-  // 🔍 DEBUG
-  console.log('📋 משימות ביום היעד:', targetDayTasks.map(t => ({
-    title: t.title,
-    due_time: t.due_time,
-    estimated_duration: t.estimated_duration
-  })));
-  
-  // ✅ יצירת רשימת זמנים תפוסים (מיון לפי שעת התחלה)
   const occupiedSlots = targetDayTasks.map(t => {
     const [h, m] = t.due_time.split(':').map(Number);
     const start = h * 60 + (m || 0);
@@ -393,65 +367,38 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     return { start, end, title: t.title };
   }).sort((a, b) => a.start - b.start);
   
-  // 🔍 DEBUG
-  console.log('🕐 סלוטים תפוסים:', occupiedSlots);
-  
-  // ✅ מציאת סלוט פנוי (שלא חופף למשימות קיימות)
   const findFreeSlot = (startFrom, duration) => {
-    let proposedStart = Math.ceil(startFrom / 5) * 5; // עיגול ל-5 דקות
+    let proposedStart = Math.ceil(startFrom / 5) * 5;
     
-    // בדיקת חפיפות עם כל המשימות הקיימות
-    for (let attempt = 0; attempt < 50; attempt++) { // מקסימום 50 ניסיונות
+    for (let attempt = 0; attempt < 50; attempt++) {
       const proposedEnd = proposedStart + duration;
       let hasConflict = false;
       
       for (const slot of occupiedSlots) {
-        // בדיקה אם יש חפיפה
         if (proposedStart < slot.end && proposedEnd > slot.start) {
-          // יש חפיפה - נתחיל אחרי המשימה הזו
-          console.log(`⚠️ חפיפה עם "${slot.title}" (${minutesToTime(slot.start)}-${minutesToTime(slot.end)})`);
-          proposedStart = slot.end + 5; // 5 דקות הפסקה
-          proposedStart = Math.ceil(proposedStart / 5) * 5; // עיגול
+          proposedStart = slot.end + 5;
+          proposedStart = Math.ceil(proposedStart / 5) * 5;
           hasConflict = true;
           break;
         }
       }
       
-      if (!hasConflict) {
-        // מצאנו סלוט פנוי!
-        console.log(`✅ סלוט פנוי נמצא: ${minutesToTime(proposedStart)}`);
-        return proposedStart;
-      }
+      if (!hasConflict) return proposedStart;
     }
     
-    // לא מצאנו - מחזירים את הנקודה האחרונה
     return proposedStart;
   };
   
-  // ✅ נקודת התחלה לחיפוש
   let searchStart;
   if (isTargetToday) {
-    // היום - מתחילים מעכשיו או מתחילת השעות
     searchStart = Math.max(currentMinutes, scheduleStart);
   } else {
-    // יום אחר - מתחילים מתחילת השעות
     searchStart = scheduleStart;
   }
   
-  console.log(`🔍 מתחיל חיפוש מ: ${minutesToTime(searchStart)}`);
-  
-  // ✅ מציאת סלוט פנוי
   const freeSlot = findFreeSlot(searchStart, estimatedDuration || 30);
   
-  // בדיקה שלא חרגנו מסוף היום
-  if (freeSlot + (estimatedDuration || 30) > scheduleEnd) {
-    console.log('⚠️ אין מספיק זמן ביום - המשימה תשובץ בסוף');
-  }
-  
-  const result = minutesToTime(freeSlot);
-  console.log(`📍 תוצאה סופית: ${result}`);
-  
-  return result;
+  return minutesToTime(freeSlot);
 }
 
 /**

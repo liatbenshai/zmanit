@@ -449,13 +449,15 @@ function DailyView() {
     if (!tasks || tasks.length === 0) return { overlaps: [], overflows: [] };
     
     const dateISO = getDateISO(selectedDate);
+    // ✅ תיקון: מסננים משימות הוריות (is_project=true) כי הן רק "מטריה" לאינטרוולים
     const todayTasks = tasks.filter(t => 
       t.due_date === dateISO && 
       !t.is_completed && 
-      t.due_time
+      t.due_time &&
+      !t.is_project  // ✅ לא כוללים משימות הוריות
     );
     
-    if (todayTasks.length < 1) return { overlaps: [], overflows: [] };
+    if (todayTasks.length < 2) return { overlaps: [], overflows: [] };
     
     // בדיקת חפיפות
     const overlaps = [];
@@ -483,7 +485,7 @@ function DailyView() {
       }
     }
     
-    // בדיקת חריגה מסוף היום
+    // בדיקת חריגה מסוף היום (גם כאן מסננים משימות הוריות)
     const daySchedule = getDaySchedule(selectedDate, workDays, workHours);
     const dayEndMinutes = daySchedule.hours.end * 60;
     

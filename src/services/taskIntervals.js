@@ -9,10 +9,8 @@
  * כשכל האינטרוולים הושלמו - המשימה ההורית מסומנת אוטומטית.
  * 
  * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
+ * ✅ תיקון: בדיקת חפיפות עם משימות קיימות
  */
-
-// 🔍 DEBUG: גרסה - אם את רואה את זה בקונסול, הקובץ החדש נטען!
-console.log('📦 taskIntervals.js גרסה DEBUG-V3 נטענה!');
 
 import { supabase } from './supabase';
 
@@ -46,52 +44,26 @@ function toLocalISODate(date) {
  */
 export async function createTaskWithIntervals(task) {
   const duration = task.estimated_duration || 0;
-  const blocksForToday = task.blocksForToday; // ✅ כמה בלוקים להיום (מהדיאלוג)
+  const blocksForToday = task.blocksForToday;
   
-  console.log('🔧 createTaskWithIntervals נקראת:', {
-    title: task.title,
-    due_time: task.due_time,
-    due_date: task.due_date,
-    duration
-  });
-  
-  // ✅ חדש: טעינת משימות קיימות לבדיקת חפיפות
-  const { data: existingTasks, error: fetchError } = await supabase
+  // טעינת משימות קיימות לבדיקת חפיפות
+  const { data: existingTasks } = await supabase
     .from('tasks')
     .select('id, title, due_date, due_time, estimated_duration, is_completed')
     .eq('user_id', task.user_id)
     .eq('is_completed', false)
     .not('due_time', 'is', null);
   
-  // 🔍 DEBUG: הודעה בולטת
-  const existingCount = existingTasks?.length || 0;
-  const existingForDate = existingTasks?.filter(t => t.due_date === task.due_date) || [];
-  console.log(`🚨 DEBUG: נמצאו ${existingCount} משימות קיימות, ${existingForDate.length} ביום הנבחר`);
-  if (existingForDate.length > 0) {
-    console.log('📋 משימות ביום:', existingForDate.map(t => `${t.title} @ ${t.due_time}`));
-  }
-  
-  if (fetchError) {
-    console.error('❌ שגיאה בטעינת משימות:', fetchError);
-  }
-  
-  // ✅ פונקציה למציאת סלוט פנוי
+  // פונקציה למציאת סלוט פנוי
   const findFreeSlot = (targetDate, startFrom, neededDuration) => {
-    // מציאת משימות ביום הזה
     const dayTasks = (existingTasks || []).filter(t => t.due_date === targetDate);
     
-    console.log(`🔍 findFreeSlot: תאריך=${targetDate}, התחלה=${startFrom}, משך=${neededDuration}`);
-    console.log(`📋 משימות ביום הזה:`, dayTasks.map(t => `${t.title} (${t.due_time})`));
-    
-    // יצירת רשימת זמנים תפוסים
     const occupiedSlots = dayTasks.map(t => {
       const [h, m] = t.due_time.split(':').map(Number);
       const start = h * 60 + (m || 0);
       const end = start + (t.estimated_duration || 30);
       return { start, end, title: t.title };
     }).sort((a, b) => a.start - b.start);
-    
-    console.log('🕐 סלוטים תפוסים:', occupiedSlots);
     
     let proposedStart = Math.ceil(startFrom / 5) * 5;
     
@@ -101,7 +73,6 @@ export async function createTaskWithIntervals(task) {
       
       for (const slot of occupiedSlots) {
         if (proposedStart < slot.end && proposedEnd > slot.start) {
-          console.log(`⚠️ חפיפה עם "${slot.title}" - עובר ל-${slot.end + 5}`);
           proposedStart = slot.end + 5;
           proposedStart = Math.ceil(proposedStart / 5) * 5;
           hasConflict = true;
@@ -109,10 +80,7 @@ export async function createTaskWithIntervals(task) {
         }
       }
       
-      if (!hasConflict) {
-        console.log(`✅ סלוט פנוי: ${proposedStart} דקות`);
-        return proposedStart;
-      }
+      if (!hasConflict) return proposedStart;
     }
     
     return proposedStart;
@@ -227,22 +195,11 @@ export async function createTaskWithIntervals(task) {
     // תאריך עתידי - מתחילים בתחילת הטווח
     currentTime = { hours: Math.floor(dayStartHour), minutes: (dayStartHour % 1) * 60 };
   } else if (task.due_time) {
-    // ✅ תיקון: יש שעה מוגדרת - בודקים חפיפות ומוצאים סלוט פנוי
+    // יש שעה מוגדרת - בודקים חפיפות ומוצאים סלוט פנוי
     const [h, m] = task.due_time.split(':').map(Number);
     const requestedStart = h * 60 + (m || 0);
-    
-    // 🔍 DEBUG: הודעה בולטת
-    const existingForDate = existingTasks?.filter(t => t.due_date === currentDate) || [];
-    console.log(`🚨 יש due_time=${task.due_time}, מחפש סלוט פנוי. משימות קיימות ביום: ${existingForDate.length}`);
-    
     const freeSlot = findFreeSlot(currentDate, requestedStart, baseIntervalDuration);
     currentTime = { hours: Math.floor(freeSlot / 60), minutes: freeSlot % 60 };
-    
-    // 🔍 DEBUG: הודעה על התוצאה
-    if (freeSlot !== requestedStart) {
-      console.log(`⚠️ שונה מ-${task.due_time} ל-${minutesToTime(freeSlot)} בגלל חפיפה!`);
-    }
-    console.log('📅 שעת התחלה מבוקשת:', task.due_time, '- סלוט פנוי:', minutesToTime(freeSlot));
   } else {
     // היום - מתחילים מהשעה הנוכחית + עיגול ל-5 דקות
     currentTime = { 
