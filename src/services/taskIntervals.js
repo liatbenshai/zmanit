@@ -45,8 +45,96 @@ export async function createTaskWithIntervals(task) {
   const duration = task.estimated_duration || 0;
   const blocksForToday = task.blocksForToday; // ✅ כמה בלוקים להיום (מהדיאלוג)
   
+  console.log('🔧 createTaskWithIntervals נקראת:', {
+    title: task.title,
+    due_time: task.due_time,
+    due_date: task.due_date,
+    duration
+  });
+  
+  // ✅ חדש: טעינת משימות קיימות לבדיקת חפיפות
+  const { data: existingTasks, error: fetchError } = await supabase
+    .from('tasks')
+    .select('id, title, due_date, due_time, estimated_duration, is_completed')
+    .eq('user_id', task.user_id)
+    .eq('is_completed', false)
+    .not('due_time', 'is', null);
+  
+  console.log('📋 משימות קיימות מ-DB:', existingTasks?.map(t => ({
+    title: t.title,
+    due_date: t.due_date,
+    due_time: t.due_time,
+    duration: t.estimated_duration
+  })));
+  
+  if (fetchError) {
+    console.error('❌ שגיאה בטעינת משימות:', fetchError);
+  }
+  
+  // ✅ פונקציה למציאת סלוט פנוי
+  const findFreeSlot = (targetDate, startFrom, neededDuration) => {
+    // מציאת משימות ביום הזה
+    const dayTasks = (existingTasks || []).filter(t => t.due_date === targetDate);
+    
+    console.log(`🔍 findFreeSlot: תאריך=${targetDate}, התחלה=${startFrom}, משך=${neededDuration}`);
+    console.log(`📋 משימות ביום הזה:`, dayTasks.map(t => `${t.title} (${t.due_time})`));
+    
+    // יצירת רשימת זמנים תפוסים
+    const occupiedSlots = dayTasks.map(t => {
+      const [h, m] = t.due_time.split(':').map(Number);
+      const start = h * 60 + (m || 0);
+      const end = start + (t.estimated_duration || 30);
+      return { start, end, title: t.title };
+    }).sort((a, b) => a.start - b.start);
+    
+    console.log('🕐 סלוטים תפוסים:', occupiedSlots);
+    
+    let proposedStart = Math.ceil(startFrom / 5) * 5;
+    
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const proposedEnd = proposedStart + neededDuration;
+      let hasConflict = false;
+      
+      for (const slot of occupiedSlots) {
+        if (proposedStart < slot.end && proposedEnd > slot.start) {
+          console.log(`⚠️ חפיפה עם "${slot.title}" - עובר ל-${slot.end + 5}`);
+          proposedStart = slot.end + 5;
+          proposedStart = Math.ceil(proposedStart / 5) * 5;
+          hasConflict = true;
+          break;
+        }
+      }
+      
+      if (!hasConflict) {
+        console.log(`✅ סלוט פנוי: ${proposedStart} דקות`);
+        return proposedStart;
+      }
+    }
+    
+    return proposedStart;
+  };
+  
+  // פונקציית עזר - המרת דקות לזמן
+  const minutesToTime = (minutes) => {
+    const h = Math.floor(minutes / 60);
+    const m = minutes % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  };
+  
   // אם המשימה קצרה - יוצרים רגיל בלי פיצול
   if (duration < CONFIG.MIN_DURATION_TO_SPLIT) {
+    // ✅ חדש: בדיקה ותיקון due_time אם יש חפיפה
+    let finalDueTime = task.due_time;
+    if (task.due_time && task.due_date) {
+      const [h, m] = task.due_time.split(':').map(Number);
+      const requestedStart = h * 60 + (m || 0);
+      const freeSlot = findFreeSlot(task.due_date, requestedStart, duration || 30);
+      if (freeSlot !== requestedStart) {
+        finalDueTime = minutesToTime(freeSlot);
+        console.log(`⚠️ חפיפה זוהתה! שונה מ-${task.due_time} ל-${finalDueTime}`);
+      }
+    }
+    
     const { data, error } = await supabase
       .from('tasks')
       .insert([{
@@ -56,7 +144,7 @@ export async function createTaskWithIntervals(task) {
         quadrant: task.quadrant || 1,
         start_date: task.start_date || null,
         due_date: task.due_date || null,
-        due_time: task.due_time || null,
+        due_time: finalDueTime || null,
         reminder_minutes: task.reminder_minutes || null,
         estimated_duration: duration || null,
         task_type: task.task_type || 'other',
@@ -135,10 +223,12 @@ export async function createTaskWithIntervals(task) {
     // תאריך עתידי - מתחילים בתחילת הטווח
     currentTime = { hours: Math.floor(dayStartHour), minutes: (dayStartHour % 1) * 60 };
   } else if (task.due_time) {
-    // ✅ תיקון: יש שעה מוגדרת - זו שעת ההתחלה של האינטרוול הראשון
-    // האינטרוולים הבאים יהיו ברצף אחריו
-    currentTime = parseTime(task.due_time);
-    console.log('📅 שעת התחלה מוגדרת:', task.due_time, '- אינטרוולים יהיו ברצף מכאן');
+    // ✅ תיקון: יש שעה מוגדרת - בודקים חפיפות ומוצאים סלוט פנוי
+    const [h, m] = task.due_time.split(':').map(Number);
+    const requestedStart = h * 60 + (m || 0);
+    const freeSlot = findFreeSlot(currentDate, requestedStart, baseIntervalDuration);
+    currentTime = { hours: Math.floor(freeSlot / 60), minutes: freeSlot % 60 };
+    console.log('📅 שעת התחלה מבוקשת:', task.due_time, '- סלוט פנוי:', minutesToTime(freeSlot));
   } else {
     // היום - מתחילים מהשעה הנוכחית + עיגול ל-5 דקות
     currentTime = { 
@@ -169,12 +259,51 @@ export async function createTaskWithIntervals(task) {
         currentTime = { hours: 9, minutes: 0 };
       }
     }
+    
+    // ✅ חדש: מציאת סלוט פנוי גם כשאין due_time
+    const currentMinutes = currentTime.hours * 60 + currentTime.minutes;
+    const freeSlot = findFreeSlot(currentDate, currentMinutes, baseIntervalDuration);
+    currentTime = { hours: Math.floor(freeSlot / 60), minutes: freeSlot % 60 };
   }
   
+  // ✅ חדש: רשימה דינמית של זמנים תפוסים (כולל אינטרוולים שאנחנו יוצרים)
+  const localOccupiedSlots = [];
   
   for (let i = 0; i < numIntervals; i++) {
     // אורך האינטרוול הנוכחי
     const intervalDuration = baseIntervalDuration + (i < remainder ? 1 : 0);
+    
+    // ✅ חדש: מציאת סלוט פנוי שלא חופף למשימות קיימות או לאינטרוולים שכבר נוצרו
+    const currentMinutes = currentTime.hours * 60 + currentTime.minutes;
+    
+    // בדיקת חפיפות עם משימות קיימות
+    const dayTasks = (existingTasks || []).filter(t => t.due_date === currentDate);
+    const allOccupied = [
+      ...dayTasks.map(t => {
+        const [h, m] = t.due_time.split(':').map(Number);
+        return { start: h * 60 + (m || 0), end: h * 60 + (m || 0) + (t.estimated_duration || 30) };
+      }),
+      ...localOccupiedSlots.filter(s => s.date === currentDate)
+    ].sort((a, b) => a.start - b.start);
+    
+    let proposedStart = currentMinutes;
+    for (let attempt = 0; attempt < 50; attempt++) {
+      const proposedEnd = proposedStart + intervalDuration;
+      let hasConflict = false;
+      
+      for (const slot of allOccupied) {
+        if (proposedStart < slot.end && proposedEnd > slot.start) {
+          proposedStart = slot.end + 5;
+          proposedStart = Math.ceil(proposedStart / 5) * 5;
+          hasConflict = true;
+          break;
+        }
+      }
+      
+      if (!hasConflict) break;
+    }
+    
+    currentTime = { hours: Math.floor(proposedStart / 60), minutes: proposedStart % 60 };
     
     // חישוב זמן סיום
     const endTime = addMinutes(currentTime, intervalDuration);
@@ -203,6 +332,14 @@ export async function createTaskWithIntervals(task) {
         currentTime = { hours: 9, minutes: 0 };
       }
     }
+    
+    // ✅ שמירת הסלוט התפוס ברשימה המקומית
+    const intervalStart = currentTime.hours * 60 + currentTime.minutes;
+    localOccupiedSlots.push({
+      date: currentDate,
+      start: intervalStart,
+      end: intervalStart + intervalDuration
+    });
     
     const intervalData = {
       user_id: task.user_id,
