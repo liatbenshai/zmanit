@@ -321,6 +321,16 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const dayOfWeek = now.getDay();
   
+  // 🔍 DEBUG
+  console.log('📅 calculateNewTaskDueTime נקראת:', {
+    tasksCount: tasks?.length || 0,
+    taskType,
+    dueDate,
+    estimatedDuration,
+    scheduleType,
+    todayISO
+  });
+  
   // פונקציית עזר - המרת דקות לפורמט HH:MM
   const minutesToTime = (minutes) => {
     const h = Math.floor(minutes / 60);
@@ -365,6 +375,13 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     t.due_time
   );
   
+  // 🔍 DEBUG
+  console.log('📋 משימות ביום היעד:', targetDayTasks.map(t => ({
+    title: t.title,
+    due_time: t.due_time,
+    estimated_duration: t.estimated_duration
+  })));
+  
   // ✅ יצירת רשימת זמנים תפוסים (מיון לפי שעת התחלה)
   const occupiedSlots = targetDayTasks.map(t => {
     const [h, m] = t.due_time.split(':').map(Number);
@@ -372,6 +389,9 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     const end = start + (t.estimated_duration || 30);
     return { start, end, title: t.title };
   }).sort((a, b) => a.start - b.start);
+  
+  // 🔍 DEBUG
+  console.log('🕐 סלוטים תפוסים:', occupiedSlots);
   
   // ✅ מציאת סלוט פנוי (שלא חופף למשימות קיימות)
   const findFreeSlot = (startFrom, duration) => {
@@ -386,6 +406,7 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
         // בדיקה אם יש חפיפה
         if (proposedStart < slot.end && proposedEnd > slot.start) {
           // יש חפיפה - נתחיל אחרי המשימה הזו
+          console.log(`⚠️ חפיפה עם "${slot.title}" (${minutesToTime(slot.start)}-${minutesToTime(slot.end)})`);
           proposedStart = slot.end + 5; // 5 דקות הפסקה
           proposedStart = Math.ceil(proposedStart / 5) * 5; // עיגול
           hasConflict = true;
@@ -395,6 +416,7 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
       
       if (!hasConflict) {
         // מצאנו סלוט פנוי!
+        console.log(`✅ סלוט פנוי נמצא: ${minutesToTime(proposedStart)}`);
         return proposedStart;
       }
     }
@@ -413,6 +435,8 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     searchStart = scheduleStart;
   }
   
+  console.log(`🔍 מתחיל חיפוש מ: ${minutesToTime(searchStart)}`);
+  
   // ✅ מציאת סלוט פנוי
   const freeSlot = findFreeSlot(searchStart, estimatedDuration || 30);
   
@@ -421,7 +445,10 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     console.log('⚠️ אין מספיק זמן ביום - המשימה תשובץ בסוף');
   }
   
-  return minutesToTime(freeSlot);
+  const result = minutesToTime(freeSlot);
+  console.log(`📍 תוצאה סופית: ${result}`);
+  
+  return result;
 }
 
 /**
