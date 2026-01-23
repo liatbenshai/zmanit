@@ -354,45 +354,74 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     return minutesToTime(roundedMinutes);
   }
   
-  // אם התאריך הוא לא היום - לא צריך due_time אוטומטי
-  if (dueDate && dueDate !== todayISO) {
-    return null;
-  }
+  // ✅ תיקון: קובעים את התאריך לבדיקה
+  const targetDate = dueDate || todayISO;
+  const isTargetToday = targetDate === todayISO;
   
-  // מציאת המשימה האחרונה להיום
-  // ✅ תיקון: כוללים גם משימות בלי due_date (נחשבות להיום)
-  const todayTasks = (tasks || []).filter(t => 
-    (t.due_date === todayISO || !t.due_date) && 
+  // ✅ מציאת כל המשימות ביום היעד (לא רק היום)
+  const targetDayTasks = (tasks || []).filter(t => 
+    t.due_date === targetDate && 
     !t.is_completed && 
     t.due_time
   );
   
-  if (todayTasks.length === 0) {
-    // אין משימות להיום - מתחילים עכשיו (או מתחילת השעות אם עוד מוקדם)
-    const startMinutes = Math.max(currentMinutes, scheduleStart);
-    const roundedMinutes = Math.ceil(startMinutes / 5) * 5;
-    return minutesToTime(roundedMinutes);
-  }
-  
-  // מציאת זמן הסיום של המשימה האחרונה
-  let latestEndMinutes = currentMinutes;
-  
-  for (const t of todayTasks) {
+  // ✅ יצירת רשימת זמנים תפוסים (מיון לפי שעת התחלה)
+  const occupiedSlots = targetDayTasks.map(t => {
     const [h, m] = t.due_time.split(':').map(Number);
-    const taskStart = h * 60 + (m || 0);
-    const taskEnd = taskStart + (t.estimated_duration || 30);
-    if (taskEnd > latestEndMinutes) {
-      latestEndMinutes = taskEnd;
+    const start = h * 60 + (m || 0);
+    const end = start + (t.estimated_duration || 30);
+    return { start, end, title: t.title };
+  }).sort((a, b) => a.start - b.start);
+  
+  // ✅ מציאת סלוט פנוי (שלא חופף למשימות קיימות)
+  const findFreeSlot = (startFrom, duration) => {
+    let proposedStart = Math.ceil(startFrom / 5) * 5; // עיגול ל-5 דקות
+    
+    // בדיקת חפיפות עם כל המשימות הקיימות
+    for (let attempt = 0; attempt < 50; attempt++) { // מקסימום 50 ניסיונות
+      const proposedEnd = proposedStart + duration;
+      let hasConflict = false;
+      
+      for (const slot of occupiedSlots) {
+        // בדיקה אם יש חפיפה
+        if (proposedStart < slot.end && proposedEnd > slot.start) {
+          // יש חפיפה - נתחיל אחרי המשימה הזו
+          proposedStart = slot.end + 5; // 5 דקות הפסקה
+          proposedStart = Math.ceil(proposedStart / 5) * 5; // עיגול
+          hasConflict = true;
+          break;
+        }
+      }
+      
+      if (!hasConflict) {
+        // מצאנו סלוט פנוי!
+        return proposedStart;
+      }
     }
+    
+    // לא מצאנו - מחזירים את הנקודה האחרונה
+    return proposedStart;
+  };
+  
+  // ✅ נקודת התחלה לחיפוש
+  let searchStart;
+  if (isTargetToday) {
+    // היום - מתחילים מעכשיו או מתחילת השעות
+    searchStart = Math.max(currentMinutes, scheduleStart);
+  } else {
+    // יום אחר - מתחילים מתחילת השעות
+    searchStart = scheduleStart;
   }
   
-  // הוספת 5 דקות הפסקה
-  const newStartMinutes = latestEndMinutes + 5;
+  // ✅ מציאת סלוט פנוי
+  const freeSlot = findFreeSlot(searchStart, estimatedDuration || 30);
   
-  // עיגול ל-5 דקות
-  const roundedMinutes = Math.ceil(newStartMinutes / 5) * 5;
+  // בדיקה שלא חרגנו מסוף היום
+  if (freeSlot + (estimatedDuration || 30) > scheduleEnd) {
+    console.log('⚠️ אין מספיק זמן ביום - המשימה תשובץ בסוף');
+  }
   
-  return minutesToTime(roundedMinutes);
+  return minutesToTime(freeSlot);
 }
 
 /**
@@ -732,6 +761,8 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     // ✅ תיקון: חישוב due_time אוטומטי למשימה חדשה
     // אם המשתמשת לא הזינה שעה ספציפית - נחשב אוטומטית
     let autoDueTime = formData.dueTime || null;
+    let hasConflict = false;
+    
     if (!isEditing && !formData.dueTime) {
       autoDueTime = calculateNewTaskDueTime(
         tasks, 
@@ -740,6 +771,39 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         calculatedDuration,
         selectedCategory  // ✅ העברת סוג הלוח זמנים
       );
+    } else if (!isEditing && formData.dueTime) {
+      // ✅ חדש: בדיקת חפיפות גם כשהמשתמשת מזינה שעה ידנית
+      const targetDate = formData.dueDate || defaultDate || getLocalDateISO(new Date());
+      const [inputHour, inputMin] = formData.dueTime.split(':').map(Number);
+      const inputStart = inputHour * 60 + (inputMin || 0);
+      const inputEnd = inputStart + calculatedDuration;
+      
+      const conflicts = (tasks || []).filter(t => {
+        if (t.due_date !== targetDate || t.is_completed || !t.due_time) return false;
+        const [h, m] = t.due_time.split(':').map(Number);
+        const taskStart = h * 60 + (m || 0);
+        const taskEnd = taskStart + (t.estimated_duration || 30);
+        // בדיקת חפיפה
+        return inputStart < taskEnd && inputEnd > taskStart;
+      });
+      
+      if (conflicts.length > 0) {
+        hasConflict = true;
+        const conflictNames = conflicts.slice(0, 2).map(t => `"${t.title}"`).join(', ');
+        toast.error(`⚠️ שעה זו חופפת ל: ${conflictNames}`, { duration: 5000 });
+        
+        // הצעת זמן פנוי
+        const suggestedTime = calculateNewTaskDueTime(
+          tasks, 
+          formData.taskType, 
+          targetDate,
+          calculatedDuration,
+          selectedCategory
+        );
+        if (suggestedTime) {
+          toast(`💡 הזמן הפנוי הבא: ${suggestedTime}`, { duration: 5000, icon: '📅' });
+        }
+      }
     }
 
     const taskData = {
