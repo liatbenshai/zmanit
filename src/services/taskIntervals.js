@@ -11,6 +11,9 @@
  * ✅ תיקון: שימוש ב-toLocalISODate לתאריכים מקומיים
  */
 
+// 🔍 DEBUG: גרסה - אם את רואה את זה בקונסול, הקובץ החדש נטען!
+console.log('📦 taskIntervals.js גרסה DEBUG-V3 נטענה!');
+
 import { supabase } from './supabase';
 
 // קונפיגורציה
@@ -60,12 +63,13 @@ export async function createTaskWithIntervals(task) {
     .eq('is_completed', false)
     .not('due_time', 'is', null);
   
-  console.log('📋 משימות קיימות מ-DB:', existingTasks?.map(t => ({
-    title: t.title,
-    due_date: t.due_date,
-    due_time: t.due_time,
-    duration: t.estimated_duration
-  })));
+  // 🔍 DEBUG: הודעה בולטת
+  const existingCount = existingTasks?.length || 0;
+  const existingForDate = existingTasks?.filter(t => t.due_date === task.due_date) || [];
+  console.log(`🚨 DEBUG: נמצאו ${existingCount} משימות קיימות, ${existingForDate.length} ביום הנבחר`);
+  if (existingForDate.length > 0) {
+    console.log('📋 משימות ביום:', existingForDate.map(t => `${t.title} @ ${t.due_time}`));
+  }
   
   if (fetchError) {
     console.error('❌ שגיאה בטעינת משימות:', fetchError);
@@ -226,8 +230,18 @@ export async function createTaskWithIntervals(task) {
     // ✅ תיקון: יש שעה מוגדרת - בודקים חפיפות ומוצאים סלוט פנוי
     const [h, m] = task.due_time.split(':').map(Number);
     const requestedStart = h * 60 + (m || 0);
+    
+    // 🔍 DEBUG: הודעה בולטת
+    const existingForDate = existingTasks?.filter(t => t.due_date === currentDate) || [];
+    console.log(`🚨 יש due_time=${task.due_time}, מחפש סלוט פנוי. משימות קיימות ביום: ${existingForDate.length}`);
+    
     const freeSlot = findFreeSlot(currentDate, requestedStart, baseIntervalDuration);
     currentTime = { hours: Math.floor(freeSlot / 60), minutes: freeSlot % 60 };
+    
+    // 🔍 DEBUG: הודעה על התוצאה
+    if (freeSlot !== requestedStart) {
+      console.log(`⚠️ שונה מ-${task.due_time} ל-${minutesToTime(freeSlot)} בגלל חפיפה!`);
+    }
     console.log('📅 שעת התחלה מבוקשת:', task.due_time, '- סלוט פנוי:', minutesToTime(freeSlot));
   } else {
     // היום - מתחילים מהשעה הנוכחית + עיגול ל-5 דקות

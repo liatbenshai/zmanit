@@ -17,6 +17,9 @@ import Input from '../UI/Input';
 import Button from '../UI/Button';
 import { getSuggestedEstimate } from '../../utils/taskLearning';
 
+// 🔍 DEBUG: גרסה - אם את רואה את זה בקונסול, הקובץ החדש נטען!
+console.log('📦 SimpleTaskForm.jsx גרסה DEBUG-V3 נטענה!');
+
 /**
  * ✅ תיקון: קבלת תאריך בפורמט ISO מקומי (לא UTC!)
  */
