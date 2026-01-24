@@ -416,6 +416,160 @@ function DailyView() {
     setSelectedDate(new Date());
   };
 
+  // ✅ חדש: כללי שיבוץ חכמים
+  const SMART_SCHEDULING_RULES = {
+    morningTasks: ['transcription'],
+    afternoonTasks: ['proofreading', 'translation', 'admin', 'email'],
+    workHours: {
+      start: 8.5 * 60,      // 08:30 בדקות
+      morningEnd: 14 * 60,  // 14:00
+      end: 16.25 * 60       // 16:15
+    },
+    bufferPercentage: 0.20  // 20% רזרבה לבלת"מים
+  };
+
+  // ✅ חדש: state לסידור מחדש
+  const [isRescheduling, setIsRescheduling] = useState(false);
+
+  // ✅ חדש: פונקציה לסידור מחדש של משימות לפי הכללים
+  const handleSmartReschedule = async () => {
+    const dateISO = getDateISO(selectedDate);
+    
+    // סינון משימות היום שלא הושלמו
+    const todayTasks = tasks.filter(t => 
+      t.due_date === dateISO && 
+      !t.is_completed && 
+      t.due_time &&
+      !t.is_project
+    );
+    
+    if (todayTasks.length === 0) {
+      toast('אין משימות לסדר מחדש', { icon: '📋' });
+      return;
+    }
+    
+    // חלוקה לפי סוג משימה
+    const morningTasks = todayTasks.filter(t => 
+      SMART_SCHEDULING_RULES.morningTasks.includes(t.task_type)
+    );
+    const afternoonTasks = todayTasks.filter(t => 
+      SMART_SCHEDULING_RULES.afternoonTasks.includes(t.task_type)
+    );
+    const otherTasks = todayTasks.filter(t => 
+      !SMART_SCHEDULING_RULES.morningTasks.includes(t.task_type) &&
+      !SMART_SCHEDULING_RULES.afternoonTasks.includes(t.task_type)
+    );
+    
+    // חישוב רזרבה לבלת"מים
+    const totalDayMinutes = SMART_SCHEDULING_RULES.workHours.end - SMART_SCHEDULING_RULES.workHours.start;
+    const bufferMinutes = Math.round(totalDayMinutes * SMART_SCHEDULING_RULES.bufferPercentage);
+    const effectiveEnd = SMART_SCHEDULING_RULES.workHours.end - bufferMinutes;
+    
+    setIsRescheduling(true);
+    
+    try {
+      const updates = [];
+      let currentMorning = SMART_SCHEDULING_RULES.workHours.start;
+      let currentAfternoon = SMART_SCHEDULING_RULES.workHours.morningEnd;
+      
+      // מיון לפי עדיפות (דחוף קודם)
+      const priorityOrder = { urgent: 0, high: 1, normal: 2 };
+      
+      // שיבוץ משימות בוקר (תמלול)
+      morningTasks
+        .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2))
+        .forEach(task => {
+          const duration = task.estimated_duration || 30;
+          const endTime = currentMorning + duration;
+          
+          // אם חורג מהבוקר, ממשיך בזמן הזמין
+          if (endTime <= SMART_SCHEDULING_RULES.workHours.morningEnd) {
+            const newTime = minutesToTimeStr(currentMorning);
+            if (task.due_time !== newTime) {
+              updates.push({ id: task.id, due_time: newTime, title: task.title });
+            }
+            currentMorning = endTime + 5; // 5 דקות מרווח
+          } else {
+            // אין מספיק מקום בבוקר - שים באחה"צ
+            const newTime = minutesToTimeStr(currentAfternoon);
+            if (task.due_time !== newTime) {
+              updates.push({ id: task.id, due_time: newTime, title: task.title });
+            }
+            currentAfternoon = currentAfternoon + duration + 5;
+          }
+        });
+      
+      // שיבוץ משימות אחה"צ (הגהות, תרגום, וכו')
+      afternoonTasks
+        .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2))
+        .forEach(task => {
+          const duration = task.estimated_duration || 30;
+          const endTime = currentAfternoon + duration;
+          
+          // בדיקה שלא חורגים מסוף היום (עם רזרבה)
+          if (endTime <= effectiveEnd) {
+            const newTime = minutesToTimeStr(currentAfternoon);
+            if (task.due_time !== newTime) {
+              updates.push({ id: task.id, due_time: newTime, title: task.title });
+            }
+            currentAfternoon = endTime + 5;
+          }
+        });
+      
+      // שיבוץ שאר המשימות בזמן הפנוי
+      // קודם למלא את הבוקר, אח"כ את האחה"צ
+      otherTasks
+        .sort((a, b) => (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2))
+        .forEach(task => {
+          const duration = task.estimated_duration || 30;
+          
+          // נסה בבוקר
+          if (currentMorning + duration <= SMART_SCHEDULING_RULES.workHours.morningEnd) {
+            const newTime = minutesToTimeStr(currentMorning);
+            if (task.due_time !== newTime) {
+              updates.push({ id: task.id, due_time: newTime, title: task.title });
+            }
+            currentMorning = currentMorning + duration + 5;
+          }
+          // אם לא נכנס לבוקר, שים באחה"צ
+          else if (currentAfternoon + duration <= effectiveEnd) {
+            const newTime = minutesToTimeStr(currentAfternoon);
+            if (task.due_time !== newTime) {
+              updates.push({ id: task.id, due_time: newTime, title: task.title });
+            }
+            currentAfternoon = currentAfternoon + duration + 5;
+          }
+        });
+      
+      // ביצוע העדכונים
+      if (updates.length === 0) {
+        toast.success('המשימות כבר מסודרות נכון! ✅');
+        setIsRescheduling(false);
+        return;
+      }
+      
+      for (const update of updates) {
+        await editTask(update.id, { due_time: update.due_time });
+      }
+      
+      await loadTasks();
+      
+      toast.success(
+        `✅ ${updates.length} משימות סודרו מחדש!\n` +
+        `🌅 תמלול: בוקר\n` +
+        `🌆 הגהות: אחה"צ\n` +
+        `⏰ ${bufferMinutes} דק' רזרבה לבלת"מים`,
+        { duration: 5000 }
+      );
+      
+    } catch (error) {
+      console.error('שגיאה בסידור מחדש:', error);
+      toast.error('שגיאה בסידור מחדש של המשימות');
+    } finally {
+      setIsRescheduling(false);
+    }
+  };
+
   // ✅ חישוב weekPlan מקומי - תלוי ב-selectedDate של DailyView
   const weekPlan = useMemo(() => {
     if (!tasks || tasks.length === 0) return null;
@@ -1472,11 +1626,23 @@ function DailyView() {
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 0.2 }}
-        className="mb-4"
+        className="mb-4 space-y-2"
       >
         <Button onClick={handleAddTask} className="w-full py-3 text-lg">
           + משימה חדשה
         </Button>
+        
+        {/* ✅ חדש: כפתור סידור חכם */}
+        {allBlocks.length > 0 && (
+          <Button 
+            onClick={handleSmartReschedule}
+            loading={isRescheduling}
+            variant="secondary"
+            className="w-full py-2 text-sm"
+          >
+            🎯 סדר משימות חכם (תמלול=בוקר, הגהות=אחה"צ)
+          </Button>
+        )}
       </motion.div>
 
       <motion.div

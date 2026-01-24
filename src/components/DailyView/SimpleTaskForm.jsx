@@ -317,6 +317,83 @@ function EstimateSuggestion({ taskType, currentEstimate, onAcceptSuggestion }) {
  * - משימה בלת"מ (unexpected) → עכשיו
  * - משימה רגילה → אחרי המשימה האחרונה ברשימה
  */
+/**
+ * ✅ כללי שיבוץ חכמים לפי סוג משימה
+ * 
+ * תמלול = בוקר (08:30-14:00)
+ * הגהות/תרגום/מנהלה/מיילים = אחה"צ (14:00-16:15)
+ * 20% מהיום שמור לבלת"מים
+ */
+const SCHEDULING_RULES = {
+  // משימות בוקר (08:30-14:00)
+  morningTasks: ['transcription'],
+  
+  // משימות אחה"צ (14:00-16:15)
+  afternoonTasks: ['proofreading', 'translation', 'admin', 'email'],
+  
+  // שעות עבודה
+  workHours: {
+    start: 8.5 * 60,      // 08:30
+    morningEnd: 14 * 60,  // 14:00
+    end: 16.25 * 60       // 16:15
+  },
+  
+  // רזרבה לבלת"מים (20% מהיום = ~93 דקות מ-465)
+  bufferMinutes: 90,
+  bufferPercentage: 0.20
+};
+
+/**
+ * קבלת טווח שעות מותר לפי סוג משימה
+ */
+function getScheduleRangeForTaskType(taskType) {
+  if (SCHEDULING_RULES.morningTasks.includes(taskType)) {
+    return {
+      start: SCHEDULING_RULES.workHours.start,
+      end: SCHEDULING_RULES.workHours.morningEnd,
+      label: 'בוקר (08:30-14:00)'
+    };
+  }
+  
+  if (SCHEDULING_RULES.afternoonTasks.includes(taskType)) {
+    return {
+      start: SCHEDULING_RULES.workHours.morningEnd,
+      end: SCHEDULING_RULES.workHours.end,
+      label: 'אחה"צ (14:00-16:15)'
+    };
+  }
+  
+  // ברירת מחדל - כל היום
+  return {
+    start: SCHEDULING_RULES.workHours.start,
+    end: SCHEDULING_RULES.workHours.end,
+    label: 'כל היום'
+  };
+}
+
+/**
+ * חישוב זמן פנוי ביום עם התחשבות ברזרבה לבלת"מים
+ */
+function getAvailableTimeWithBuffer(tasks, targetDate, scheduleStart, scheduleEnd) {
+  const totalDayMinutes = scheduleEnd - scheduleStart;
+  const bufferMinutes = Math.round(totalDayMinutes * SCHEDULING_RULES.bufferPercentage);
+  
+  // חישוב זמן תפוס
+  const occupiedMinutes = (tasks || [])
+    .filter(t => t.due_date === targetDate && !t.is_completed && t.due_time && !t.is_project)
+    .reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
+  
+  const availableMinutes = totalDayMinutes - occupiedMinutes - bufferMinutes;
+  
+  return {
+    totalMinutes: totalDayMinutes,
+    occupiedMinutes,
+    bufferMinutes,
+    availableMinutes: Math.max(0, availableMinutes),
+    bufferUsed: occupiedMinutes > (totalDayMinutes - bufferMinutes)
+  };
+}
+
 function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, scheduleType = 'work') {
   const now = new Date();
   const todayISO = getLocalDateISO(now);
@@ -342,8 +419,10 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
       scheduleEnd = 21 * 60;
     }
   } else {
-    scheduleStart = 8.5 * 60;
-    scheduleEnd = 16.25 * 60;
+    // ✅ חדש: שימוש בכללי שיבוץ לפי סוג משימה
+    const taskRange = getScheduleRangeForTaskType(taskType);
+    scheduleStart = taskRange.start;
+    scheduleEnd = taskRange.end;
   }
   
   if (taskType === 'unexpected') {
@@ -369,11 +448,17 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     return { start, end, title: t.title };
   }).sort((a, b) => a.start - b.start);
   
-  const findFreeSlot = (startFrom, duration) => {
+  const findFreeSlot = (startFrom, duration, rangeEnd) => {
     let proposedStart = Math.ceil(startFrom / 5) * 5;
     
     for (let attempt = 0; attempt < 50; attempt++) {
       const proposedEnd = proposedStart + duration;
+      
+      // ✅ בדיקה שלא חורגים מסוף הטווח
+      if (proposedEnd > rangeEnd) {
+        return null; // אין מקום בטווח הזה
+      }
+      
       let hasConflict = false;
       
       for (const slot of occupiedSlots) {
@@ -388,7 +473,7 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
       if (!hasConflict) return proposedStart;
     }
     
-    return proposedStart;
+    return null;
   };
   
   let searchStart;
@@ -398,7 +483,27 @@ function calculateNewTaskDueTime(tasks, taskType, dueDate, estimatedDuration, sc
     searchStart = scheduleStart;
   }
   
-  const freeSlot = findFreeSlot(searchStart, estimatedDuration || 30);
+  // ✅ חיפוש בטווח המתאים לסוג המשימה
+  let freeSlot = findFreeSlot(searchStart, estimatedDuration || 30, scheduleEnd);
+  
+  // אם אין מקום בטווח המועדף, חפש בכל היום
+  if (freeSlot === null && !isHomeTask) {
+    const fullDayStart = SCHEDULING_RULES.workHours.start;
+    const fullDayEnd = SCHEDULING_RULES.workHours.end;
+    
+    if (isTargetToday) {
+      searchStart = Math.max(currentMinutes, fullDayStart);
+    } else {
+      searchStart = fullDayStart;
+    }
+    
+    freeSlot = findFreeSlot(searchStart, estimatedDuration || 30, fullDayEnd);
+  }
+  
+  // אם עדיין אין מקום, שים בסוף היום
+  if (freeSlot === null) {
+    freeSlot = scheduleEnd - (estimatedDuration || 30);
+  }
   
   return minutesToTime(freeSlot);
 }
