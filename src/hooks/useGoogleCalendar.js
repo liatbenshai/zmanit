@@ -367,6 +367,11 @@ export function useGoogleCalendar() {
         toast.success(`📅 סונכרנו ${imported} אירועים חדשים${updated > 0 ? `, ${updated} עודכנו` : ''}`);
       }
 
+      // ✅ חדש: שמירת אירועי היום ל-localStorage להתראות
+      try {
+        localStorage.setItem('zmanit_calendar_events_today', JSON.stringify(events));
+      } catch (e) {}
+
       return { imported, updated };
 
     } catch (err) {

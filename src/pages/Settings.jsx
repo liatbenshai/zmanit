@@ -100,23 +100,59 @@ function Settings() {
 }
 
 function NotificationSettings() {
-  const { settings, permission, isSupported, requestPermission, saveSettings, testNotification } = useNotifications();
+  const { settings, permission, isSupported, requestPermission, saveSettings, testNotification, playSound } = useNotifications();
   const [localSettings, setLocalSettings] = useState(settings);
   const [saving, setSaving] = useState(false);
+  const [activeSubTab, setActiveSubTab] = useState('settings'); // 'settings' | 'history' | 'procrastination' | 'calendar'
+  const [notificationHistory, setNotificationHistory] = useState([]);
 
   useEffect(() => {
-    setLocalSettings(settings);
+    setLocalSettings({
+      ...settings,
+      // ברירות מחדל להגדרות דחיינות
+      noTimerReminder: settings.noTimerReminder || { enabled: true, intervalMinutes: 10 },
+      pausedTaskReminder: settings.pausedTaskReminder || { enabled: true, afterMinutes: 10 },
+      overdueTaskReminder: settings.overdueTaskReminder || { enabled: true, intervalMinutes: 15 },
+      calendarReminder: settings.calendarReminder || { enabled: true, minutesBefore: 10 }
+    });
+    loadNotificationHistory();
   }, [settings]);
+
+  const loadNotificationHistory = () => {
+    try {
+      const history = localStorage.getItem('zmanit_notification_history');
+      if (history) {
+        const parsed = JSON.parse(history);
+        setNotificationHistory(parsed.sort((a, b) => b.timestamp - a.timestamp).slice(0, 50));
+      }
+    } catch (e) {}
+  };
+
+  const clearHistory = () => {
+    localStorage.removeItem('zmanit_notification_history');
+    setNotificationHistory([]);
+    toast.success('ההיסטוריה נמחקה');
+  };
 
   const handleChange = (key, value) => {
     setLocalSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleNestedChange = (parent, key, value) => {
+    setLocalSettings(prev => ({
+      ...prev,
+      [parent]: { ...prev[parent], [key]: value }
+    }));
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       await saveSettings(localSettings);
+      // שמירה גם ב-localStorage לגישה מהירה
+      localStorage.setItem('zmanit_notification_settings', JSON.stringify(localSettings));
       toast.success('ההגדרות נשמרו! ✅');
+      playSound('success');
     } catch (err) {
       toast.error('שגיאה בשמירת ההגדרות');
     } finally {
@@ -128,6 +164,7 @@ function NotificationSettings() {
     const granted = await requestPermission();
     if (granted) {
       toast.success('🔔 התראות הופעלו!');
+      playSound('success');
     } else {
       toast.error('ההתראות לא אושרו בדפדפן');
     }
@@ -136,38 +173,94 @@ function NotificationSettings() {
   const handleTest = () => {
     testNotification();
     toast.success('נשלחה התראת בדיקה');
+    // הוספה להיסטוריה
+    const history = JSON.parse(localStorage.getItem('zmanit_notification_history') || '[]');
+    history.unshift({ id: Date.now(), type: 'test', title: 'התראת בדיקה', timestamp: Date.now() });
+    localStorage.setItem('zmanit_notification_history', JSON.stringify(history.slice(0, 100)));
+    loadNotificationHistory();
   };
+
+  const formatTime = (timestamp) => {
+    const date = new Date(timestamp);
+    const now = new Date();
+    const diff = now - date;
+    if (diff < 60000) return 'עכשיו';
+    if (diff < 3600000) return `לפני ${Math.floor(diff / 60000)} דק'`;
+    if (diff < 86400000) return `לפני ${Math.floor(diff / 3600000)} שעות`;
+    return date.toLocaleDateString('he-IL', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getNotificationIcon = (type) => {
+    const icons = { task_starting: '⏰', task_ending: '⏳', task_overdue: '🔴', no_timer: '🎯', paused: '⏸️', calendar: '📅', break: '☕', test: '🧪' };
+    return icons[type] || '🔔';
+  };
+
+  // Toggle component
+  const Toggle = ({ enabled, onChange }) => (
+    <button
+      onClick={() => onChange(!enabled)}
+      className={`relative w-14 h-8 rounded-full transition-colors ${enabled ? 'bg-blue-600' : 'bg-gray-300 dark:bg-gray-600'}`}
+    >
+      <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${enabled ? 'right-1' : 'left-1'}`} />
+    </button>
+  );
 
   return (
     <div className="space-y-6">
       <h2 className="text-lg font-bold text-gray-900 dark:text-white">🔔 הגדרות התראות</h2>
 
-      <div className="p-4 rounded-lg bg-gray-50 dark:bg-gray-700">
+      {/* תתי-טאבים */}
+      <div className="flex gap-2 overflow-x-auto pb-2">
+        {[
+          { id: 'settings', label: '⚙️ כללי' },
+          { id: 'procrastination', label: '🎯 דחיינות' },
+          { id: 'calendar', label: '📅 יומן' },
+          { id: 'history', label: `📜 היסטוריה (${notificationHistory.length})` }
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveSubTab(tab.id)}
+            className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
+              activeSubTab === tab.id ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300' : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400'
+            }`}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* סטטוס הרשאות - מוצג תמיד */}
+      <div className={`p-4 rounded-lg ${
+        permission === 'granted' ? 'bg-green-50 dark:bg-green-900/20' : 
+        permission === 'denied' ? 'bg-red-50 dark:bg-red-900/20' : 'bg-yellow-50 dark:bg-yellow-900/20'
+      }`}>
         <div className="flex items-center justify-between">
-          <div>
-            <p className="font-medium text-gray-900 dark:text-white">התראות דפדפן</p>
-            <p className="text-sm text-gray-500 dark:text-gray-400">
-              {!isSupported && 'הדפדפן לא תומך בהתראות'}
-              {isSupported && permission === 'granted' && '✅ התראות מופעלות'}
-              {isSupported && permission === 'denied' && '❌ התראות חסומות'}
-              {isSupported && permission === 'default' && 'יש לאשר התראות'}
-            </p>
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">{permission === 'granted' ? '✅' : permission === 'denied' ? '❌' : '⚠️'}</span>
+            <div>
+              <p className="font-medium text-gray-900 dark:text-white">
+                {permission === 'granted' ? 'התראות Push פועלות' : permission === 'denied' ? 'התראות חסומות' : 'התראות לא אושרו'}
+              </p>
+              <p className="text-sm text-gray-500 dark:text-gray-400">
+                {permission === 'denied' && 'יש לאשר בהגדרות הדפדפן'}
+                {permission === 'granted' && 'התראות יופיעו גם כשהדפדפן ממוזער'}
+              </p>
+            </div>
           </div>
-          
-          {isSupported && permission !== 'granted' && (
-            <Button onClick={handleRequestPermission}>🔔 אפשר התראות</Button>
+          {isSupported && permission !== 'granted' && permission !== 'denied' && (
+            <Button onClick={handleRequestPermission}>🔔 אפשר</Button>
           )}
-          
           {permission === 'granted' && (
             <Button variant="secondary" onClick={handleTest}>🧪 בדיקה</Button>
           )}
         </div>
       </div>
 
-      {permission === 'granted' && (
+      {/* טאב הגדרות כלליות */}
+      {activeSubTab === 'settings' && (
         <div className="space-y-4">
           <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-            <p className="font-medium text-gray-900 dark:text-white mb-2">⏰ התראה לפני המשימה</p>
+            <p className="font-medium text-gray-900 dark:text-white mb-2">⏰ התראה לפני משימה</p>
             <select
               value={localSettings.reminderMinutes}
               onChange={(e) => handleChange('reminderMinutes', parseInt(e.target.value))}
@@ -187,27 +280,7 @@ function NotificationSettings() {
               <p className="font-medium text-gray-900 dark:text-white">🔔 התראה בזמן המשימה</p>
               <p className="text-sm text-gray-500">התראה כשמגיע הזמן</p>
             </div>
-            <button
-              onClick={() => handleChange('notifyOnTime', !localSettings.notifyOnTime)}
-              className={`relative w-14 h-8 rounded-full transition-colors ${localSettings.notifyOnTime ? 'bg-blue-600' : 'bg-gray-300'}`}
-            >
-              <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${localSettings.notifyOnTime ? 'right-1' : 'left-1'}`} />
-            </button>
-          </div>
-
-          <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-600">
-            <p className="font-medium text-gray-900 dark:text-white mb-2">🔴 תזכורת חוזרת למשימות באיחור</p>
-            <select
-              value={localSettings.repeatEveryMinutes || 10}
-              onChange={(e) => handleChange('repeatEveryMinutes', parseInt(e.target.value))}
-              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              <option value={5}>כל 5 דקות</option>
-              <option value={10}>כל 10 דקות</option>
-              <option value={15}>כל 15 דקות</option>
-              <option value={30}>כל 30 דקות</option>
-              <option value={60}>כל שעה</option>
-            </select>
+            <Toggle enabled={localSettings.notifyOnTime} onChange={(v) => handleChange('notifyOnTime', v)} />
           </div>
 
           <div className="flex items-center justify-between p-4 rounded-lg border border-gray-200 dark:border-gray-600">
@@ -215,15 +288,202 @@ function NotificationSettings() {
               <p className="font-medium text-gray-900 dark:text-white">🔊 צליל התראה</p>
               <p className="text-sm text-gray-500">השמע צליל עם ההתראה</p>
             </div>
-            <button
-              onClick={() => handleChange('soundEnabled', !localSettings.soundEnabled)}
-              className={`relative w-14 h-8 rounded-full transition-colors ${localSettings.soundEnabled ? 'bg-blue-600' : 'bg-gray-300'}`}
-            >
-              <span className={`absolute top-1 w-6 h-6 rounded-full bg-white shadow transition-transform ${localSettings.soundEnabled ? 'right-1' : 'left-1'}`} />
-            </button>
+            <div className="flex items-center gap-2">
+              {localSettings.soundEnabled && (
+                <button onClick={() => playSound('warning')} className="text-sm text-blue-500 hover:text-blue-600">🔈 נגן</button>
+              )}
+              <Toggle enabled={localSettings.soundEnabled} onChange={(v) => handleChange('soundEnabled', v)} />
+            </div>
           </div>
 
           <Button onClick={handleSave} loading={saving} className="w-full">💾 שמור הגדרות</Button>
+        </div>
+      )}
+
+      {/* טאב הגדרות דחיינות */}
+      {activeSubTab === 'procrastination' && (
+        <div className="space-y-4">
+          <div className="p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg text-sm text-orange-700 dark:text-orange-300">
+            💡 הגדרות אלו עוזרות להילחם בדחיינות בשעות העבודה
+          </div>
+
+          {/* תזכורת כשאין טיימר */}
+          <div className="p-4 rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">🎯 תזכורת בשעות עבודה</p>
+                <p className="text-sm text-gray-500">כשאין טיימר פעיל - פופאפ חוסם</p>
+              </div>
+              <Toggle 
+                enabled={localSettings.noTimerReminder?.enabled} 
+                onChange={(v) => handleNestedChange('noTimerReminder', 'enabled', v)} 
+              />
+            </div>
+            {localSettings.noTimerReminder?.enabled && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">הזכר כל</span>
+                <select
+                  value={localSettings.noTimerReminder?.intervalMinutes || 10}
+                  onChange={(e) => handleNestedChange('noTimerReminder', 'intervalMinutes', parseInt(e.target.value))}
+                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                >
+                  <option value={5}>5 דקות</option>
+                  <option value={10}>10 דקות</option>
+                  <option value={15}>15 דקות</option>
+                  <option value={20}>20 דקות</option>
+                  <option value={30}>30 דקות</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          {/* תזכורת כשמשימה מושהית */}
+          <div className="p-4 rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">⏸️ משימה מושהית</p>
+                <p className="text-sm text-gray-500">כשטיימר מושהה זמן רב</p>
+              </div>
+              <Toggle 
+                enabled={localSettings.pausedTaskReminder?.enabled} 
+                onChange={(v) => handleNestedChange('pausedTaskReminder', 'enabled', v)} 
+              />
+            </div>
+            {localSettings.pausedTaskReminder?.enabled && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">הזכר אחרי</span>
+                <select
+                  value={localSettings.pausedTaskReminder?.afterMinutes || 10}
+                  onChange={(e) => handleNestedChange('pausedTaskReminder', 'afterMinutes', parseInt(e.target.value))}
+                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                >
+                  <option value={5}>5 דקות</option>
+                  <option value={10}>10 דקות</option>
+                  <option value={15}>15 דקות</option>
+                  <option value={20}>20 דקות</option>
+                </select>
+                <span className="text-sm text-gray-600 dark:text-gray-400">השהייה</span>
+              </div>
+            )}
+          </div>
+
+          {/* תזכורת משימה באיחור */}
+          <div className="p-4 rounded-lg border-2 border-orange-200 dark:border-orange-800 bg-orange-50/50 dark:bg-orange-900/10">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">🔴 משימה באיחור</p>
+                <p className="text-sm text-gray-500">כשמשימה עברה את הזמן שלה</p>
+              </div>
+              <Toggle 
+                enabled={localSettings.overdueTaskReminder?.enabled} 
+                onChange={(v) => handleNestedChange('overdueTaskReminder', 'enabled', v)} 
+              />
+            </div>
+            {localSettings.overdueTaskReminder?.enabled && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">הזכר כל</span>
+                <select
+                  value={localSettings.overdueTaskReminder?.intervalMinutes || 15}
+                  onChange={(e) => handleNestedChange('overdueTaskReminder', 'intervalMinutes', parseInt(e.target.value))}
+                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                >
+                  <option value={5}>5 דקות</option>
+                  <option value={10}>10 דקות</option>
+                  <option value={15}>15 דקות</option>
+                  <option value={30}>30 דקות</option>
+                  <option value={60}>שעה</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <Button onClick={handleSave} loading={saving} className="w-full">💾 שמור הגדרות דחיינות</Button>
+        </div>
+      )}
+
+      {/* טאב יומן גוגל */}
+      {activeSubTab === 'calendar' && (
+        <div className="space-y-4">
+          <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg text-sm text-blue-700 dark:text-blue-300">
+            📅 קבלי התראות על אירועים מיומן גוגל
+          </div>
+
+          <div className="p-4 rounded-lg border-2 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-900/10">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">📅 התראות אירועי יומן</p>
+                <p className="text-sm text-gray-500">תזכורת לפני פגישות ואירועים</p>
+              </div>
+              <Toggle 
+                enabled={localSettings.calendarReminder?.enabled} 
+                onChange={(v) => handleNestedChange('calendarReminder', 'enabled', v)} 
+              />
+            </div>
+            {localSettings.calendarReminder?.enabled && (
+              <div className="flex items-center gap-2 mt-2">
+                <span className="text-sm text-gray-600 dark:text-gray-400">הזכר</span>
+                <select
+                  value={localSettings.calendarReminder?.minutesBefore || 10}
+                  onChange={(e) => handleNestedChange('calendarReminder', 'minutesBefore', parseInt(e.target.value))}
+                  className="px-2 py-1 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-sm"
+                >
+                  <option value={5}>5 דקות</option>
+                  <option value={10}>10 דקות</option>
+                  <option value={15}>15 דקות</option>
+                  <option value={30}>30 דקות</option>
+                  <option value={60}>שעה</option>
+                </select>
+                <span className="text-sm text-gray-600 dark:text-gray-400">לפני האירוע</span>
+              </div>
+            )}
+          </div>
+
+          <div className="p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="font-medium text-gray-900 dark:text-white">🔔 התראה בתחילת אירוע</p>
+                <p className="text-sm text-gray-500">התראה כשהאירוע מתחיל</p>
+              </div>
+              <Toggle 
+                enabled={localSettings.calendarReminder?.notifyOnStart ?? true} 
+                onChange={(v) => handleNestedChange('calendarReminder', 'notifyOnStart', v)} 
+              />
+            </div>
+          </div>
+
+          <Button onClick={handleSave} loading={saving} className="w-full">💾 שמור הגדרות יומן</Button>
+        </div>
+      )}
+
+      {/* טאב היסטוריה */}
+      {activeSubTab === 'history' && (
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <p className="text-sm text-gray-500">התראות אחרונות</p>
+            {notificationHistory.length > 0 && (
+              <button onClick={clearHistory} className="text-sm text-red-500 hover:text-red-600">🗑️ נקה</button>
+            )}
+          </div>
+
+          {notificationHistory.length === 0 ? (
+            <div className="text-center py-12 text-gray-500 dark:text-gray-400">
+              <div className="text-4xl mb-3">📭</div>
+              <div>אין היסטוריית התראות</div>
+            </div>
+          ) : (
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {notificationHistory.map((n) => (
+                <div key={n.id} className="p-3 bg-gray-50 dark:bg-gray-700 rounded-lg flex items-start gap-3">
+                  <span className="text-xl">{getNotificationIcon(n.type)}</span>
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-gray-900 dark:text-white text-sm">{n.title}</p>
+                    {n.message && <p className="text-xs text-gray-500 truncate">{n.message}</p>}
+                  </div>
+                  <span className="text-xs text-gray-400 whitespace-nowrap">{formatTime(n.timestamp)}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

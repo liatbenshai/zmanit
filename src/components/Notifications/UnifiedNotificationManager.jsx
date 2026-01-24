@@ -107,6 +107,39 @@ export function useUnifiedNotifications() {
   const lastNotifiedRef = useRef({});
   const checkIntervalRef = useRef(null);
   
+  // ✅ חדש: קריאת הגדרות מותאמות
+  const getNotificationSettings = useCallback(() => {
+    try {
+      const saved = localStorage.getItem('zmanit_notification_settings');
+      if (saved) {
+        return JSON.parse(saved);
+      }
+    } catch (e) {}
+    // ברירות מחדל
+    return {
+      noTimerReminder: { enabled: true, intervalMinutes: 10 },
+      pausedTaskReminder: { enabled: true, afterMinutes: 10 },
+      overdueTaskReminder: { enabled: true, intervalMinutes: 15 },
+      calendarReminder: { enabled: true, minutesBefore: 10 }
+    };
+  }, []);
+  
+  // ✅ חדש: שמירת התראה להיסטוריה
+  const logNotificationToHistory = useCallback((type, title, message) => {
+    try {
+      const history = JSON.parse(localStorage.getItem('zmanit_notification_history') || '[]');
+      history.unshift({
+        id: Date.now(),
+        type,
+        title,
+        message,
+        timestamp: Date.now()
+      });
+      // שומר רק 100 אחרונות
+      localStorage.setItem('zmanit_notification_history', JSON.stringify(history.slice(0, 100)));
+    } catch (e) {}
+  }, []);
+  
   // ✅ אתחול מנהל ההתראות
   useEffect(() => {
     console.log('🔔 UnifiedNotificationManager: מאתחל...');
@@ -128,6 +161,9 @@ export function useUnifiedNotifications() {
           playSound('default');
         }
         
+        // ✅ שמירה להיסטוריה
+        logNotificationToHistory(alert.type, alert.title, alert.message);
+        
         // הצגת פופאפ
         if (alert.blockingPopup) {
           setActiveAlert(alert);
@@ -142,7 +178,7 @@ export function useUnifiedNotifications() {
     return () => {
       alertManager.stopMonitoring();
     };
-  }, [playSound]);
+  }, [playSound, logNotificationToHistory]);
   
   // ✅ הצגת התראה כ-toast
   const showToastAlert = useCallback((alert) => {
@@ -346,6 +382,81 @@ export function useUnifiedNotifications() {
     }
   }, [canNotify, markNotified, sendNotification]);
 
+  // ✅ חדש: בדיקת אירועי יומן גוגל
+  const checkGoogleCalendarEvents = useCallback((minutesBefore, hasPushPermission) => {
+    try {
+      // קריאת אירועי יומן מ-localStorage (נשמרים ע"י useGoogleCalendar)
+      const calendarEventsData = localStorage.getItem('zmanit_calendar_events_today');
+      if (!calendarEventsData) return;
+      
+      const events = JSON.parse(calendarEventsData);
+      if (!Array.isArray(events) || events.length === 0) return;
+      
+      const now = new Date();
+      const currentMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      events.forEach(event => {
+        if (!event.start?.dateTime) return;
+        
+        const startTime = new Date(event.start.dateTime);
+        const eventMinutes = startTime.getHours() * 60 + startTime.getMinutes();
+        const diff = eventMinutes - currentMinutes;
+        
+        // התראה X דקות לפני האירוע
+        if (diff > 0 && diff <= minutesBefore) {
+          if (canNotify(`calendar-${event.id}`, 'before', 15)) {
+            const eventTitle = event.summary || 'אירוע';
+            const timeStr = startTime.toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' });
+            
+            playSound('default');
+            logNotificationToHistory('calendar', eventTitle, `מתחיל בעוד ${diff} דקות`);
+            
+            if (hasPushPermission) {
+              sendNotification(`📅 ${eventTitle}`, {
+                body: `מתחיל בעוד ${diff} דקות (${timeStr})`,
+                tag: `calendar-${event.id}`,
+                requireInteraction: true
+              });
+            }
+            
+            toast(`📅 ${eventTitle} - בעוד ${diff} דקות (${timeStr})`, {
+              duration: 8000,
+              icon: '📅'
+            });
+            
+            markNotified(`calendar-${event.id}`, 'before');
+          }
+        }
+        
+        // התראה בזמן האירוע
+        if (diff >= -1 && diff <= 1) {
+          if (canNotify(`calendar-${event.id}`, 'start', 5)) {
+            const eventTitle = event.summary || 'אירוע';
+            
+            playSound('warning');
+            logNotificationToHistory('calendar', eventTitle, 'מתחיל עכשיו!');
+            
+            if (hasPushPermission) {
+              sendNotification(`📅 ${eventTitle} מתחיל!`, {
+                body: 'האירוע מתחיל עכשיו',
+                tag: `calendar-start-${event.id}`,
+                requireInteraction: true
+              });
+            }
+            
+            toast.success(`📅 ${eventTitle} - מתחיל עכשיו!`, {
+              duration: 10000
+            });
+            
+            markNotified(`calendar-${event.id}`, 'start');
+          }
+        }
+      });
+    } catch (e) {
+      // שגיאה בקריאת אירועי יומן - לא קריטי
+    }
+  }, [canNotify, markNotified, sendNotification, playSound, logNotificationToHistory]);
+
   // ✅ בדיקת משימות ושליחת התראות מתואמות
   const checkAndNotify = useCallback(() => {
     if (!tasks || tasks.length === 0) {
@@ -353,6 +464,9 @@ export function useUnifiedNotifications() {
     }
     
     const hasPushPermission = permission === 'granted';
+    
+    // ✅ קריאת הגדרות מותאמות אישית
+    const settings = getNotificationSettings();
     
     const now = new Date();
     const today = toLocalISODate(now);
@@ -368,10 +482,15 @@ export function useUnifiedNotifications() {
     const workEnd = 16.25 * 60;  // 16:15
     const isWorkHours = isWorkDay && currentMinutes >= workStart && currentMinutes <= workEnd;
     
+    // ✅ בדיקת אירועי יומן גוגל
+    if (settings.calendarReminder?.enabled) {
+      checkGoogleCalendarEvents(settings.calendarReminder.minutesBefore || 10, hasPushPermission);
+    }
+    
     // ✅ פופאפ חוסם אם אנחנו בשעות עבודה ואין טיימר רץ
-    if (isWorkHours && !activeTaskId) {
-      // בדיקה שלא נשלחה התראה ב-10 דקות האחרונות
-      if (canNotify('work-hours', 'no-timer', 10)) {
+    if (isWorkHours && !activeTaskId && settings.noTimerReminder?.enabled) {
+      const interval = settings.noTimerReminder.intervalMinutes || 10;
+      if (canNotify('work-hours', 'no-timer', interval)) {
         
         // בדיקה אם יש משימות מתוכננות היום שעדיין לא הושלמו
         const pendingTasks = tasks.filter(t => 
@@ -393,6 +512,9 @@ export function useUnifiedNotifications() {
             // ✅ השמעת צליל אזהרה
             playSound('warning');
             
+            // ✅ שמירה להיסטוריה
+            logNotificationToHistory('no_timer', 'את בשעות העבודה!', `המשימה הבאה: ${nextTask.title}`);
+            
             // ✅ Push notification
             if (hasPushPermission) {
               sendNotification('⏰ את בשעות העבודה!', {
@@ -411,7 +533,7 @@ export function useUnifiedNotifications() {
               taskTitle: nextTask.title,
               actions: [
                 { id: 'start_task', label: '▶️ התחל משימה', primary: true },
-                { id: 'snooze_10', label: '⏱️ הזכר בעוד 10 דק׳' },
+                { id: 'snooze_10', label: `⏱️ הזכר בעוד ${interval} דק׳` },
                 { id: 'dismiss', label: '❌ סגור' }
               ]
             });
@@ -424,18 +546,22 @@ export function useUnifiedNotifications() {
     
     // ✅ בדיקת משימה מושהית יותר מידי זמן
     const pausedTimerData = localStorage.getItem('zmanit_focus_paused');
-    if (pausedTimerData && isWorkHours) {
+    if (pausedTimerData && isWorkHours && settings.pausedTaskReminder?.enabled) {
       try {
         const pausedData = JSON.parse(pausedTimerData);
         const pausedAt = new Date(pausedData.pausedAt).getTime();
         const pausedMinutes = Math.floor((Date.now() - pausedAt) / 60000);
+        const threshold = settings.pausedTaskReminder.afterMinutes || 10;
         
-        if (pausedMinutes >= 10 && canNotify('paused-timer', 'too-long', 10)) {
+        if (pausedMinutes >= threshold && canNotify('paused-timer', 'too-long', threshold)) {
           const pausedTask = tasks.find(t => t.id === pausedData.taskId);
           const taskTitle = pausedTask?.title || 'משימה';
           
           // ✅ השמעת צליל אזהרה
           playSound('warning');
+          
+          // ✅ שמירה להיסטוריה
+          logNotificationToHistory('paused', `${taskTitle} מושהית`, `מושהית ${pausedMinutes} דקות`);
           
           if (hasPushPermission) {
             sendNotification(`⏸️ ${taskTitle} מושהית`, {
@@ -455,7 +581,7 @@ export function useUnifiedNotifications() {
             actions: [
               { id: 'resume_task', label: '▶️ המשך עבודה', primary: true },
               { id: 'switch_task', label: '🔄 עבור למשימה אחרת' },
-              { id: 'snooze_10', label: '⏱️ הזכר בעוד 10 דק׳' }
+              { id: 'snooze_10', label: `⏱️ הזכר בעוד ${threshold} דק׳` }
             ]
           });
           
@@ -511,7 +637,7 @@ export function useUnifiedNotifications() {
       checkTaskAlerts(task, currentMinutes, today, hasPushPermission);
     });
     
-  }, [tasks, permission, canNotify, markNotified, sendNotification, playSound, checkActiveTaskAlerts, checkTaskAlerts]);
+  }, [tasks, permission, canNotify, markNotified, sendNotification, playSound, logNotificationToHistory, getNotificationSettings, checkActiveTaskAlerts, checkTaskAlerts, checkGoogleCalendarEvents]);
   
   // ✅ הפעלת בדיקה תקופתית
   useEffect(() => {
