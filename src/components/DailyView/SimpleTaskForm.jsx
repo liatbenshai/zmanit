@@ -16,6 +16,8 @@ import toast from 'react-hot-toast';
 import Input from '../UI/Input';
 import Button from '../UI/Button';
 import { getSuggestedEstimate } from '../../utils/taskLearning';
+import ScheduleConflictAlert from '../Tasks/ScheduleConflictAlert';
+import { findNextFreeSlot } from '../../utils/timeOverlap';
 
 /**
  * ✅ תיקון: קבלת תאריך בפורמט ISO מקומי (לא UTC!)
@@ -435,6 +437,10 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
   // ✅ חדש: פופאפ למשימות שחרגו מסוף היום
   const [showOverflowDialog, setShowOverflowDialog] = useState(false);
   const [overflowTasks, setOverflowTasks] = useState([]);
+  
+  // ✅ חדש: מצב חפיפה - מציג פופאפ עם אפשרויות
+  const [showConflictAlert, setShowConflictAlert] = useState(false);
+  const [conflictData, setConflictData] = useState(null);
 
   // קבלת סוג המשימה הנוכחי
   const currentTaskType = getTaskType(formData.taskType);
@@ -749,7 +755,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
         selectedCategory  // ✅ העברת סוג הלוח זמנים
       );
     } else if (!isEditing && formData.dueTime) {
-      // ✅ חדש: בדיקת חפיפות גם כשהמשתמשת מזינה שעה ידנית
+      // ✅ בדיקת חפיפות כשהמשתמשת מזינה שעה ידנית
       const targetDate = formData.dueDate || defaultDate || getLocalDateISO(new Date());
       const [inputHour, inputMin] = formData.dueTime.split(':').map(Number);
       const inputStart = inputHour * 60 + (inputMin || 0);
@@ -757,6 +763,7 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       
       const conflicts = (tasks || []).filter(t => {
         if (t.due_date !== targetDate || t.is_completed || !t.due_time) return false;
+        if (t.is_project) return false; // התעלם ממשימות הוריות
         const [h, m] = t.due_time.split(':').map(Number);
         const taskStart = h * 60 + (m || 0);
         const taskEnd = taskStart + (t.estimated_duration || 30);
@@ -766,20 +773,41 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
       
       if (conflicts.length > 0) {
         hasConflict = true;
-        const conflictNames = conflicts.slice(0, 2).map(t => `"${t.title}"`).join(', ');
-        toast.error(`⚠️ שעה זו חופפת ל: ${conflictNames}`, { duration: 5000 });
         
-        // הצעת זמן פנוי
-        const suggestedTime = calculateNewTaskDueTime(
-          tasks, 
-          formData.taskType, 
-          targetDate,
-          calculatedDuration,
-          selectedCategory
-        );
-        if (suggestedTime) {
-          toast(`💡 הזמן הפנוי הבא: ${suggestedTime}`, { duration: 5000, icon: '📅' });
-        }
+        // ✅ שמירת נתוני המשימה והחפיפה להצגה בפופאפ
+        const taskDataForConflict = {
+          title: formData.title.trim(),
+          task_type: formData.taskType,
+          estimated_duration: calculatedDuration,
+          estimatedDuration: calculatedDuration,
+          start_date: formData.startDate || null,
+          due_date: targetDate,
+          dueDate: targetDate,
+          due_time: autoDueTime,
+          dueTime: autoDueTime,
+          deadline_date: formData.deadlineDate || null,
+          deadline_time: formData.deadlineTime || null,
+          description: formData.description || null,
+          priority: formData.priority,
+          recording_duration: hasSourceField(formData.taskType) && formData.sourceValue 
+            ? parseFloat(formData.sourceValue) 
+            : null,
+          page_count: null
+        };
+        
+        setConflictData({
+          taskData: taskDataForConflict,
+          conflicts,
+          suggestedTime: calculateNewTaskDueTime(
+            tasks, 
+            formData.taskType, 
+            targetDate,
+            calculatedDuration,
+            selectedCategory
+          )
+        });
+        setShowConflictAlert(true);
+        return; // ✅ עוצר כאן - לא יוצר את המשימה עד שהמשתמשת תבחר
       }
     }
 
@@ -835,8 +863,94 @@ function SimpleTaskForm({ task, onClose, taskTypes, defaultDate }) {
     createTask(taskData, 1);
   };
 
+  // ✅ חדש: Handlers לטיפול בחפיפות
+  
+  // שינוי שעה לשעה הפנויה
+  const handleConflictChangeTime = (newTime, isTomorrow = false) => {
+    if (!conflictData?.taskData) return;
+    
+    let targetDate = conflictData.taskData.due_date;
+    if (isTomorrow) {
+      const tomorrow = new Date(targetDate);
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      targetDate = getLocalDateISO(tomorrow);
+    }
+    
+    const updatedTaskData = {
+      ...conflictData.taskData,
+      due_date: targetDate,
+      due_time: newTime
+    };
+    
+    setShowConflictAlert(false);
+    setConflictData(null);
+    
+    // יצירת המשימה עם השעה החדשה
+    createTask(updatedTaskData, 1);
+    toast.success(`✅ המשימה נוצרה בשעה ${newTime}${isTomorrow ? ' (מחר)' : ''}`);
+  };
+  
+  // התעלמות מהחפיפה ויצירה בכל זאת
+  const handleConflictIgnore = () => {
+    if (!conflictData?.taskData) return;
+    
+    setShowConflictAlert(false);
+    setConflictData(null);
+    
+    // יצירת המשימה למרות החפיפה
+    createTask(conflictData.taskData, 1);
+    toast('⚠️ המשימה נוצרה למרות החפיפה', { icon: '⚠️' });
+  };
+  
+  // ביטול וחזרה לטופס
+  const handleConflictCancel = () => {
+    setShowConflictAlert(false);
+    setConflictData(null);
+  };
+  
+  // דחיית משימות אחרות
+  const handleConflictDefer = async (tasksToDefer) => {
+    if (!conflictData?.taskData) return;
+    
+    try {
+      // דחיית המשימות למחר
+      const tomorrow = new Date();
+      tomorrow.setDate(tomorrow.getDate() + 1);
+      const tomorrowStr = getLocalDateISO(tomorrow);
+      
+      for (const task of tasksToDefer) {
+        await editTask(task.id, {
+          ...task,
+          due_date: tomorrowStr
+        });
+      }
+      
+      setShowConflictAlert(false);
+      setConflictData(null);
+      
+      // יצירת המשימה החדשה
+      createTask(conflictData.taskData, 1);
+      toast.success(`✅ ${tasksToDefer.length} משימות נדחו למחר והמשימה נוצרה`);
+    } catch (error) {
+      console.error('שגיאה בדחיית משימות:', error);
+      toast.error('שגיאה בדחיית המשימות');
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
+      
+      {/* ✅ חדש: פופאפ חפיפה */}
+      {showConflictAlert && conflictData && (
+        <ScheduleConflictAlert
+          newTask={conflictData.taskData}
+          existingTasks={tasks || []}
+          onDefer={handleConflictDefer}
+          onChangeTime={handleConflictChangeTime}
+          onIgnore={handleConflictIgnore}
+          onCancel={handleConflictCancel}
+        />
+      )}
       
       {/* בחירת קטגוריה */}
       <div>
