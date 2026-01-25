@@ -668,6 +668,13 @@ export function useUnifiedNotifications() {
       return taskDate === today && task.due_time;
     });
     
+    console.log('🔔 checkAndNotify:', {
+      totalTasks: tasks.length,
+      todayPending: todayTasks.length,
+      titles: todayTasks.slice(0, 3).map(t => t.title),
+      activeTaskId
+    });
+    
     // ✅ יצירת בלוקים מתוזמנים עבור alertManager
     const scheduledBlocks = todayTasks.map(task => {
       const [h, m] = (task.due_time || '09:00').split(':').map(Number);

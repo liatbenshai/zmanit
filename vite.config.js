@@ -10,10 +10,10 @@ export default defineConfig({
       '@': '/src'
     }
   },
-  // הסרת console.log בייצור
-  esbuild: {
-    drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : []
-  },
+  // 🔧 זמנית: לא מוחקים console.log כדי לראות את הלוגים
+  // esbuild: {
+  //   drop: process.env.NODE_ENV === 'production' ? ['console', 'debugger'] : []
+  // },
   build: {
     // חלוקת הקוד לחבילות קטנות יותר
     rollupOptions: {
