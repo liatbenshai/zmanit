@@ -57,6 +57,36 @@ function FocusedDashboard() {
     }
   }, []);
 
+  // ✅ בדיקה אם יש בקשת הארכה מפופאפ "הזמן נגמר"
+  useEffect(() => {
+    const checkExtendRequest = async () => {
+      try {
+        const extendData = localStorage.getItem('zmanit_extend_task');
+        if (extendData) {
+          const { taskId, minutes, timestamp } = JSON.parse(extendData);
+          // בודקים שהבקשה לא ישנה מדי (פחות מ-5 דקות)
+          if (Date.now() - timestamp < 5 * 60 * 1000) {
+            const task = tasks.find(t => t.id === taskId);
+            if (task) {
+              const newDuration = (task.estimated_duration || 30) + minutes;
+              await updateTask(taskId, { estimated_duration: newDuration });
+              toast.success(`⏱️ הוספנו ${minutes} דקות ל-${task.title}`, { duration: 3000 });
+              loadTasks();
+            }
+          }
+          localStorage.removeItem('zmanit_extend_task');
+        }
+      } catch (err) {
+        console.error('❌ שגיאה בטיפול בבקשת הארכה:', err);
+      }
+    };
+    
+    checkExtendRequest();
+    // בדיקה מחדש כל 2 שניות (למקרה שהמשתמש בוחר הארכה מפופאפ)
+    const interval = setInterval(checkExtendRequest, 2000);
+    return () => clearInterval(interval);
+  }, [tasks, updateTask, loadTasks]);
+
   const requestNotificationPermission = async () => {
     if ('Notification' in window) {
       const permission = await Notification.requestPermission();
