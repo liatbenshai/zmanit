@@ -34,43 +34,27 @@ function toLocalISODate(date) {
 
 /**
  * בדיקה אם יש טיימר פעיל על משימה כלשהי
- * 🔧 תיקון: סורק את כל הטיימרים ב-localStorage אם המפתח הראשי לא מסונכרן
+ * 🔧 תיקון: בודקים גם אם הטיימר באמת רץ, לא רק אם יש ID
  */
 function getActiveTaskId() {
   try {
-    // בדיקה ראשונה: המפתח הישיר
     const activeTimer = localStorage.getItem('zmanit_active_timer');
     if (activeTimer && activeTimer !== 'null' && activeTimer !== 'undefined') {
+      // 🔧 חשוב: בודקים אם הטיימר באמת רץ!
       const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
       if (timerData) {
         try {
           const data = JSON.parse(timerData);
-          if ((data.isRunning === true && data.startTime) || 
-              (data.isInterrupted === true && data.startTime)) {
+          // רק אם הטיימר באמת רץ (לא מושהה, לא נעצר)
+          if (data.isRunning === true && data.startTime) {
+            console.log('🔔 [Notifications] טיימר פעיל ורץ:', activeTimer);
             return activeTimer;
           }
         } catch (e) {}
       }
+      // אין נתוני טיימר או הטיימר לא רץ - מנקים
+      console.log('🔔 [Notifications] יש ID אבל הטיימר לא רץ');
     }
-    
-    // 🔧 חדש: סריקת כל המפתחות timer_v2_* למציאת טיימר פעיל
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key && key.startsWith('timer_v2_')) {
-        try {
-          const data = JSON.parse(localStorage.getItem(key));
-          if ((data.isRunning === true && data.startTime) || 
-              (data.isInterrupted === true && data.startTime)) {
-            const taskId = key.replace('timer_v2_', '');
-            // סנכרון המפתח הראשי
-            localStorage.setItem('zmanit_active_timer', taskId);
-            console.log('🔔 [getActiveTaskId] נמצא טיימר פעיל בסריקה:', taskId);
-            return taskId;
-          }
-        } catch (e) {}
-      }
-    }
-    
   } catch (e) {
     console.error('🔔 [Notifications] שגיאה בבדיקת טיימר:', e);
   }
@@ -79,37 +63,28 @@ function getActiveTaskId() {
 
 /**
  * 🔧 חדש: קריאת הזמן שעבר מהטיימר (מ-localStorage)
- * מחזיר את הזמן בדקות - כולל time_spent מה-DB + הסשן הנוכחי
+ * מחזיר את הזמן בדקות
  */
-function getElapsedTimeFromTimer(taskId, taskTimeSpent = 0) {
+function getElapsedTimeFromTimer(taskId) {
   try {
     const timerData = localStorage.getItem(`timer_v2_${taskId}`);
-    if (!timerData) return taskTimeSpent; // אם אין טיימר, מחזירים רק את הזמן מה-DB
+    if (!timerData) return 0;
     
     const data = JSON.parse(timerData);
+    let totalMs = data.accumulatedTime || data.elapsed || 0;
     
-    // אם הטיימר רץ עכשיו (ולא במצב הפרעה), מחשבים את הזמן מאז startTime
-    if (data.isRunning && data.startTime && !data.isInterrupted) {
+    // אם הטיימר רץ עכשיו, מוסיפים את הזמן מאז startTime
+    if (data.isRunning && data.startTime) {
       const startTime = new Date(data.startTime).getTime();
       const now = Date.now();
-      const totalInterruptionMs = (data.totalInterruptionSeconds || 0) * 1000;
-      const sessionMs = now - startTime - totalInterruptionMs;
-      const sessionMinutes = Math.floor(sessionMs / 60000);
-      
-      // מחזירים את הזמן מה-DB + הסשן הנוכחי
-      return taskTimeSpent + sessionMinutes;
+      totalMs += (now - startTime);
     }
     
-    // אם במצב הפרעה, מחזירים רק את הזמן מה-DB (ההפרעה לא נספרת)
-    if (data.isInterrupted) {
-      return taskTimeSpent;
-    }
-    
-    // אם הטיימר לא רץ, מחזירים את הזמן מה-DB
-    return taskTimeSpent;
+    // המרה לדקות
+    return Math.floor(totalMs / 60000);
   } catch (e) {
     console.error('🔔 [Notifications] שגיאה בקריאת זמן טיימר:', e);
-    return taskTimeSpent;
+    return 0;
   }
 }
 
@@ -127,9 +102,6 @@ export function useUnifiedNotifications() {
   
   // ✅ חדש: מצב פופאפ דחיינות
   const [procrastinationPopup, setProcrastinationPopup] = useState(null);
-  
-  // ✅ חדש: מצב פופאפ "הזמן נגמר"
-  const [timeUpPopup, setTimeUpPopup] = useState(null);
   
   // refs למניעת התראות כפולות
   const lastNotifiedRef = useRef({});
@@ -229,35 +201,17 @@ export function useUnifiedNotifications() {
   const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
     const now = Date.now();
     const key = `${taskId}-${type}`;
+    const lastNotified = lastNotifiedRef.current[key];
     
-    // 🔧 תיקון: קריאה מ-localStorage במקום ref (כדי לשמור בין renders)
-    try {
-      const storedData = localStorage.getItem('zmanit_last_notified');
-      const lastNotifiedData = storedData ? JSON.parse(storedData) : {};
-      const lastNotified = lastNotifiedData[key];
-      
-      if (!lastNotified) return true;
-      
-      const minutesSinceLastNotification = (now - lastNotified) / (1000 * 60);
-      return minutesSinceLastNotification >= minIntervalMinutes;
-    } catch (e) {
-      return true;
-    }
+    if (!lastNotified) return true;
+    
+    const minutesSinceLastNotification = (now - lastNotified) / (1000 * 60);
+    return minutesSinceLastNotification >= minIntervalMinutes;
   }, []);
   
   // ✅ סימון שנשלחה התראה
   const markNotified = useCallback((taskId, type) => {
     const key = `${taskId}-${type}`;
-    
-    // 🔧 תיקון: שמירה ב-localStorage במקום ref
-    try {
-      const storedData = localStorage.getItem('zmanit_last_notified');
-      const lastNotifiedData = storedData ? JSON.parse(storedData) : {};
-      lastNotifiedData[key] = Date.now();
-      localStorage.setItem('zmanit_last_notified', JSON.stringify(lastNotifiedData));
-    } catch (e) {}
-    
-    // גם שומרים ב-ref לתאימות אחורה
     lastNotifiedRef.current[key] = Date.now();
   }, []);
   
@@ -291,12 +245,8 @@ export function useUnifiedNotifications() {
     
     if (estimated <= 0) return;
     
-    // 🔧 תיקון: מעבירים את time_spent מהמשימה
-    const taskTimeSpent = task.time_spent || 0;
-    const timeSpentMinutes = getElapsedTimeFromTimer(task.id, taskTimeSpent);
+    const timeSpentMinutes = getElapsedTimeFromTimer(task.id);
     const remaining = estimated - timeSpentMinutes;
-    
-    console.log('🔔 [checkActiveTaskAlerts]', task.title, '| עבר:', timeSpentMinutes, '| הערכה:', estimated, '| נותר:', remaining);
     
     // 5 דקות לסיום
     if (remaining > 0 && remaining <= 5) {
@@ -315,43 +265,25 @@ export function useUnifiedNotifications() {
       }
     }
     
-    // הזמן נגמר - פופאפ עם אפשרויות
+    // הזמן נגמר
     if (remaining <= 0) {
       if (canNotify(task.id, 'timeUp', 5)) {
-        // השמעת צליל
-        playSound('warning');
-        
-        // שמירה להיסטוריה
-        logNotificationToHistory('timeUp', `${task.title} - הזמן נגמר`, 'הזמן המוקצב הסתיים');
-        
         if (hasPushPermission) {
           sendNotification(`🔔 הזמן נגמר: ${task.title}`, {
-            body: 'הזמן המוקצב הסתיים - מה עושים?',
+            body: 'הזמן המוקצב הסתיים',
             tag: `task-timeup-${task.id}`,
             requireInteraction: true
           });
         }
-        
-        // ✅ פופאפ עם אפשרויות במקום toast
-        setTimeUpPopup({
-          taskId: task.id,
-          taskTitle: task.title,
-          estimated: estimated,
-          timeSpent: timeSpentMinutes,
-          overtime: Math.abs(remaining),
-          actions: [
-            { id: 'extend_15', label: '🔄 עוד 15 דקות', primary: true },
-            { id: 'extend_30', label: '🔄 עוד 30 דקות' },
-            { id: 'complete', label: '✅ סיימתי!' },
-            { id: 'switch', label: '➡️ עבור למשימה אחרת' },
-            { id: 'dismiss', label: '❌ סגור' }
-          ]
-        });
-        
         markNotified(task.id, 'timeUp');
+        
+        toast.error(`🔔 הזמן נגמר: ${task.title}`, {
+          duration: 8000,
+          icon: '⏰'
+        });
       }
     }
-  }, [canNotify, markNotified, sendNotification, playSound, logNotificationToHistory]);
+  }, [canNotify, markNotified, sendNotification]);
   
   // ✅ בדיקת התראות למשימה (ללא טיימר)
   const checkTaskAlerts = useCallback((task, currentMinutes, today, hasPushPermission = false) => {
@@ -668,13 +600,6 @@ export function useUnifiedNotifications() {
       return taskDate === today && task.due_time;
     });
     
-    console.log('🔔 checkAndNotify:', {
-      totalTasks: tasks.length,
-      todayPending: todayTasks.length,
-      titles: todayTasks.slice(0, 3).map(t => t.title),
-      activeTaskId
-    });
-    
     // ✅ יצירת בלוקים מתוזמנים עבור alertManager
     const scheduledBlocks = todayTasks.map(task => {
       const [h, m] = (task.due_time || '09:00').split(':').map(Number);
@@ -718,34 +643,13 @@ export function useUnifiedNotifications() {
   useEffect(() => {
     // 🔧 תיקון: לא עוצרים אם אין הרשאה - פשוט מציגים toast במקום Push
     
-    // ✅ ניקוי היסטוריית התראות ישנה (יותר משעה)
-    try {
-      const cleanupHistory = (key) => {
-        const saved = localStorage.getItem(key);
-        if (saved) {
-          const history = JSON.parse(saved);
-          const cutoff = Date.now() - 60 * 60 * 1000; // שעה
-          const filtered = history.filter(a => a.timestamp > cutoff);
-          if (filtered.length < history.length) {
-            localStorage.setItem(key, JSON.stringify(filtered));
-            console.log(`🧹 נוקתה היסטוריה ${key}: ${history.length} -> ${filtered.length}`);
-          }
-        }
-      };
-      cleanupHistory('zmanit_alert_history');
-      cleanupHistory('zmanit_last_notified');
-    } catch (e) {}
-    
-    // 🔧 השהייה קצרה לפני בדיקה ראשונית - נותן זמן ל-state להתייצב
-    const initialTimeout = setTimeout(() => {
-      checkAndNotify();
-    }, 2000);
+    // בדיקה ראשונית
+    checkAndNotify();
     
     // בדיקה כל 30 שניות
     checkIntervalRef.current = setInterval(checkAndNotify, 30 * 1000);
     
     return () => {
-      clearTimeout(initialTimeout);
       if (checkIntervalRef.current) {
         clearInterval(checkIntervalRef.current);
       }
@@ -774,55 +678,6 @@ export function useUnifiedNotifications() {
   const dismissProcrastinationPopup = useCallback(() => {
     setProcrastinationPopup(null);
   }, []);
-  
-  // ✅ סגירת פופאפ "הזמן נגמר"
-  const dismissTimeUpPopup = useCallback(() => {
-    setTimeUpPopup(null);
-  }, []);
-  
-  // ✅ טיפול בפעולה על פופאפ "הזמן נגמר"
-  const handleTimeUpAction = useCallback((actionId) => {
-    const popup = timeUpPopup;
-    if (!popup) return;
-    
-    switch (actionId) {
-      case 'extend_15':
-      case 'extend_30':
-        const minutes = actionId === 'extend_15' ? 15 : 30;
-        // שמירת בקשת הארכה ב-localStorage - FocusedDashboard יקרא את זה
-        localStorage.setItem('zmanit_extend_task', JSON.stringify({
-          taskId: popup.taskId,
-          minutes: minutes,
-          timestamp: Date.now()
-        }));
-        toast.success(`⏱️ הוספנו ${minutes} דקות ל-${popup.taskTitle}`, { duration: 3000 });
-        break;
-        
-      case 'complete':
-        // שמירת בקשת השלמה ב-localStorage
-        localStorage.setItem('zmanit_complete_task', JSON.stringify({
-          taskId: popup.taskId,
-          timestamp: Date.now()
-        }));
-        toast.success(`✅ ${popup.taskTitle} הושלמה!`, { duration: 3000 });
-        // ניווט ל-daily לטיפול בהשלמה
-        window.location.href = '/daily';
-        break;
-        
-      case 'switch':
-        window.location.href = '/daily';
-        break;
-        
-      case 'dismiss':
-        // סתם סגירה
-        break;
-        
-      default:
-        break;
-    }
-    
-    dismissTimeUpPopup();
-  }, [timeUpPopup, dismissTimeUpPopup]);
   
   // ✅ טיפול בפעולה על פופאפ דחיינות
   const handleProcrastinationAction = useCallback((actionId) => {
@@ -922,11 +777,7 @@ export function useUnifiedNotifications() {
     // ✅ חדש: פופאפ דחיינות
     procrastinationPopup,
     dismissProcrastinationPopup,
-    handleProcrastinationAction,
-    // ✅ חדש: פופאפ "הזמן נגמר"
-    timeUpPopup,
-    dismissTimeUpPopup,
-    handleTimeUpAction
+    handleProcrastinationAction
   };
 }
 
@@ -962,11 +813,7 @@ export function UnifiedNotificationManager() {
     dismissAlert,
     procrastinationPopup,
     dismissProcrastinationPopup,
-    handleProcrastinationAction,
-    // ✅ חדש: פופאפ "הזמן נגמר"
-    timeUpPopup,
-    dismissTimeUpPopup,
-    handleTimeUpAction
+    handleProcrastinationAction
   } = useUnifiedNotifications();
   const { sendNotification, permission, playSound, requestPermission } = useNotifications();
   
@@ -1023,57 +870,6 @@ export function UnifiedNotificationManager() {
           <p className="mt-4 text-sm text-gray-500 dark:text-gray-400">
             💪 את יכולה לעשות את זה!
           </p>
-        </div>
-      </div>
-    );
-  }
-  
-  // ✅ פופאפ "הזמן נגמר" - עם אפשרויות להארכה
-  if (timeUpPopup) {
-    return (
-      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[9999] p-4 backdrop-blur-sm">
-        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full overflow-hidden animate-bounce-in relative border-4 border-purple-400">
-          
-          {/* כותרת */}
-          <div className="p-6 bg-gradient-to-r from-purple-500 to-pink-500 text-white text-center">
-            <div className="text-5xl mb-3">⏱️</div>
-            <h2 className="text-xl font-bold">הזמן נגמר!</h2>
-            <p className="text-purple-100 text-sm mt-1">{timeUpPopup.taskTitle}</p>
-            {timeUpPopup.overtime > 0 && (
-              <div className="mt-2 text-lg font-medium">
-                חריגה של {timeUpPopup.overtime} דקות
-              </div>
-            )}
-          </div>
-          
-          <div className="p-6">
-            <p className="text-center text-gray-600 dark:text-gray-400 mb-4">
-              מה עושים עכשיו?
-            </p>
-            
-            {/* כפתורי פעולה */}
-            <div className="flex flex-col gap-3">
-              {timeUpPopup.actions?.map((action) => (
-                <button
-                  key={action.id}
-                  onClick={() => handleTimeUpAction(action.id)}
-                  className={`
-                    w-full py-3 px-4 rounded-xl font-medium transition-all text-lg
-                    ${action.primary 
-                      ? 'bg-purple-500 hover:bg-purple-600 text-white shadow-lg' 
-                      : action.id === 'complete'
-                        ? 'bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-900/50 text-green-700 dark:text-green-300'
-                        : action.id === 'dismiss'
-                          ? 'text-gray-400 text-sm py-2'
-                          : 'bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200'
-                    }
-                  `}
-                >
-                  {action.label}
-                </button>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
     );

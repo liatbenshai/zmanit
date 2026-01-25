@@ -40,11 +40,6 @@ function FocusedDashboard() {
     audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleEs+m9LLqWs4JFCl3OsAAADv7+/v7+/v7+/v7+/v7+/v');
   }, []);
 
-  // ✅ טעינת משימות מחדש כשהדשבורד נטען
-  useEffect(() => {
-    loadTasks();
-  }, [loadTasks]);
-
   // בקשת הרשאה להתראות
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -61,36 +56,6 @@ function FocusedDashboard() {
       toast.success('🎯 משימה נבחרה - התחל לעבוד!');
     }
   }, []);
-
-  // ✅ בדיקה אם יש בקשת הארכה מפופאפ "הזמן נגמר"
-  useEffect(() => {
-    const checkExtendRequest = async () => {
-      try {
-        const extendData = localStorage.getItem('zmanit_extend_task');
-        if (extendData) {
-          const { taskId, minutes, timestamp } = JSON.parse(extendData);
-          // בודקים שהבקשה לא ישנה מדי (פחות מ-5 דקות)
-          if (Date.now() - timestamp < 5 * 60 * 1000) {
-            const task = tasks.find(t => t.id === taskId);
-            if (task) {
-              const newDuration = (task.estimated_duration || 30) + minutes;
-              await updateTask(taskId, { estimated_duration: newDuration });
-              toast.success(`⏱️ הוספנו ${minutes} דקות ל-${task.title}`, { duration: 3000 });
-              loadTasks();
-            }
-          }
-          localStorage.removeItem('zmanit_extend_task');
-        }
-      } catch (err) {
-        console.error('❌ שגיאה בטיפול בבקשת הארכה:', err);
-      }
-    };
-    
-    checkExtendRequest();
-    // בדיקה מחדש כל 2 שניות (למקרה שהמשתמש בוחר הארכה מפופאפ)
-    const interval = setInterval(checkExtendRequest, 2000);
-    return () => clearInterval(interval);
-  }, [tasks, updateTask, loadTasks]);
 
   const requestNotificationPermission = async () => {
     if ('Notification' in window) {
@@ -251,16 +216,8 @@ function FocusedDashboard() {
   // הארכת זמן
   const handleExtend = async (minutes) => {
     if (!taskToEnd) return;
-    try {
-      // 🔧 תיקון: עדכון estimated_duration במסד הנתונים
-      const newDuration = (taskToEnd.estimated_duration || 30) + minutes;
-      await updateTask(taskToEnd.id, { estimated_duration: newDuration });
-      toast.success(`⏱️ הוספנו ${minutes} דקות! (סה"כ ${newDuration} דק')`);
-      loadTasks(); // רענון המשימות
-    } catch (err) {
-      console.error('❌ שגיאה בהארכת זמן:', err);
-      toast.error('שגיאה בהארכת זמן');
-    }
+    // פשוט סוגרים את הדיאלוג - הטיימר ימשיך
+    toast(`⏰ עוד ${minutes} דקות!`);
     setShowEndDialog(false);
     setTaskToEnd(null);
   };

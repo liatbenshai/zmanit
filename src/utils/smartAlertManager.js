@@ -56,10 +56,7 @@ export class SmartAlertManager {
     this.taskStartTime = null;
     this.lastActivityTime = Date.now();
     this.idleThreshold = 5 * 60 * 1000;  // 5 דקות ללא פעילות
-    
-    // 🔧 תיקון: טעינת היסטוריה מ-localStorage
-    this.alertHistory = this.loadAlertHistory();
-    
+    this.alertHistory = [];
     this.callbacks = {
       onAlert: null,
       onPopup: null,
@@ -75,39 +72,6 @@ export class SmartAlertManager {
     this.taskSwitchCount = 0;
     this.lastTaskSwitch = null;
     this.procrastinationThreshold = 5;  // 5 החלפות ב-30 דקות = עיגול פינות
-  }
-  
-  // 🔧 חדש: טעינת היסטוריה מ-localStorage
-  loadAlertHistory() {
-    try {
-      const saved = localStorage.getItem('zmanit_alert_history');
-      if (saved) {
-        const history = JSON.parse(saved);
-        // 🔧 תיקון: מנקים התראות ישנות מ-15 דקות (לא 30)
-        const cutoff = Date.now() - 15 * 60 * 1000;
-        const filtered = history.filter(a => a.timestamp > cutoff);
-        
-        // שומרים את הגרסה המנוקה
-        if (filtered.length < history.length) {
-          localStorage.setItem('zmanit_alert_history', JSON.stringify(filtered));
-        }
-        
-        return filtered;
-      }
-    } catch (e) {
-      console.error('❌ loadAlertHistory error:', e);
-    }
-    return [];
-  }
-  
-  // 🔧 חדש: שמירת היסטוריה ל-localStorage
-  saveAlertHistory() {
-    try {
-      // שומרים רק 30 דקות אחרונות
-      const cutoff = Date.now() - 30 * 60 * 1000;
-      const recentHistory = this.alertHistory.filter(a => a.timestamp > cutoff);
-      localStorage.setItem('zmanit_alert_history', JSON.stringify(recentHistory));
-    } catch (e) {}
   }
   
   // ============================================
@@ -241,13 +205,10 @@ export class SmartAlertManager {
           }
         }
         
-        // עברנו את הזמן - צריך transition alert
+        // עברנו את הזמן
         if (timeToEnd < 0) {
-          // 🔧 תיקון: בודקים אם כבר שלחנו התראה זו!
-          if (!this.wasAlertSent(block.taskId, ALERT_TYPES.TRANSITION_NEEDED)) {
-            const nextBlock = this.findNextBlock(todayBlocks, block.endMinute);
-            alerts.push(this.createTransitionAlert(block, nextBlock));
-          }
+          const nextBlock = this.findNextBlock(todayBlocks, block.endMinute);
+          alerts.push(this.createTransitionAlert(block, nextBlock));
         }
       }
     }
@@ -491,9 +452,6 @@ export class SmartAlertManager {
       timestamp: Date.now()
     });
     
-    // 🔧 שמירה ל-localStorage
-    this.saveAlertHistory();
-    
     // קריאה לקולבק
     if (this.callbacks.onAlert) {
       this.callbacks.onAlert(alert);
@@ -544,10 +502,8 @@ export class SmartAlertManager {
           if (timerData) {
             try {
               const data = JSON.parse(timerData);
-              // 🔧 תיקון: גם מצב הפרעה נחשב כטיימר רץ!
-              if (data.isRunning === true || data.isInterrupted === true) {
-                console.log('🔇 smartAlertManager fallback: טיימר רץ - לא שולח',
-                            data.isInterrupted ? '(במצב הפרעה)' : '');
+              if (data.isRunning === true) {
+                console.log('🔇 smartAlertManager fallback: טיימר רץ - לא שולח');
                 return;
               }
             } catch (e) {}
@@ -581,13 +537,6 @@ export class SmartAlertManager {
   
   wasAlertSent(taskId, alertType) {
     const recentCutoff = Date.now() - 15 * 60 * 1000;  // 15 דקות
-    
-    // 🔧 וידוא שההיסטוריה עדכנית - תמיד טוען מ-localStorage
-    const freshHistory = this.loadAlertHistory();
-    if (freshHistory.length > this.alertHistory.length) {
-      this.alertHistory = freshHistory;
-    }
-    
     return this.alertHistory.some(a => 
       a.taskId === taskId && 
       a.type === alertType && 
