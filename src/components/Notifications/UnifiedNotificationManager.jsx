@@ -34,31 +34,43 @@ function toLocalISODate(date) {
 
 /**
  * בדיקה אם יש טיימר פעיל על משימה כלשהי
- * 🔧 תיקון: בודקים גם אם הטיימר באמת רץ, לא רק אם יש ID
- * 🔧 תיקון נוסף: מצב הפרעה נחשב גם כטיימר פעיל!
+ * 🔧 תיקון: סורק את כל הטיימרים ב-localStorage אם המפתח הראשי לא מסונכרן
  */
 function getActiveTaskId() {
   try {
+    // בדיקה ראשונה: המפתח הישיר
     const activeTimer = localStorage.getItem('zmanit_active_timer');
     if (activeTimer && activeTimer !== 'null' && activeTimer !== 'undefined') {
-      // 🔧 חשוב: בודקים אם הטיימר באמת רץ!
       const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
       if (timerData) {
         try {
           const data = JSON.parse(timerData);
-          // 🔧 תיקון: גם מצב הפרעה נחשב כטיימר פעיל!
-          // רק אם הטיימר באמת רץ (לא מושהה, לא נעצר) או במצב הפרעה
           if ((data.isRunning === true && data.startTime) || 
               (data.isInterrupted === true && data.startTime)) {
-            console.log('🔔 [Notifications] טיימר פעיל ורץ:', activeTimer, 
-                        data.isInterrupted ? '(במצב הפרעה)' : '');
             return activeTimer;
           }
         } catch (e) {}
       }
-      // אין נתוני טיימר או הטיימר לא רץ - מנקים
-      console.log('🔔 [Notifications] יש ID אבל הטיימר לא רץ');
     }
+    
+    // 🔧 חדש: סריקת כל המפתחות timer_v2_* למציאת טיימר פעיל
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('timer_v2_')) {
+        try {
+          const data = JSON.parse(localStorage.getItem(key));
+          if ((data.isRunning === true && data.startTime) || 
+              (data.isInterrupted === true && data.startTime)) {
+            const taskId = key.replace('timer_v2_', '');
+            // סנכרון המפתח הראשי
+            localStorage.setItem('zmanit_active_timer', taskId);
+            console.log('🔔 [getActiveTaskId] נמצא טיימר פעיל בסריקה:', taskId);
+            return taskId;
+          }
+        } catch (e) {}
+      }
+    }
+    
   } catch (e) {
     console.error('🔔 [Notifications] שגיאה בבדיקת טיימר:', e);
   }
@@ -217,17 +229,35 @@ export function useUnifiedNotifications() {
   const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
     const now = Date.now();
     const key = `${taskId}-${type}`;
-    const lastNotified = lastNotifiedRef.current[key];
     
-    if (!lastNotified) return true;
-    
-    const minutesSinceLastNotification = (now - lastNotified) / (1000 * 60);
-    return minutesSinceLastNotification >= minIntervalMinutes;
+    // 🔧 תיקון: קריאה מ-localStorage במקום ref (כדי לשמור בין renders)
+    try {
+      const storedData = localStorage.getItem('zmanit_last_notified');
+      const lastNotifiedData = storedData ? JSON.parse(storedData) : {};
+      const lastNotified = lastNotifiedData[key];
+      
+      if (!lastNotified) return true;
+      
+      const minutesSinceLastNotification = (now - lastNotified) / (1000 * 60);
+      return minutesSinceLastNotification >= minIntervalMinutes;
+    } catch (e) {
+      return true;
+    }
   }, []);
   
   // ✅ סימון שנשלחה התראה
   const markNotified = useCallback((taskId, type) => {
     const key = `${taskId}-${type}`;
+    
+    // 🔧 תיקון: שמירה ב-localStorage במקום ref
+    try {
+      const storedData = localStorage.getItem('zmanit_last_notified');
+      const lastNotifiedData = storedData ? JSON.parse(storedData) : {};
+      lastNotifiedData[key] = Date.now();
+      localStorage.setItem('zmanit_last_notified', JSON.stringify(lastNotifiedData));
+    } catch (e) {}
+    
+    // גם שומרים ב-ref לתאימות אחורה
     lastNotifiedRef.current[key] = Date.now();
   }, []);
   
@@ -513,6 +543,13 @@ export function useUnifiedNotifications() {
     
     // בדיקה אם יש טיימר פעיל (רץ, לא בהשהיה)
     const activeTaskId = getActiveTaskId();
+    
+    console.log('🔔 [checkAndNotify] בדיקה:', { 
+      isWorkHours, 
+      activeTaskId, 
+      noTimerEnabled: settings.noTimerReminder?.enabled,
+      currentMinutes
+    });
     
     // ✅ בדיקת שעות עבודה (08:30-16:15, ימים א-ה)
     const isWorkDay = dayOfWeek >= 0 && dayOfWeek <= 4; // ראשון עד חמישי

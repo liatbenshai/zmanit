@@ -60,6 +60,9 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
   const elapsedSecondsRef = useRef(0);
   const isRunningRef = useRef(false);
   const previousTaskIdRef = useRef(currentTask?.id);
+  
+  // 🔧 חדש: מניעת שמירה לפני שהטעינה הושלמה
+  const isInitializedRef = useRef(false);
 
   // מפתח localStorage
   const timerStorageKey = currentTask ? `timer_v2_${currentTask.id}` : null;
