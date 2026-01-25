@@ -56,7 +56,10 @@ export class SmartAlertManager {
     this.taskStartTime = null;
     this.lastActivityTime = Date.now();
     this.idleThreshold = 5 * 60 * 1000;  // 5 דקות ללא פעילות
-    this.alertHistory = [];
+    
+    // 🔧 תיקון: טעינת היסטוריה מ-localStorage
+    this.alertHistory = this.loadAlertHistory();
+    
     this.callbacks = {
       onAlert: null,
       onPopup: null,
@@ -72,6 +75,35 @@ export class SmartAlertManager {
     this.taskSwitchCount = 0;
     this.lastTaskSwitch = null;
     this.procrastinationThreshold = 5;  // 5 החלפות ב-30 דקות = עיגול פינות
+  }
+  
+  // 🔧 חדש: טעינת היסטוריה מ-localStorage
+  loadAlertHistory() {
+    try {
+      const saved = localStorage.getItem('zmanit_alert_history');
+      if (saved) {
+        const history = JSON.parse(saved);
+        // מנקים התראות ישנות מ-30 דקות
+        const cutoff = Date.now() - 30 * 60 * 1000;
+        const filtered = history.filter(a => a.timestamp > cutoff);
+        console.log('📥 loadAlertHistory:', filtered.length, 'התראות');
+        return filtered;
+      }
+    } catch (e) {
+      console.error('❌ loadAlertHistory error:', e);
+    }
+    console.log('📥 loadAlertHistory: ריק');
+    return [];
+  }
+  
+  // 🔧 חדש: שמירת היסטוריה ל-localStorage
+  saveAlertHistory() {
+    try {
+      // שומרים רק 30 דקות אחרונות
+      const cutoff = Date.now() - 30 * 60 * 1000;
+      const recentHistory = this.alertHistory.filter(a => a.timestamp > cutoff);
+      localStorage.setItem('zmanit_alert_history', JSON.stringify(recentHistory));
+    } catch (e) {}
   }
   
   // ============================================
@@ -205,10 +237,13 @@ export class SmartAlertManager {
           }
         }
         
-        // עברנו את הזמן
+        // עברנו את הזמן - צריך transition alert
         if (timeToEnd < 0) {
-          const nextBlock = this.findNextBlock(todayBlocks, block.endMinute);
-          alerts.push(this.createTransitionAlert(block, nextBlock));
+          // 🔧 תיקון: בודקים אם כבר שלחנו התראה זו!
+          if (!this.wasAlertSent(block.taskId, ALERT_TYPES.TRANSITION_NEEDED)) {
+            const nextBlock = this.findNextBlock(todayBlocks, block.endMinute);
+            alerts.push(this.createTransitionAlert(block, nextBlock));
+          }
         }
       }
     }
@@ -446,11 +481,17 @@ export class SmartAlertManager {
   // ============================================
   
   dispatchAlert(alert) {
+    console.log('📤 dispatchAlert:', alert.type, alert.taskId, alert.title);
+    
     // שמירה בהיסטוריה
     this.alertHistory.push({
       ...alert,
       timestamp: Date.now()
     });
+    
+    // 🔧 שמירה ל-localStorage
+    this.saveAlertHistory();
+    console.log('💾 נשמרה היסטוריה, אורך:', this.alertHistory.length);
     
     // קריאה לקולבק
     if (this.callbacks.onAlert) {
@@ -539,11 +580,22 @@ export class SmartAlertManager {
   
   wasAlertSent(taskId, alertType) {
     const recentCutoff = Date.now() - 15 * 60 * 1000;  // 15 דקות
-    return this.alertHistory.some(a => 
+    
+    // 🔧 וידוא שההיסטוריה עדכנית - תמיד טוען מ-localStorage
+    const freshHistory = this.loadAlertHistory();
+    if (freshHistory.length > this.alertHistory.length) {
+      this.alertHistory = freshHistory;
+    }
+    
+    const found = this.alertHistory.some(a => 
       a.taskId === taskId && 
       a.type === alertType && 
       a.timestamp > recentCutoff
     );
+    
+    console.log('🔍 wasAlertSent:', { taskId, alertType, found, historyLength: this.alertHistory.length });
+    
+    return found;
   }
   
   findNextBlock(blocks, afterMinute) {
