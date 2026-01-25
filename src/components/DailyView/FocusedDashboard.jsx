@@ -40,6 +40,11 @@ function FocusedDashboard() {
     audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleEs+m9LLqWs4JFCl3OsAAADv7+/v7+/v7+/v7+/v7+/v');
   }, []);
 
+  // ✅ טעינת משימות מחדש כשהדשבורד נטען
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
+
   // בקשת הרשאה להתראות
   useEffect(() => {
     if ('Notification' in window && Notification.permission === 'granted') {
@@ -246,8 +251,16 @@ function FocusedDashboard() {
   // הארכת זמן
   const handleExtend = async (minutes) => {
     if (!taskToEnd) return;
-    // פשוט סוגרים את הדיאלוג - הטיימר ימשיך
-    toast(`⏰ עוד ${minutes} דקות!`);
+    try {
+      // 🔧 תיקון: עדכון estimated_duration במסד הנתונים
+      const newDuration = (taskToEnd.estimated_duration || 30) + minutes;
+      await updateTask(taskToEnd.id, { estimated_duration: newDuration });
+      toast.success(`⏱️ הוספנו ${minutes} דקות! (סה"כ ${newDuration} דק')`);
+      loadTasks(); // רענון המשימות
+    } catch (err) {
+      console.error('❌ שגיאה בהארכת זמן:', err);
+      toast.error('שגיאה בהארכת זמן');
+    }
     setShowEndDialog(false);
     setTaskToEnd(null);
   };
