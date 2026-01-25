@@ -67,7 +67,6 @@ function SmartDashboard() {
 
   // ✅ טעינת משימות מחדש כשהדשבורד נטען
   useEffect(() => {
-    console.log('🏠 SmartDashboard: טוען משימות...');
     loadTasks();
   }, [loadTasks]);
 
@@ -85,25 +84,15 @@ function SmartDashboard() {
   const todayTasks = useMemo(() => {
     if (!tasks) return { remaining: [], completed: [], all: [] };
     const all = tasks.filter(t => t.due_date === todayISO && !t.deleted_at);
-    const remaining = all.filter(t => !t.is_completed);
-    const completed = all.filter(t => t.is_completed);
-    
-    console.log('🏠 SmartDashboard todayTasks:', {
-      total: all.length,
-      remaining: remaining.length,
-      completed: completed.length,
-      firstRemaining: remaining[0]?.title
-    });
-    
     return {
       all,
-      remaining: remaining.sort((a, b) => {
+      remaining: all.filter(t => !t.is_completed).sort((a, b) => {
         if (a.priority === 'urgent' && b.priority !== 'urgent') return -1;
         if (b.priority === 'urgent' && a.priority !== 'urgent') return 1;
         if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
         return 0;
       }),
-      completed
+      completed: all.filter(t => t.is_completed)
     };
   }, [tasks, todayISO, dataVersion]);
 
