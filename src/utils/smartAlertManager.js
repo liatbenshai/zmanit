@@ -83,16 +83,20 @@ export class SmartAlertManager {
       const saved = localStorage.getItem('zmanit_alert_history');
       if (saved) {
         const history = JSON.parse(saved);
-        // מנקים התראות ישנות מ-30 דקות
-        const cutoff = Date.now() - 30 * 60 * 1000;
+        // 🔧 תיקון: מנקים התראות ישנות מ-15 דקות (לא 30)
+        const cutoff = Date.now() - 15 * 60 * 1000;
         const filtered = history.filter(a => a.timestamp > cutoff);
-        console.log('📥 loadAlertHistory:', filtered.length, 'התראות');
+        
+        // שומרים את הגרסה המנוקה
+        if (filtered.length < history.length) {
+          localStorage.setItem('zmanit_alert_history', JSON.stringify(filtered));
+        }
+        
         return filtered;
       }
     } catch (e) {
       console.error('❌ loadAlertHistory error:', e);
     }
-    console.log('📥 loadAlertHistory: ריק');
     return [];
   }
   
@@ -481,8 +485,6 @@ export class SmartAlertManager {
   // ============================================
   
   dispatchAlert(alert) {
-    console.log('📤 dispatchAlert:', alert.type, alert.taskId, alert.title);
-    
     // שמירה בהיסטוריה
     this.alertHistory.push({
       ...alert,
@@ -491,7 +493,6 @@ export class SmartAlertManager {
     
     // 🔧 שמירה ל-localStorage
     this.saveAlertHistory();
-    console.log('💾 נשמרה היסטוריה, אורך:', this.alertHistory.length);
     
     // קריאה לקולבק
     if (this.callbacks.onAlert) {
@@ -587,15 +588,11 @@ export class SmartAlertManager {
       this.alertHistory = freshHistory;
     }
     
-    const found = this.alertHistory.some(a => 
+    return this.alertHistory.some(a => 
       a.taskId === taskId && 
       a.type === alertType && 
       a.timestamp > recentCutoff
     );
-    
-    console.log('🔍 wasAlertSent:', { taskId, alertType, found, historyLength: this.alertHistory.length });
-    
-    return found;
   }
   
   findNextBlock(blocks, afterMinute) {

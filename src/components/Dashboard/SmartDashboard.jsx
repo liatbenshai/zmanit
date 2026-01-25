@@ -53,7 +53,7 @@ const HEBREW_DAY_NAMES = ['ראשון', 'שני', 'שלישי', 'רביעי', '�
 // ========================================
 
 function SmartDashboard() {
-  const { tasks, loading, editTask, addTask, dataVersion } = useTasks();
+  const { tasks, loading, editTask, addTask, dataVersion, loadTasks } = useTasks();
   const { user } = useAuth();
   
   // State
@@ -64,6 +64,11 @@ function SmartDashboard() {
   
   const today = new Date();
   const todayISO = today.toISOString().split('T')[0];
+
+  // ✅ טעינת משימות מחדש כשהדשבורד נטען
+  useEffect(() => {
+    loadTasks();
+  }, [loadTasks]);
 
   // טעינת הערות מ-localStorage
   useEffect(() => {
@@ -89,7 +94,7 @@ function SmartDashboard() {
       }),
       completed: all.filter(t => t.is_completed)
     };
-  }, [tasks, todayISO]);
+  }, [tasks, todayISO, dataVersion]);
 
   // סטטיסטיקות היום
   const stats = useMemo(() => {

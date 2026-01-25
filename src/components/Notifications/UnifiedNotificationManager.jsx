@@ -544,13 +544,6 @@ export function useUnifiedNotifications() {
     // בדיקה אם יש טיימר פעיל (רץ, לא בהשהיה)
     const activeTaskId = getActiveTaskId();
     
-    console.log('🔔 [checkAndNotify] בדיקה:', { 
-      isWorkHours, 
-      activeTaskId, 
-      noTimerEnabled: settings.noTimerReminder?.enabled,
-      currentMinutes
-    });
-    
     // ✅ בדיקת שעות עבודה (08:30-16:15, ימים א-ה)
     const isWorkDay = dayOfWeek >= 0 && dayOfWeek <= 4; // ראשון עד חמישי
     const workStart = 8.5 * 60;  // 08:30
@@ -718,13 +711,34 @@ export function useUnifiedNotifications() {
   useEffect(() => {
     // 🔧 תיקון: לא עוצרים אם אין הרשאה - פשוט מציגים toast במקום Push
     
-    // בדיקה ראשונית
-    checkAndNotify();
+    // ✅ ניקוי היסטוריית התראות ישנה (יותר משעה)
+    try {
+      const cleanupHistory = (key) => {
+        const saved = localStorage.getItem(key);
+        if (saved) {
+          const history = JSON.parse(saved);
+          const cutoff = Date.now() - 60 * 60 * 1000; // שעה
+          const filtered = history.filter(a => a.timestamp > cutoff);
+          if (filtered.length < history.length) {
+            localStorage.setItem(key, JSON.stringify(filtered));
+            console.log(`🧹 נוקתה היסטוריה ${key}: ${history.length} -> ${filtered.length}`);
+          }
+        }
+      };
+      cleanupHistory('zmanit_alert_history');
+      cleanupHistory('zmanit_last_notified');
+    } catch (e) {}
+    
+    // 🔧 השהייה קצרה לפני בדיקה ראשונית - נותן זמן ל-state להתייצב
+    const initialTimeout = setTimeout(() => {
+      checkAndNotify();
+    }, 2000);
     
     // בדיקה כל 30 שניות
     checkIntervalRef.current = setInterval(checkAndNotify, 30 * 1000);
     
     return () => {
+      clearTimeout(initialTimeout);
       if (checkIntervalRef.current) {
         clearInterval(checkIntervalRef.current);
       }
