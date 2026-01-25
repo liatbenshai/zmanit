@@ -35,6 +35,7 @@ function toLocalISODate(date) {
 /**
  * בדיקה אם יש טיימר פעיל על משימה כלשהי
  * 🔧 תיקון: בודקים גם אם הטיימר באמת רץ, לא רק אם יש ID
+ * 🔧 תיקון נוסף: מצב הפרעה נחשב גם כטיימר פעיל!
  */
 function getActiveTaskId() {
   try {
@@ -45,9 +46,12 @@ function getActiveTaskId() {
       if (timerData) {
         try {
           const data = JSON.parse(timerData);
-          // רק אם הטיימר באמת רץ (לא מושהה, לא נעצר)
-          if (data.isRunning === true && data.startTime) {
-            console.log('🔔 [Notifications] טיימר פעיל ורץ:', activeTimer);
+          // 🔧 תיקון: גם מצב הפרעה נחשב כטיימר פעיל!
+          // רק אם הטיימר באמת רץ (לא מושהה, לא נעצר) או במצב הפרעה
+          if ((data.isRunning === true && data.startTime) || 
+              (data.isInterrupted === true && data.startTime)) {
+            console.log('🔔 [Notifications] טיימר פעיל ורץ:', activeTimer, 
+                        data.isInterrupted ? '(במצב הפרעה)' : '');
             return activeTimer;
           }
         } catch (e) {}

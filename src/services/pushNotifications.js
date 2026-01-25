@@ -54,10 +54,12 @@ export function sendLocalNotification(title, options = {}) {
     if (timerData) {
       try {
         const data = JSON.parse(timerData);
-        if (data.isRunning === true) {
-          // טיימר רץ - בודקים אם זו התראה על משימה אחרת
+        // 🔧 תיקון: גם מצב הפרעה נחשב כטיימר רץ!
+        if (data.isRunning === true || data.isInterrupted === true) {
+          // טיימר רץ או במצב הפרעה - בודקים אם זו התראה על משימה אחרת
           if (taskId && activeTimer !== taskId) {
-            console.log('🔇 pushNotifications: טיימר רץ - לא שולח התראה על משימה אחרת');
+            console.log('🔇 pushNotifications: טיימר רץ - לא שולח התראה על משימה אחרת',
+                        data.isInterrupted ? '(במצב הפרעה)' : '');
             return null;
           }
         }

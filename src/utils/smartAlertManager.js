@@ -502,8 +502,10 @@ export class SmartAlertManager {
           if (timerData) {
             try {
               const data = JSON.parse(timerData);
-              if (data.isRunning === true) {
-                console.log('🔇 smartAlertManager fallback: טיימר רץ - לא שולח');
+              // 🔧 תיקון: גם מצב הפרעה נחשב כטיימר רץ!
+              if (data.isRunning === true || data.isInterrupted === true) {
+                console.log('🔇 smartAlertManager fallback: טיימר רץ - לא שולח',
+                            data.isInterrupted ? '(במצב הפרעה)' : '');
                 return;
               }
             } catch (e) {}

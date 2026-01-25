@@ -102,6 +102,30 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
             return;
           }
           
+          // 🔧 תיקון חדש: שחזור מצב הפרעה
+          if (data.isInterrupted && data.startTime && data.isRunning) {
+            const start = new Date(data.startTime);
+            const interruptStart = data.interruptionStart ? new Date(data.interruptionStart) : new Date();
+            const interruptElapsed = Math.floor((new Date() - interruptStart) / 1000);
+            
+            // שחזור כל המצב של ההפרעה
+            setStartTime(start);
+            setIsRunning(true);
+            setIsPaused(false);
+            setIsInterrupted(true);
+            setInterruptionType(data.interruptionType);
+            setInterruptionStart(interruptStart);
+            setInterruptionSeconds(interruptElapsed);
+            setTotalInterruptionSeconds(data.totalInterruptionSeconds || 0);
+            setInterruptions(data.interruptions || []);
+            
+            // שמירת מצב טיימר פעיל - חשוב שההתראות ידעו שיש טיימר
+            localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
+            console.log('⚡ הפרעה שוחזרה! משימה:', currentTask?.id);
+            toast.success(`⚡ הפרעה חודשה! עברו ${Math.floor(interruptElapsed / 60)} דקות`);
+            return;
+          }
+          
           if (data.startTime && data.isRunning && !data.isInterrupted) {
             const start = new Date(data.startTime);
             const elapsed = Math.floor((new Date() - start) / 1000);
