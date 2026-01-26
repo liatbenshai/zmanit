@@ -3,6 +3,7 @@ import { updateSubtaskProgress } from '../../services/supabase';
 import { useTasks } from '../../hooks/useTasks';
 import { saveCompletedTask } from '../../utils/learningEngine';
 import { InterruptionButton } from '../Learning/InterruptionLogger';
+import TimerEndDialog from '../ADHD/TimerEndDialog';
 import toast from 'react-hot-toast';
 import Button from '../UI/Button';
 
@@ -29,6 +30,7 @@ function TaskTimer({ task, onUpdate, onComplete }) {
   const [originalStartTime, setOriginalStartTime] = useState(null); // זמן התחלה מקורי שלא מתאפס
   const [targetMinutes, setTargetMinutes] = useState(30); // זמן יעד - נעדכן ב-useEffect
   const [hasReachedTarget, setHasReachedTarget] = useState(false);
+  const [showEndDialog, setShowEndDialog] = useState(false); // ✅ חדש: פופאפ סיום זמן
   const intervalRef = useRef(null);
   const audioRef = useRef(null);
   // מניעת שמירות כפולות במקביל - עם timeout אוטומטי
@@ -51,6 +53,46 @@ function TaskTimer({ task, onUpdate, onComplete }) {
 
   // פונקציית saveProgress מוגדרת כאן כדי שתהיה זמינה ל-useEffect
   const saveProgressRef = useRef(null);
+
+  // ✅ פונקציות עזר לסנכרון עם מנהל ההתראות
+  // מנהל ההתראות מחפש את הנתונים בפורמט הזה
+  const syncTimerToNotificationManager = useCallback((taskId, running, startTimeValue, accumulatedMs = 0) => {
+    if (!taskId) return;
+    
+    try {
+      // שמירת מזהה המשימה הפעילה
+      if (running) {
+        localStorage.setItem('zmanit_active_timer', taskId);
+      } else {
+        localStorage.removeItem('zmanit_active_timer');
+      }
+      
+      // שמירת נתוני הטיימר בפורמט שמנהל ההתראות מצפה לו
+      const timerData = {
+        isRunning: running,
+        startTime: startTimeValue ? startTimeValue.toISOString() : null,
+        accumulatedTime: accumulatedMs,
+        elapsed: accumulatedMs
+      };
+      localStorage.setItem(`timer_v2_${taskId}`, JSON.stringify(timerData));
+      
+      console.log('🔄 [Timer] סנכרון עם מנהל ההתראות:', { taskId, running, accumulatedMs });
+    } catch (e) {
+      console.error('🔄 [Timer] שגיאה בסנכרון:', e);
+    }
+  }, []);
+  
+  const clearTimerFromNotificationManager = useCallback((taskId) => {
+    if (!taskId) return;
+    
+    try {
+      localStorage.removeItem('zmanit_active_timer');
+      localStorage.removeItem(`timer_v2_${taskId}`);
+      console.log('🔄 [Timer] ניקוי מנהל ההתראות:', taskId);
+    } catch (e) {
+      console.error('🔄 [Timer] שגיאה בניקוי:', e);
+    }
+  }, []);
 
   // צפצוף/התראה
   const playAlarm = () => {
@@ -129,6 +171,9 @@ function TaskTimer({ task, onUpdate, onComplete }) {
             // אם אין, נשתמש ב-startTime כ-originalStartTime
             setOriginalStartTime(start);
           }
+          
+          // ✅ סנכרון עם מנהל ההתראות - טיימר חודש
+          syncTimerToNotificationManager(currentTask.id, true, start, elapsed * 1000);
 
           toast.success(`⏰ טיימר חודש! עברו ${Math.floor(elapsed / 60)} דקות`, {
             duration: 3000
@@ -148,10 +193,12 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         } else {
           localStorage.removeItem(timerStorageKey);
           localStorage.removeItem(`${timerStorageKey}_original`);
+          // ✅ ניקוי ממנהל ההתראות
+          clearTimerFromNotificationManager(currentTask.id);
         }
       }
     }
-  }, [currentTask?.id, timerStorageKey]);
+  }, [currentTask?.id, timerStorageKey, syncTimerToNotificationManager, clearTimerFromNotificationManager]);
 
   // עדכון זמן כל שנייה
   useEffect(() => {
@@ -219,9 +266,9 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     }
   }, [elapsedSeconds, isRunning]);
 
-  // בדיקת הגעה ליעד זמן - אבל לא עוצר את הטיימר, רק מציג הודעה
+  // בדיקת הגעה ליעד זמן - עוצר את הטיימר ומציג פופאפ בחירה
   useEffect(() => {
-    if (isRunning && targetMinutes > 0 && !hasReachedTarget) {
+    if (isRunning && targetMinutes > 0 && !hasReachedTarget && !showEndDialog) {
       const targetMinutesTotal = targetMinutes;
       
       // חישוב הזמן הכולל: time_spent + הזמן מהסשן הנוכחי
@@ -243,13 +290,12 @@ function TaskTimer({ task, onUpdate, onComplete }) {
       
       if (totalMinutes >= targetMinutesTotal) {
         setHasReachedTarget(true);
-        // לא עוצרים את הטיימר - ממשיכים לעבוד מעבר ליעד!
+        // ✅ עוצרים את הטיימר ומציגים פופאפ בחירה
+        setIsRunning(false);
         playAlarm();
-        toast.success(`⏰ הגעת ליעד של ${targetMinutes} דקות! ממשיכים לעבוד...`, {
-          duration: 5000,
-          icon: '🎉'
-        });
-        // שמירה אוטומטית כשמגיעים ליעד (בלי לעצור)
+        setShowEndDialog(true);
+        
+        // שמירה אוטומטית כשמגיעים ליעד
         if (saveProgressRef.current) {
           saveProgressRef.current(false, true).catch(err => {
             console.warn('⚠️ שמירה אוטומטית נכשלה:', err);
@@ -257,7 +303,7 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         }
       }
     }
-  }, [elapsedSeconds, isRunning, targetMinutes, hasReachedTarget, startTime, originalStartTime, timeSpent]);
+  }, [elapsedSeconds, isRunning, targetMinutes, hasReachedTarget, showEndDialog, startTime, originalStartTime, timeSpent]);
 
   // Early return AFTER all hooks are called
   if (!task || !task.id || !currentTask) {
@@ -347,12 +393,21 @@ function TaskTimer({ task, onUpdate, onComplete }) {
         }
       }
       setIsRunning(true);
+      
+      // ✅ סנכרון עם מנהל ההתראות
+      const timerStartTime = startTime || now;
+      syncTimerToNotificationManager(currentTask?.id, true, timerStartTime, elapsedSeconds * 1000);
+      
       toast.success('טיימר הופעל');
     }
   };
   
   const pauseTimer = async () => {
     setIsRunning(false);
+    
+    // ✅ סנכרון עם מנהל ההתראות - טיימר מושהה
+    const accumulatedMs = elapsedSeconds * 1000;
+    syncTimerToNotificationManager(currentTask?.id, false, startTime, accumulatedMs);
     
     // ✅ שמירת הזמן שעבד עד עכשיו
     if (elapsedSeconds >= 60) {
@@ -394,6 +449,8 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     // ניקוי מ-localStorage
     if (currentTask?.id) {
       localStorage.removeItem(timerStorageKey);
+      // ✅ ניקוי ממנהל ההתראות
+      clearTimerFromNotificationManager(currentTask.id);
     }
     
     setElapsedSeconds(0);
@@ -411,6 +468,8 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     if (currentTask?.id) {
       localStorage.removeItem(timerStorageKey);
       localStorage.removeItem(`${timerStorageKey}_original`);
+      // ✅ ניקוי ממנהל ההתראות
+      clearTimerFromNotificationManager(currentTask.id);
     }
   };
 
@@ -553,7 +612,11 @@ function TaskTimer({ task, onUpdate, onComplete }) {
   const continueAfterTarget = () => {
     // לא מאפסים את הזמן - ממשיכים מהזמן הנוכחי!
     setHasReachedTarget(false);
-    // הטיימר כבר רץ, רק מסירים את הדגל
+    setIsRunning(true);
+    
+    // ✅ סנכרון עם מנהל ההתראות - טיימר ממשיך לרוץ
+    syncTimerToNotificationManager(currentTask?.id, true, startTime, elapsedSeconds * 1000);
+    
     toast.success('ממשיכים לעבוד מעבר ליעד!');
   };
   
@@ -566,6 +629,82 @@ function TaskTimer({ task, onUpdate, onComplete }) {
       return `${hours}:${minutes.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
     }
     return `${minutes}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // ✅ פונקציות טיפול בפופאפ סיום זמן
+  const handleDialogComplete = async () => {
+    // סיום מלא של המשימה
+    setShowEndDialog(false);
+    try {
+      const result = await saveProgress(true, true);
+      if (result && result.success) {
+        resetTimer();
+        toast.success('✅ מעולה! המשימה הושלמה', { duration: 3000 });
+        if (onComplete) {
+          onComplete();
+        }
+      }
+    } catch (err) {
+      console.error('שגיאה בסיום משימה:', err);
+      toast.error('שגיאה בשמירה');
+    }
+  };
+  
+  const handleDialogExtend = (extraMinutes) => {
+    // הוספת זמן נוסף
+    setShowEndDialog(false);
+    setTargetMinutes(prev => prev + extraMinutes);
+    setHasReachedTarget(false);
+    setIsRunning(true);
+    
+    // ✅ סנכרון עם מנהל ההתראות - טיימר ממשיך לרוץ
+    syncTimerToNotificationManager(currentTask?.id, true, startTime, elapsedSeconds * 1000);
+    
+    toast.success(`⏱️ נוספו ${extraMinutes} דקות. המשך לעבוד!`, { duration: 3000 });
+  };
+  
+  const handleDialogPartial = async (progressPercent) => {
+    // התקדמות חלקית - שומר ועוצר
+    setShowEndDialog(false);
+    try {
+      const result = await saveProgress(true, true);
+      if (result && result.success) {
+        resetTimer();
+        toast.success(`📊 נשמר! התקדמת ${progressPercent}%`, { duration: 3000 });
+      }
+    } catch (err) {
+      console.error('שגיאה בשמירה:', err);
+      toast.error('שגיאה בשמירה');
+    }
+  };
+  
+  const handleDialogStuck = async () => {
+    // נתקע - שומר את הזמן ועוצר
+    setShowEndDialog(false);
+    try {
+      const result = await saveProgress(true, true);
+      if (result && result.success) {
+        resetTimer();
+        toast('😵 קורה! קח הפסקה או עבור למשימה אחרת', { 
+          duration: 4000,
+          icon: '💪'
+        });
+      }
+    } catch (err) {
+      console.error('שגיאה בשמירה:', err);
+    }
+  };
+  
+  const handleDialogDismiss = () => {
+    // סגירה בלי פעולה - ממשיך לעבוד
+    setShowEndDialog(false);
+    setHasReachedTarget(false);
+    setIsRunning(true);
+    
+    // ✅ סנכרון עם מנהל ההתראות - טיימר ממשיך לרוץ
+    syncTimerToNotificationManager(currentTask?.id, true, startTime, elapsedSeconds * 1000);
+    
+    toast('ממשיכים לעבוד...', { duration: 2000 });
   };
   
   const displayTime = isTargetReached ? elapsedSeconds : (targetMinutes * 60 - elapsedSeconds);
@@ -896,6 +1035,18 @@ function TaskTimer({ task, onUpdate, onComplete }) {
           💡 הטיימר מושהה - תוכל לחזור או לעבור למשימה אחרת
         </p>
       )}
+      
+      {/* ✅ פופאפ סיום זמן */}
+      <TimerEndDialog
+        isOpen={showEndDialog}
+        task={currentTask}
+        elapsedTime={currentSessionMinutes}
+        onComplete={handleDialogComplete}
+        onExtend={handleDialogExtend}
+        onPartial={handleDialogPartial}
+        onStuck={handleDialogStuck}
+        onDismiss={handleDialogDismiss}
+      />
     </div>
   );
 }
