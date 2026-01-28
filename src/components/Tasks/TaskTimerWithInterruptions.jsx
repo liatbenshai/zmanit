@@ -574,21 +574,24 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     }
   };
 
-  // 🔧 תיקון: עצירה ושמירה - ניקוי מלא
+  // 🔧 תיקון: עצירה ושמירה - שמירה קודם, ניקוי אחר כך!
   const stopAndSaveRef = useRef(null);
   
   const stopAndSave = async (e) => {
     if (e) e.stopPropagation();
     
-    // 🔧 תיקון: ניקוי כל המצבים
+    // 🔧 תיקון חשוב: שומרים קודם!
+    console.log('🔴 טיימר נעצר! שומרים לפני ניקוי...');
+    const result = await saveProgress(true);
+    
+    // 🔧 תיקון: ניקוי רק אחרי שמירה מוצלחת!
     const currentActiveTimer = localStorage.getItem('zmanit_active_timer');
     if (currentActiveTimer === currentTask?.id) {
       localStorage.removeItem('zmanit_active_timer');
     }
     localStorage.removeItem('zmanit_focus_paused');
+    console.log('🔴 ניקוי localStorage אחרי שמירה');
     
-    console.log('🔴 טיימר נעצר! נמחק מ-localStorage');
-    const result = await saveProgress(true);
     if (result?.success) {
       toast.success(`💾 נשמר! ${result.minutesToAdd} דקות נוספו`);
     }

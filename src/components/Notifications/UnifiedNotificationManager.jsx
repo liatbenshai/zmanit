@@ -25,6 +25,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useAuth } from '../../hooks/useAuth';
 import alertManager, { ALERT_TYPES, ALERT_PRIORITY } from '../../utils/smartAlertManager';
+import OverdueTaskPopup from './OverdueTaskPopup';
 import toast from 'react-hot-toast';
 
 /**
@@ -241,9 +242,18 @@ export function useUnifiedNotifications() {
   // ✅ חדש: מצב פופאפ דחיינות
   const [procrastinationPopup, setProcrastinationPopup] = useState(null);
   
+  // 🔧 חדש: מצב פופאפ משימה באיחור
+  const [overdueTaskPopup, setOverdueTaskPopup] = useState(null);
+  
   // refs למניעת התראות כפולות
   const lastNotifiedRef = useRef({});
   const checkIntervalRef = useRef(null);
+  
+  // 🔧 חדש: זמן התחלת הסשן - להוספת grace period
+  const sessionStartRef = useRef(Date.now());
+  
+  // 🔧 חדש: מעקב אחר מצב טיימר קודם
+  const prevTimerStateRef = useRef(null);
   
   // ✅ חדש: קריאת הגדרות מותאמות
   const getNotificationSettings = useCallback(() => {
@@ -302,6 +312,16 @@ export function useUnifiedNotifications() {
         // ✅ שמירה להיסטוריה
         logNotificationToHistory(alert.type, alert.title, alert.message);
         
+        // 🔧 טיפול מיוחד במשימה באיחור - פופאפ מותאם
+        if (alert.type === ALERT_TYPES.TASK_OVERDUE && alert.taskId) {
+          // מוצאים את המשימה
+          const overdueTask = tasks?.find(t => t.id === alert.taskId);
+          if (overdueTask) {
+            setOverdueTaskPopup(overdueTask);
+            return; // לא מציגים את הפופאפ הרגיל
+          }
+        }
+        
         // הצגת פופאפ
         if (alert.blockingPopup) {
           setActiveAlert(alert);
@@ -335,11 +355,19 @@ export function useUnifiedNotifications() {
   }, []);
   
   // ✅ בדיקה אם ניתן לשלוח התראה (מניעת כפילויות)
-  // 🔧 תיקון: כשמשימה מתעדכנת (זמן חדש), מאפשרים התראה חדשה
+  // 🔧 תיקון: grace period של 2 דקות בהתחלה + מרווח בין התראות
   const canNotify = useCallback((taskId, type, minIntervalMinutes) => {
     const now = Date.now();
     const key = `${taskId}-${type}`;
     const lastNotified = lastNotifiedRef.current[key];
+    
+    // 🔧 חדש: grace period - לא שולחים התראות ב-2 דקות הראשונות
+    const GRACE_PERIOD_MS = 2 * 60 * 1000; // 2 דקות
+    const timeSinceSessionStart = now - sessionStartRef.current;
+    if (timeSinceSessionStart < GRACE_PERIOD_MS) {
+      console.log('🔔 [Notifications] בתוך grace period - לא שולחים התראה');
+      return false;
+    }
     
     if (!lastNotified) return true;
     
@@ -622,6 +650,17 @@ export function useUnifiedNotifications() {
     const timerInfo = getActiveTimerInfo();
     const hasActiveTimer = timerInfo !== null; // כולל מושהה
     const hasRunningTimer = timerInfo?.isRunning === true; // רק רץ
+    
+    // 🔧 חדש: איפוס grace period כשטיימר נעצר/מופעל
+    // (כדי שההתראה תקפוץ רק 2 דקות אחרי שהטיימר נעצר)
+    if (prevTimerStateRef.current !== null && prevTimerStateRef.current !== hasActiveTimer) {
+      if (!hasActiveTimer) {
+        // טיימר נעצר - מתחילים grace period חדש
+        sessionStartRef.current = Date.now();
+        console.log('🔔 [Notifications] טיימר נעצר - מתחיל grace period חדש');
+      }
+    }
+    prevTimerStateRef.current = hasActiveTimer;
     
     // ✅ בדיקת אירועי יומן גוגל
     if (settings.calendarReminder?.enabled) {
@@ -924,7 +963,10 @@ export function useUnifiedNotifications() {
     // ✅ חדש: פופאפ דחיינות
     procrastinationPopup,
     dismissProcrastinationPopup,
-    handleProcrastinationAction
+    handleProcrastinationAction,
+    // 🔧 חדש: פופאפ משימה באיחור
+    overdueTaskPopup,
+    setOverdueTaskPopup
   };
 }
 
@@ -960,7 +1002,9 @@ export function UnifiedNotificationManager() {
     dismissAlert,
     procrastinationPopup,
     dismissProcrastinationPopup,
-    handleProcrastinationAction
+    handleProcrastinationAction,
+    overdueTaskPopup,
+    setOverdueTaskPopup
   } = useUnifiedNotifications();
   const { sendNotification, permission, playSound, requestPermission } = useNotifications();
   
@@ -974,6 +1018,20 @@ export function UnifiedNotificationManager() {
       });
     }
   }, [isAlertVisible, activeAlert, sendNotification, permission]);
+  
+  // 🔧 חדש: פופאפ משימה באיחור
+  if (overdueTaskPopup) {
+    return (
+      <OverdueTaskPopup
+        isOpen={true}
+        task={overdueTaskPopup}
+        onClose={() => setOverdueTaskPopup(null)}
+        onStartTask={(taskId) => {
+          console.log('🔔 התחלת עבודה על משימה:', taskId);
+        }}
+      />
+    );
+  }
   
   // ✅ פופאפ דחיינות (בשעות עבודה ללא טיימר / משימה מושהית)
   if (procrastinationPopup) {
