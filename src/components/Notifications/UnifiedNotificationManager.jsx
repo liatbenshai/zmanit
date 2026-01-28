@@ -13,11 +13,17 @@
  * - פופאפ חוסם לדחיינות (לא רק toast)
  * - התראות קוליות
  * - בדיקת Push notifications
+ * 
+ * 🔧 תיקונים (גרסה 2.1):
+ * - קריאת הגדרות שעות עבודה מ-localStorage
+ * - זיהוי טיימר מושהה (לא רק רץ)
+ * - התראות רק כשאין טיימר פעיל כלל
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
 import { useTasks } from '../../hooks/useTasks';
 import { useNotifications } from '../../hooks/useNotifications';
+import { useAuth } from '../../hooks/useAuth';
 import alertManager, { ALERT_TYPES, ALERT_PRIORITY } from '../../utils/smartAlertManager';
 import toast from 'react-hot-toast';
 
@@ -33,32 +39,163 @@ function toLocalISODate(date) {
 }
 
 /**
- * בדיקה אם יש טיימר פעיל על משימה כלשהי
- * 🔧 תיקון: בודקים גם אם הטיימר באמת רץ, לא רק אם יש ID
+ * 🔧 תיקון: קריאת הגדרות שעות עבודה מ-localStorage
+ * מחזיר אובייקט עם startMinutes, endMinutes, workDays
  */
-function getActiveTaskId() {
+function getWorkHoursSettings(userId) {
   try {
-    const activeTimer = localStorage.getItem('zmanit_active_timer');
-    if (activeTimer && activeTimer !== 'null' && activeTimer !== 'undefined') {
-      // 🔧 חשוב: בודקים אם הטיימר באמת רץ!
-      const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
+    // ניסיון לקרוא הגדרות משתמש
+    const userSettings = localStorage.getItem(`work_settings_${userId}`);
+    if (userSettings) {
+      const parsed = JSON.parse(userSettings);
+      if (parsed.workHours) {
+        const { startHour, startMinute, endHour, endMinute, workDays } = parsed.workHours;
+        return {
+          startMinutes: (startHour || 8) * 60 + (startMinute || 0),
+          endMinutes: (endHour || 16) * 60 + (endMinute || 0),
+          workDays: workDays || [0, 1, 2, 3, 4] // ראשון עד חמישי
+        };
+      }
+    }
+    
+    // ניסיון לקרוא הגדרות כלליות
+    const generalSettings = localStorage.getItem('zmanit_work_settings');
+    if (generalSettings) {
+      const parsed = JSON.parse(generalSettings);
+      return {
+        startMinutes: parsed.startMinutes || 8.5 * 60,
+        endMinutes: parsed.endMinutes || 16.25 * 60,
+        workDays: parsed.workDays || [0, 1, 2, 3, 4]
+      };
+    }
+  } catch (e) {
+    console.warn('🔔 [Notifications] שגיאה בקריאת הגדרות שעות עבודה:', e);
+  }
+  
+  // ברירת מחדל
+  return {
+    startMinutes: 8.5 * 60,  // 08:30
+    endMinutes: 16.25 * 60,  // 16:15
+    workDays: [0, 1, 2, 3, 4] // ראשון עד חמישי
+  };
+}
+
+/**
+ * 🔧 תיקון: בדיקה אם יש טיימר פעיל (רץ או מושהה)
+ * מחזיר אובייקט עם מידע על הטיימר, או null אם אין
+ */
+function getActiveTimerInfo() {
+  try {
+    const activeTimerId = localStorage.getItem('zmanit_active_timer');
+    
+    // אם יש ID של טיימר פעיל
+    if (activeTimerId && activeTimerId !== 'null' && activeTimerId !== 'undefined' && activeTimerId !== 'active') {
+      const timerData = localStorage.getItem(`timer_v2_${activeTimerId}`);
       if (timerData) {
         try {
           const data = JSON.parse(timerData);
-          // רק אם הטיימר באמת רץ (לא מושהה, לא נעצר)
+          
+          // טיימר רץ
           if (data.isRunning === true && data.startTime) {
-            console.log('🔔 [Notifications] טיימר פעיל ורץ:', activeTimer);
-            return activeTimer;
+            console.log('🔔 [Notifications] טיימר רץ:', activeTimerId);
+            return {
+              taskId: activeTimerId,
+              isRunning: true,
+              isPaused: false,
+              isInterrupted: false
+            };
+          }
+          
+          // טיימר מושהה
+          if (data.isPaused === true) {
+            console.log('🔔 [Notifications] טיימר מושהה:', activeTimerId);
+            return {
+              taskId: activeTimerId,
+              isRunning: false,
+              isPaused: true,
+              isInterrupted: false
+            };
+          }
+          
+          // טיימר מופרע (הפרעה)
+          if (data.isInterrupted === true) {
+            console.log('🔔 [Notifications] טיימר מופרע:', activeTimerId);
+            return {
+              taskId: activeTimerId,
+              isRunning: false,
+              isPaused: false,
+              isInterrupted: true
+            };
           }
         } catch (e) {}
       }
-      // אין נתוני טיימר או הטיימר לא רץ - מנקים
-      console.log('🔔 [Notifications] יש ID אבל הטיימר לא רץ');
     }
+    
+    // 🔧 בדיקה נוספת: חיפוש טיימר פעיל בכל המפתחות
+    // (למקרה ש-zmanit_active_timer לא עודכן)
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key && key.startsWith('timer_v2_')) {
+        try {
+          const data = JSON.parse(localStorage.getItem(key));
+          const taskId = key.replace('timer_v2_', '');
+          
+          if (data.isRunning === true && data.startTime) {
+            console.log('🔔 [Notifications] נמצא טיימר רץ (סריקה):', taskId);
+            // עדכון zmanit_active_timer
+            localStorage.setItem('zmanit_active_timer', taskId);
+            return {
+              taskId,
+              isRunning: true,
+              isPaused: false,
+              isInterrupted: false
+            };
+          }
+          
+          if (data.isPaused === true) {
+            console.log('🔔 [Notifications] נמצא טיימר מושהה (סריקה):', taskId);
+            return {
+              taskId,
+              isRunning: false,
+              isPaused: true,
+              isInterrupted: false
+            };
+          }
+        } catch (e) {}
+      }
+    }
+    
+    // בדיקת zmanit_focus_paused (טיימר מושהה)
+    const pausedData = localStorage.getItem('zmanit_focus_paused');
+    if (pausedData) {
+      try {
+        const data = JSON.parse(pausedData);
+        if (data.isPaused && data.taskId) {
+          console.log('🔔 [Notifications] טיימר מושהה (focus_paused):', data.taskId);
+          return {
+            taskId: data.taskId,
+            isRunning: false,
+            isPaused: true,
+            isInterrupted: false,
+            pausedAt: data.pausedAt
+          };
+        }
+      } catch (e) {}
+    }
+    
   } catch (e) {
     console.error('🔔 [Notifications] שגיאה בבדיקת טיימר:', e);
   }
+  
   return null;
+}
+
+/**
+ * 🔧 לתאימות אחורה - פונקציה ישנה
+ */
+function getActiveTaskId() {
+  const info = getActiveTimerInfo();
+  return info?.isRunning ? info.taskId : null;
 }
 
 /**
@@ -93,6 +230,7 @@ function getElapsedTimeFromTimer(taskId) {
  */
 export function useUnifiedNotifications() {
   const { tasks } = useTasks();
+  const { user } = useAuth();
   const { permission, sendNotification, playSound, requestPermission } = useNotifications();
   
   // מצב התראות
@@ -473,22 +611,25 @@ export function useUnifiedNotifications() {
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
     const dayOfWeek = now.getDay();
     
-    // בדיקה אם יש טיימר פעיל (רץ, לא בהשהיה)
-    const activeTaskId = getActiveTaskId();
+    // 🔧 תיקון: קריאת הגדרות שעות עבודה מ-localStorage
+    const workSettings = getWorkHoursSettings(user?.id);
+    const isWorkDay = workSettings.workDays.includes(dayOfWeek);
+    const isWorkHours = isWorkDay && 
+                        currentMinutes >= workSettings.startMinutes && 
+                        currentMinutes <= workSettings.endMinutes;
     
-    // ✅ בדיקת שעות עבודה (08:30-16:15, ימים א-ה)
-    const isWorkDay = dayOfWeek >= 0 && dayOfWeek <= 4; // ראשון עד חמישי
-    const workStart = 8.5 * 60;  // 08:30
-    const workEnd = 16.25 * 60;  // 16:15
-    const isWorkHours = isWorkDay && currentMinutes >= workStart && currentMinutes <= workEnd;
+    // 🔧 תיקון: בדיקת טיימר - כולל מושהה!
+    const timerInfo = getActiveTimerInfo();
+    const hasActiveTimer = timerInfo !== null; // כולל מושהה
+    const hasRunningTimer = timerInfo?.isRunning === true; // רק רץ
     
     // ✅ בדיקת אירועי יומן גוגל
     if (settings.calendarReminder?.enabled) {
       checkGoogleCalendarEvents(settings.calendarReminder.minutesBefore || 10, hasPushPermission);
     }
     
-    // ✅ פופאפ חוסם אם אנחנו בשעות עבודה ואין טיימר רץ
-    if (isWorkHours && !activeTaskId && settings.noTimerReminder?.enabled) {
+    // ✅ פופאפ חוסם אם אנחנו בשעות עבודה ואין טיימר כלל (גם לא מושהה)
+    if (isWorkHours && !hasActiveTimer && settings.noTimerReminder?.enabled) {
       const interval = settings.noTimerReminder.intervalMinutes || 10;
       if (canNotify('work-hours', 'no-timer', interval)) {
         
@@ -555,7 +696,7 @@ export function useUnifiedNotifications() {
         
         if (pausedMinutes >= threshold && canNotify('paused-timer', 'too-long', threshold)) {
           const pausedTask = tasks.find(t => t.id === pausedData.taskId);
-          const taskTitle = pausedTask?.title || 'משימה';
+          const taskTitle = pausedTask?.title || pausedData.taskTitle || 'משימה';
           
           // ✅ השמעת צליל אזהרה
           playSound('warning');
@@ -621,23 +762,29 @@ export function useUnifiedNotifications() {
     // - הוא לא שולח התראות על משימות אחרות כשיש טיימר פעיל
     alertManager.checkScheduledTasks(tasks, scheduledBlocks);
     
-    // ✅ אם יש טיימר פעיל - בודקים גם לפי time_spent (לא רק לפי לוח זמנים)
-    if (activeTaskId) {
-      const activeTask = tasks.find(t => t.id === activeTaskId);
+    // ✅ אם יש טיימר פעיל (רץ) - בודקים גם לפי time_spent
+    if (hasRunningTimer && timerInfo?.taskId) {
+      const activeTask = tasks.find(t => t.id === timerInfo.taskId);
       if (activeTask) {
         // בדיקת התראות לפי time_spent vs estimated_duration
         checkActiveTaskAlerts(activeTask, currentMinutes, hasPushPermission);
       }
-      // לא בודקים התראות על משימות אחרות כשעובדים
+      // 🔧 תיקון: לא בודקים התראות על משימות אחרות כשעובדים
       return;
     }
     
-    // ✅ בדיקת כל משימות היום (רק אם אין טיימר פעיל)
+    // 🔧 תיקון: אם יש טיימר מושהה - לא שולחים התראות על משימות אחרות!
+    if (hasActiveTimer) {
+      console.log('🔔 [Notifications] טיימר מושהה - לא בודקים משימות אחרות');
+      return;
+    }
+    
+    // ✅ בדיקת כל משימות היום (רק אם אין טיימר בכלל)
     todayTasks.forEach(task => {
       checkTaskAlerts(task, currentMinutes, today, hasPushPermission);
     });
     
-  }, [tasks, permission, canNotify, markNotified, sendNotification, playSound, logNotificationToHistory, getNotificationSettings, checkActiveTaskAlerts, checkTaskAlerts, checkGoogleCalendarEvents]);
+  }, [tasks, permission, user?.id, canNotify, markNotified, sendNotification, playSound, logNotificationToHistory, getNotificationSettings, checkActiveTaskAlerts, checkTaskAlerts, checkGoogleCalendarEvents]);
   
   // ✅ הפעלת בדיקה תקופתית
   useEffect(() => {

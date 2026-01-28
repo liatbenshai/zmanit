@@ -498,24 +498,56 @@ function NotificationSettings() {
 }
 
 function WorkSettings({ user }) {
-  const [workHours, setWorkHours] = useState({ startHour: 8, endHour: 16, workDays: [0, 1, 2, 3, 4] });
+  // 🔧 תיקון: הוספת תמיכה בדקות (לא רק שעות שלמות)
+  const [workHours, setWorkHours] = useState({ 
+    startHour: 8, 
+    startMinute: 30, 
+    endHour: 16, 
+    endMinute: 15, 
+    workDays: [0, 1, 2, 3, 4] 
+  });
 
   useEffect(() => {
     const saved = localStorage.getItem(`work_settings_${user?.id}`);
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (parsed.workHours) setWorkHours(parsed.workHours);
+        if (parsed.workHours) {
+          // 🔧 תאימות אחורה: אם אין דקות, נשתמש ב-0
+          setWorkHours({
+            startHour: parsed.workHours.startHour || 8,
+            startMinute: parsed.workHours.startMinute ?? 30,
+            endHour: parsed.workHours.endHour || 16,
+            endMinute: parsed.workHours.endMinute ?? 15,
+            workDays: parsed.workHours.workDays || [0, 1, 2, 3, 4]
+          });
+        }
       } catch (e) {}
     }
   }, [user?.id]);
 
   const handleSave = () => {
     localStorage.setItem(`work_settings_${user?.id}`, JSON.stringify({ workHours }));
+    
+    // 🔧 שמירה גם בפורמט שמנהל ההתראות מחפש
+    localStorage.setItem('zmanit_work_settings', JSON.stringify({
+      startMinutes: workHours.startHour * 60 + workHours.startMinute,
+      endMinutes: workHours.endHour * 60 + workHours.endMinute,
+      workDays: workHours.workDays
+    }));
+    
     toast.success('הגדרות העבודה נשמרו');
   };
 
   const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
+  
+  // אפשרויות דקות
+  const minuteOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  
+  // פורמט שעה לתצוגה
+  const formatTime = (hour, minute) => {
+    return `${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -523,32 +555,66 @@ function WorkSettings({ user }) {
       
       <div className="space-y-3">
         <h3 className="font-medium text-gray-700 dark:text-gray-300">שעות עבודה</h3>
+        
+        {/* שעת התחלה */}
         <div className="flex items-center gap-4 flex-wrap">
           <div>
             <label className="block text-sm text-gray-500 mb-1">התחלה</label>
-            <select
-              value={workHours.startHour}
-              onChange={(e) => setWorkHours(w => ({ ...w, startHour: parseInt(e.target.value) }))}
-              className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              {Array.from({ length: 14 }, (_, i) => i + 5).map(h => (
-                <option key={h} value={h}>{h}:00</option>
-              ))}
-            </select>
+            <div className="flex gap-1">
+              <select
+                value={workHours.startHour}
+                onChange={(e) => setWorkHours(w => ({ ...w, startHour: parseInt(e.target.value) }))}
+                className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                {Array.from({ length: 14 }, (_, i) => i + 5).map(h => (
+                  <option key={h} value={h}>{h.toString().padStart(2, '0')}</option>
+                ))}
+              </select>
+              <span className="text-gray-400 self-center">:</span>
+              <select
+                value={workHours.startMinute}
+                onChange={(e) => setWorkHours(w => ({ ...w, startMinute: parseInt(e.target.value) }))}
+                className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                {minuteOptions.map(m => (
+                  <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>
+                ))}
+              </select>
+            </div>
           </div>
+          
           <span className="text-gray-400 pt-6">עד</span>
+          
+          {/* שעת סיום */}
           <div>
             <label className="block text-sm text-gray-500 mb-1">סיום</label>
-            <select
-              value={workHours.endHour}
-              onChange={(e) => setWorkHours(w => ({ ...w, endHour: parseInt(e.target.value) }))}
-              className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
-            >
-              {Array.from({ length: 14 }, (_, i) => i + 10).map(h => (
-                <option key={h} value={h}>{h}:00</option>
-              ))}
-            </select>
+            <div className="flex gap-1">
+              <select
+                value={workHours.endHour}
+                onChange={(e) => setWorkHours(w => ({ ...w, endHour: parseInt(e.target.value) }))}
+                className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                {Array.from({ length: 14 }, (_, i) => i + 10).map(h => (
+                  <option key={h} value={h}>{h.toString().padStart(2, '0')}</option>
+                ))}
+              </select>
+              <span className="text-gray-400 self-center">:</span>
+              <select
+                value={workHours.endMinute}
+                onChange={(e) => setWorkHours(w => ({ ...w, endMinute: parseInt(e.target.value) }))}
+                className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              >
+                {minuteOptions.map(m => (
+                  <option key={m} value={m}>{m.toString().padStart(2, '0')}</option>
+                ))}
+              </select>
+            </div>
           </div>
+        </div>
+        
+        {/* תצוגת השעות שנבחרו */}
+        <div className="text-sm text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-900/50 p-3 rounded-lg">
+          📅 שעות עבודה: {formatTime(workHours.startHour, workHours.startMinute)} - {formatTime(workHours.endHour, workHours.endMinute)}
         </div>
       </div>
 
@@ -569,6 +635,12 @@ function WorkSettings({ user }) {
               {name}
             </button>
           ))}
+        </div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          {workHours.workDays.length === 0 
+            ? 'לא נבחרו ימי עבודה'
+            : `${workHours.workDays.length} ימי עבודה בשבוע`
+          }
         </div>
       </div>
 

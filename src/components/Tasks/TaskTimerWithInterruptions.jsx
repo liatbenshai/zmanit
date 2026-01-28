@@ -20,6 +20,11 @@ const INTERRUPTION_TYPES = {
 /**
  * טיימר עם תמיכה בהפרעות
  * הזמן של ההפרעות נספר בנפרד ולא מתווסף לזמן המשימה
+ * 
+ * 🔧 תיקונים (גרסה 2.1):
+ * - תיקון שמירת ID הטיימר (לא 'active')
+ * - שמירת מצב מושהה ב-zmanit_active_timer
+ * - סנכרון טוב יותר עם מנהל ההתראות
  */
 function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }) {
   const { updateTaskTime, tasks } = useTasks();
@@ -112,9 +117,9 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
               setIsPaused(false);
               setTotalInterruptionSeconds(data.totalInterruptionSeconds || 0);
               setInterruptions(data.interruptions || []);
-              // שמירת מצב טיימר פעיל גם בשחזור
-              localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
-              console.log('🔄 טיימר שוחזר! נשמר:', currentTask?.id);
+              // 🔧 תיקון: שמירת מצב טיימר פעיל עם ID אמיתי (לא 'active')
+              localStorage.setItem('zmanit_active_timer', currentTask.id);
+              console.log('🔄 טיימר שוחזר! נשמר:', currentTask.id);
               toast.success(`⏰ טיימר חודש! עברו ${Math.floor(elapsed / 60)} דקות`);
             }
           }
@@ -125,12 +130,14 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     }
   }, [currentTask?.id, timerStorageKey]);
 
-  // שמירה ב-localStorage
+  // 🔧 תיקון: שמירה ב-localStorage - כולל ID נכון
   const saveToStorage = useCallback(() => {
-    if (timerStorageKey) {
+    if (timerStorageKey && currentTask?.id) {
       const data = {
+        taskId: currentTask.id, // 🔧 שומרים את ה-ID
         startTime: startTime?.toISOString(),
         isRunning,
+        isPaused,
         isInterrupted,
         interruptionType,
         interruptionStart: interruptionStart?.toISOString(),
@@ -139,44 +146,61 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
       };
       localStorage.setItem(timerStorageKey, JSON.stringify(data));
     }
-  }, [timerStorageKey, startTime, isRunning, isInterrupted, interruptionType, interruptionStart, totalInterruptionSeconds, interruptions]);
+  }, [timerStorageKey, currentTask?.id, startTime, isRunning, isPaused, isInterrupted, interruptionType, interruptionStart, totalInterruptionSeconds, interruptions]);
 
   useEffect(() => {
     saveToStorage();
   }, [saveToStorage]);
 
-  // טיימר ראשי - עבודה
-  // 🆕 שמירת מצב טיימר פעיל ב-localStorage
+  // 🔧 תיקון: שמירת מצב טיימר פעיל ב-localStorage - עם ID נכון!
   useEffect(() => {
-    const taskId = currentTask?.id || task?.id;
-    console.log('🔍 useEffect טיימר:', { isRunning, isPaused, taskId, currentTaskId: currentTask?.id, propTaskId: task?.id });
+    const taskId = currentTask?.id;
     
-    if (isRunning && taskId) {
+    if (!taskId) {
+      console.log('🔍 אין taskId - לא עושים כלום');
+      return;
+    }
+    
+    console.log('🔍 useEffect טיימר:', { isRunning, isPaused, taskId });
+    
+    if (isRunning) {
+      // 🔧 תיקון: שומרים את ה-ID האמיתי, לא 'active'
       localStorage.setItem('zmanit_active_timer', taskId);
       console.log('🟢 טיימר רץ - נשמר:', taskId);
-    } else if (!isRunning && !isPaused) {
-      // 🔧 תיקון חשוב: לפני שמוחקים, בודקים אם יש טיימר רץ על משימה כלשהי
-      // (לא רק על המשימה הנוכחית)
+    } else if (isPaused) {
+      // 🔧 תיקון חשוב: כשמושהה, לא מוחקים! משאירים את ה-ID
+      // מנהל ההתראות יבדוק אם הטיימר רץ או מושהה לפי timer_v2_
+      console.log('⏸️ טיימר מושהה - נשאר:', taskId);
+      // לא מוחקים את zmanit_active_timer!
+    } else {
+      // רק אם לא רץ ולא מושהה - בודקים אם זה הטיימר הפעיל ומוחקים
       const currentActiveTimer = localStorage.getItem('zmanit_active_timer');
-      if (currentActiveTimer) {
-        // בדיקה אם הטיימר הפעיל באמת רץ
-        const activeTimerData = localStorage.getItem(`timer_v2_${currentActiveTimer}`);
-        if (activeTimerData) {
-          try {
-            const data = JSON.parse(activeTimerData);
-            if (data.isRunning && data.startTime) {
-              console.log('⏳ יש טיימר אחר שרץ - לא מוחקים:', currentActiveTimer);
-              return; // לא למחוק!
-            }
-          } catch (e) {}
+      if (currentActiveTimer === taskId) {
+        // בדיקה אם יש טיימר רץ על משימה אחרת
+        let otherRunning = false;
+        for (let i = 0; i < localStorage.length; i++) {
+          const key = localStorage.key(i);
+          if (key && key.startsWith('timer_v2_') && key !== `timer_v2_${taskId}`) {
+            try {
+              const data = JSON.parse(localStorage.getItem(key));
+              if (data.isRunning && data.startTime) {
+                otherRunning = true;
+                const otherId = key.replace('timer_v2_', '');
+                localStorage.setItem('zmanit_active_timer', otherId);
+                console.log('⏳ יש טיימר אחר שרץ:', otherId);
+                break;
+              }
+            } catch (e) {}
+          }
+        }
+        
+        if (!otherRunning) {
+          localStorage.removeItem('zmanit_active_timer');
+          console.log('🔴 אין טיימר פעיל - נמחק');
         }
       }
-      
-      // רק אם אין טיימר רץ - מוחקים
-      localStorage.removeItem('zmanit_active_timer');
-      console.log('🔴 אין טיימר פעיל - נמחק');
     }
-  }, [isRunning, currentTask?.id, task?.id, isPaused]);
+  }, [isRunning, isPaused, currentTask?.id]);
 
   // טיימר ראשי
   useEffect(() => {
@@ -228,32 +252,45 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     };
   }, [isInterrupted, interruptionStart]);
 
-  // התחלת עבודה
+  // 🔧 תיקון: התחלת עבודה - שמירת ID נכון
   const startTimer = (e) => {
     if (e) e.stopPropagation();
+    
+    if (!currentTask?.id) {
+      toast.error('שגיאה: לא נמצאה משימה');
+      return;
+    }
+    
     const now = new Date();
     setStartTime(now);
     setIsRunning(true);
     setIsPaused(false);
     setElapsedSeconds(0);
-    // 🆕 שמירת מצב טיימר פעיל
-    const timerId = currentTask?.id || 'active';
-    localStorage.setItem('zmanit_active_timer', timerId);
-    console.log('🟢 טיימר התחיל! נשמר:', timerId);
+    
+    // 🔧 תיקון: שמירת ID אמיתי (לא 'active')
+    localStorage.setItem('zmanit_active_timer', currentTask.id);
+    console.log('🟢 טיימר התחיל! נשמר:', currentTask.id);
+    
+    // מחיקת מצב השהייה אם היה
+    localStorage.removeItem('zmanit_focus_paused');
+    
     toast.success('▶ התחלנו לעבוד!');
   };
 
-  // השהיה - ✅ תיקון: שמירת הזמן לפני השהייה
+  // 🔧 תיקון: השהיה - לא מוחקים את zmanit_active_timer!
   const pauseTimer = async (e) => {
     if (e) e.stopPropagation();
     setIsRunning(false);
     setIsPaused(true);
-    // מחיקת מצב טיימר פעיל
-    localStorage.removeItem('zmanit_active_timer');
+    
+    // 🔧 תיקון חשוב: לא מוחקים את zmanit_active_timer!
+    // מנהל ההתראות יבדוק את timer_v2_ וירא שהטיימר מושהה
+    // localStorage.removeItem('zmanit_active_timer'); // ← הוסר!
     
     // 🔧 שמירת מצב השהייה ל-localStorage
-    if (timerStorageKey) {
+    if (timerStorageKey && currentTask?.id) {
       const data = {
+        taskId: currentTask.id,
         startTime: null,
         isRunning: false,
         isPaused: true,
@@ -264,7 +301,7 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
       localStorage.setItem(timerStorageKey, JSON.stringify(data));
     }
     
-    // 🔧 שמירה ל-IdleDetector
+    // 🔧 שמירה ל-IdleDetector - לפופאפ "משימה מושהית יותר מידי זמן"
     localStorage.setItem('zmanit_focus_paused', JSON.stringify({
       isPaused: true,
       pausedAt: new Date().toISOString(),
@@ -288,21 +325,28 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     }
   };
 
-  // המשך
+  // 🔧 תיקון: המשך - שמירת ID נכון
   const resumeTimer = (e) => {
     if (e) e.stopPropagation();
+    
+    if (!currentTask?.id) {
+      toast.error('שגיאה: לא נמצאה משימה');
+      return;
+    }
+    
     const now = new Date();
     setStartTime(now);
     setIsRunning(true);
     setIsPaused(false);
     setElapsedSeconds(0); // מתחילים מחדש (הזמן הקודם כבר נשמר)
     
-    // שמירת מצב טיימר פעיל
-    localStorage.setItem('zmanit_active_timer', currentTask?.id || 'active');
+    // 🔧 תיקון: שמירת ID אמיתי
+    localStorage.setItem('zmanit_active_timer', currentTask.id);
     
     // 🔧 שמירת מצב רץ ל-localStorage
     if (timerStorageKey) {
       const data = {
+        taskId: currentTask.id,
         startTime: now.toISOString(),
         isRunning: true,
         isPaused: false,
@@ -502,7 +546,7 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     };
   }, []);
 
-  // איפוס
+  // 🔧 תיקון: איפוס - ניקוי כל המצבים
   const resetTimer = (e) => {
     if (e) e.stopPropagation();
     setIsRunning(false);
@@ -515,18 +559,34 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     setInterruptionSeconds(0);
     setTotalInterruptionSeconds(0);
     setInterruptions([]);
+    
     if (timerStorageKey) {
       localStorage.removeItem(timerStorageKey);
     }
+    
+    // 🔧 תיקון: ניקוי מצב השהייה
+    localStorage.removeItem('zmanit_focus_paused');
+    
+    // 🔧 תיקון: ניקוי טיימר פעיל אם זה הטיימר הנוכחי
+    const currentActiveTimer = localStorage.getItem('zmanit_active_timer');
+    if (currentActiveTimer === currentTask?.id) {
+      localStorage.removeItem('zmanit_active_timer');
+    }
   };
 
-  // עצירה ושמירה
+  // 🔧 תיקון: עצירה ושמירה - ניקוי מלא
   const stopAndSaveRef = useRef(null);
   
   const stopAndSave = async (e) => {
     if (e) e.stopPropagation();
-    // 🆕 מחיקת מצב טיימר
-    localStorage.removeItem('zmanit_active_timer');
+    
+    // 🔧 תיקון: ניקוי כל המצבים
+    const currentActiveTimer = localStorage.getItem('zmanit_active_timer');
+    if (currentActiveTimer === currentTask?.id) {
+      localStorage.removeItem('zmanit_active_timer');
+    }
+    localStorage.removeItem('zmanit_focus_paused');
+    
     console.log('🔴 טיימר נעצר! נמחק מ-localStorage');
     const result = await saveProgress(true);
     if (result?.success) {
@@ -551,20 +611,6 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
     if (mins === 0) return `${hours}:00`;
     return `${hours}:${mins.toString().padStart(2, '0')}`;
   };
-
-  // התראה כשהזמן נגמר - מושבת כי FullScreenFocus מטפל בזה
-  // const [timeUpNotified, setTimeUpNotified] = useState(false);
-  
-  // useEffect(() => {
-  //   // הועבר ל-FullScreenFocus
-  // }, [isRunning, totalSpent, estimated, timeUpNotified]);
-
-  // איפוס התראה כשמתחילים מחדש - מושבת כי FullScreenFocus מטפל בזה
-  // useEffect(() => {
-  //   if (!isRunning) {
-  //     setTimeUpNotified(false);
-  //   }
-  // }, [isRunning]);
 
   if (!currentTask) {
     return (
