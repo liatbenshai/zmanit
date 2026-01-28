@@ -255,6 +255,18 @@ export function useUnifiedNotifications() {
   // 🔧 חדש: מעקב אחר מצב טיימר קודם
   const prevTimerStateRef = useRef(null);
   
+  // 🔧 חדש: ref לגישה ל-tasks עדכניים מתוך callbacks
+  const tasksRef = useRef(tasks);
+  useEffect(() => {
+    tasksRef.current = tasks;
+  }, [tasks]);
+  
+  // 🔧 חדש: ref ל-setOverdueTaskPopup לשימוש ב-callbacks
+  const setOverdueTaskPopupRef = useRef(setOverdueTaskPopup);
+  useEffect(() => {
+    setOverdueTaskPopupRef.current = setOverdueTaskPopup;
+  }, [setOverdueTaskPopup]);
+  
   // ✅ חדש: קריאת הגדרות מותאמות
   const getNotificationSettings = useCallback(() => {
     try {
@@ -314,11 +326,15 @@ export function useUnifiedNotifications() {
         
         // 🔧 טיפול מיוחד במשימה באיחור - פופאפ מותאם
         if (alert.type === ALERT_TYPES.TASK_OVERDUE && alert.taskId) {
-          // מוצאים את המשימה
-          const overdueTask = tasks?.find(t => t.id === alert.taskId);
+          // מוצאים את המשימה מתוך ה-ref (תמיד עדכני)
+          const currentTasks = tasksRef.current;
+          const overdueTask = currentTasks?.find(t => t.id === alert.taskId);
           if (overdueTask) {
+            console.log('🔔 פותח פופאפ משימה באיחור:', overdueTask.title);
             setOverdueTaskPopup(overdueTask);
             return; // לא מציגים את הפופאפ הרגיל
+          } else {
+            console.log('🔔 לא נמצאה משימה עם ID:', alert.taskId);
           }
         }
         
@@ -336,7 +352,7 @@ export function useUnifiedNotifications() {
     return () => {
       alertManager.stopMonitoring();
     };
-  }, [playSound, logNotificationToHistory]);
+  }, [playSound, logNotificationToHistory]); // לא כולל tasks כי משתמשים ב-ref
   
   // ✅ הצגת התראה כ-toast
   const showToastAlert = useCallback((alert) => {
@@ -507,6 +523,7 @@ export function useUnifiedNotifications() {
       
       if (canNotify(task.id, 'late', 10)) {
         const lateMinutes = Math.abs(Math.round(diffFromStart));
+        
         if (hasPushPermission) {
           sendNotification(`⏰ ${task.title}`, {
             body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
@@ -515,10 +532,14 @@ export function useUnifiedNotifications() {
         }
         markNotified(task.id, 'late');
         
-        toast(`⏰ ${task.title} - באיחור של ${lateMinutes} דקות`, {
-          duration: 5000,
-          icon: '⚠️'
-        });
+        // 🔧 תיקון: פופאפ במקום toast
+        // מוצאים את המשימה המלאה ומציגים פופאפ
+        const currentTasks = tasksRef.current;
+        const overdueTask = currentTasks?.find(t => t.id === task.id);
+        if (overdueTask && setOverdueTaskPopupRef.current) {
+          console.log('🔔 פותח פופאפ משימה באיחור (מ-checkTaskAlerts):', overdueTask.title);
+          setOverdueTaskPopupRef.current(overdueTask);
+        }
       }
     }
     
@@ -540,9 +561,13 @@ export function useUnifiedNotifications() {
           }
           markNotified(task.id, 'overdue-end');
           
-          toast.error(`🔴 "${task.title}" הייתה אמורה להסתיים לפני ${overdueMinutes} דקות`, {
-            duration: 10000
-          });
+          // 🔧 תיקון: פופאפ במקום toast
+          const currentTasks = tasksRef.current;
+          const overdueTask = currentTasks?.find(t => t.id === task.id);
+          if (overdueTask && setOverdueTaskPopupRef.current) {
+            console.log('🔔 פותח פופאפ משימה שעבר זמנה (מ-checkTaskAlerts):', overdueTask.title);
+            setOverdueTaskPopupRef.current(overdueTask);
+          }
         }
       }
     }
