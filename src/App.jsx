@@ -17,24 +17,12 @@ import ProtectedRoute from './components/Auth/ProtectedRoute';
 import Header from './components/Layout/Header';
 import MobileNav from './components/Layout/MobileNav';
 import InstallPrompt from './components/PWA/InstallPrompt';
-import IdleDetector from './components/Productivity/IdleDetector';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
-// FloatingNowWidget הוסר
-import WhyNotStartedDetector from './components/Productivity/WhyNotStartedDetector';
-// ✅ מנהל התראות מאוחד - מחליף את NotificationChecker + OverdueTaskManager
+// ✅ מנהל התראות מאוחד v3.0 - מקור יחיד לכל ההתראות!
+// מחליף: IdleDetector, WhyNotStartedDetector, smartAlertManager, notificationService
 import UnifiedNotificationManager from './components/Notifications/UnifiedNotificationManager';
 import { DeadlineConflictManager } from './components/Notifications/DeadlineConflictModal';
-import EndOfDaySummary from './components/Learning/EndOfDaySummary';
-import { useTasks } from './hooks/useTasks';
-
-/**
- * ✅ Wrapper לסיכום יומי
- */
-function EndOfDaySummaryWrapper() {
-  const { tasks } = useTasks();
-  return <EndOfDaySummary tasks={tasks} workEndHour={16} />;
-}
 
 function App() {
   const { user, loading } = useAuth();
@@ -66,28 +54,16 @@ function App() {
       {/* הודעת התקנת PWA */}
       <InstallPrompt />
 
-      {/* זיהוי זמן מת */}
-      {user && <IdleDetector />}
-
       {/* כפתור עבודה דחופה */}
       {user && <UrgentTaskButton />}
 
-      {/* ווידג'ט צף "עכשיו" */}
-      {/* FloatingNowWidget הוסר */}
-
-      {/* גלאי "למה לא התחלת?" */}
-      {user && <WhyNotStartedDetector />}
-
-      {/* סיכום יומי */}
+      {/* סיכום סוף יום */}
       {user && <EndOfDayPopup />}
 
-      {/* ✅ מנהל התראות מאוחד - מטפל בהכל! */}
+      {/* ✅ מנהל התראות מאוחד v3.0 - מטפל בהכל! */}
       {user && <UnifiedNotificationManager />}
       
-      {/* ✅ חדש: סיכום יומי אוטומטי בסוף היום */}
-      {user && <EndOfDaySummaryWrapper />}
-      
-      {/* ✅ חדש: מנהל התנגשויות דדליין */}
+      {/* מנהל התנגשויות דדליין */}
       {user && <DeadlineConflictManager />}
 
       {/* כותרת עליונה */}

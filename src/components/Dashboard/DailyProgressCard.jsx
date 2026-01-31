@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { getAverageBufferTime, getDelayStats } from '../Productivity/WhyNotStartedDetector';
+import { getAverageBufferTime, getDelayStats } from '../../utils/delayStats';
 import { getCompletionStats } from '../Productivity/SmartTaskCompletionDialog';
 
 /**
