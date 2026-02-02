@@ -47,31 +47,72 @@ async function requestNotificationPermission() {
 }
 
 /**
+ * ✅ תיקון v3.1: בדיקה משופרת אם יש טיימר פעיל
+ * מאוחדת עם UnifiedNotificationManager
+ */
+function isTimerActiveForOtherTask(taskId) {
+  try {
+    const activeTimerId = localStorage.getItem('zmanit_active_timer');
+    
+    // אם אין טיימר פעיל בכלל - מותר לשלוח
+    if (!activeTimerId || activeTimerId === 'null' || activeTimerId === 'undefined') {
+      return false;
+    }
+    
+    // אם זו אותה משימה - מותר לשלוח (התראה על המשימה הפעילה)
+    if (taskId && activeTimerId === taskId) {
+      return false;
+    }
+    
+    // בודקים אם הטיימר באמת פעיל
+    const timerData = localStorage.getItem(`timer_v2_${activeTimerId}`);
+    if (timerData) {
+      const data = JSON.parse(timerData);
+      // טיימר נחשב פעיל אם הוא רץ, מושהה, או במצב הפרעה
+      if (data.isRunning === true || data.isPaused === true || data.isInterrupted === true) {
+        // יש טיימר פעיל על משימה אחרת - לא לשלוח התראה
+        return true;
+      }
+    }
+    
+    // בדיקה נוספת: סריקת כל הטיימרים
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('timer_v2_')) {
+        const timerId = key.replace('timer_v2_', '');
+        
+        // אם זו אותה משימה - ממשיכים
+        if (taskId && timerId === taskId) continue;
+        
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}');
+          if (data.isRunning === true || data.isPaused === true || data.isInterrupted === true) {
+            return true; // יש טיימר פעיל על משימה אחרת
+          }
+        } catch (e) {}
+      }
+    }
+    
+    return false;
+  } catch (e) {
+    console.error('[NotificationContext] שגיאה בבדיקת טיימר:', e);
+    return false;
+  }
+}
+
+/**
  * שליחת התראה מקומית
+ * ✅ תיקון v3.1: בדיקה משופרת של טיימר פעיל
  */
 function sendLocalNotification(title, options = {}) {
   if (!isNotificationSupported()) return null;
   if (Notification.permission !== 'granted') return null;
   
-  // 🔧 תיקון: אם יש טיימר רץ על משימה כלשהי - לא לשלוח התראות על משימות אחרות
-  const activeTimer = localStorage.getItem('zmanit_active_timer');
-  if (activeTimer) {
-    // בדיקה שהטיימר באמת רץ
-    const timerData = localStorage.getItem(`timer_v2_${activeTimer}`);
-    if (timerData) {
-      try {
-        const data = JSON.parse(timerData);
-        if (data.isRunning === true) {
-          // טיימר רץ - בודקים אם זו התראה על המשימה הפעילה או לא
-          if (options.taskId && activeTimer !== options.taskId) {
-            // התראה על משימה אחרת - לא שולחים!
-            console.log('🔇 NotificationContext: טיימר רץ - לא שולח התראה על משימה אחרת');
-            return null;
-          }
-          // אם אין taskId או שזו המשימה הפעילה - ממשיכים (יכול להיות "הזמן עומד להיגמר")
-        }
-      } catch (e) {}
-    }
+  // ✅ תיקון v3.1: אם יש טיימר רץ על משימה אחרת - לא לשלוח התראה
+  const taskId = options.taskId || options.data?.taskId;
+  if (isTimerActiveForOtherTask(taskId)) {
+    console.log('🔇 NotificationContext: יש טיימר פעיל - לא שולח התראה על משימה אחרת');
+    return null;
   }
 
   try {

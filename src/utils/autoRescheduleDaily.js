@@ -1,17 +1,20 @@
 /**
- * מערכת דחייה אוטומטית של משימות
+ * מערכת דחייה אוטומטית של משימות - גרסה מתוקנת v1.1
  * 
  * כשאין מספיק זמן להיום - מעביר משימות אוטומטית למחר
  * כשמתפנה זמן - מושך משימות ממחר להיום
  * 
- * ✅ תומך בהפרדה בין משימות עבודה למשימות בית
+ * ✅ תיקונים בגרסה 1.1:
+ * 1. תיקון שעות עבודה (16:15 במקום 16:00)
+ * 2. שיפור סינון משימות הוריות - לא סופרים אותן!
+ * 3. סינון כפול: גם is_project וגם parent_task_id
  */
 
-// שעות עבודה
+// ✅ תיקון: שעות עבודה מעודכנות
 const WORK_HOURS = {
-  start: 8.5,   // 08:30
-  end: 16,      // 16:00
-  totalMinutes: 450 // 7:30 שעות
+  start: 8.5,    // 08:30
+  end: 16.25,    // 16:15 ✅ תיקון!
+  totalMinutes: 465 // 7:45 שעות
 };
 
 // שעות בית
@@ -43,7 +46,6 @@ function getNextWorkday(fromDate) {
   date.setDate(date.getDate() + 1);
   
   // דילוג על שבת (6) - עובר ליום ראשון
-  // אפשר להוסיף דילוג על שישי אם צריך
   while (date.getDay() === 6) { // שבת
     date.setDate(date.getDate() + 1);
   }
@@ -60,7 +62,7 @@ function getRemainingMinutesToday(scheduleType = 'work') {
   const currentMinutes = now.getHours() * 60 + now.getMinutes();
   const dayOfWeek = now.getDay();
   
-  // ✅ תיקון: שישי-שבת - חישוב דינמי של זמן בית
+  // שישי-שבת - חישוב דינמי של זמן בית
   if (dayOfWeek === 5 || dayOfWeek === 6) {
     if (scheduleType === 'home') {
       // סופ"ש: 08:00 - 22:00
@@ -104,7 +106,7 @@ function isHomeTask(task) {
   if (category && HOME_CATEGORIES.includes(category)) {
     return true;
   }
-  // ✅ תיקון: רשימה מלאה של סוגי משימות בית/משפחה
+  // רשימה מלאה של סוגי משימות בית/משפחה
   const taskType = task.task_type || '';
   const homeTaskTypes = [
     'family', 'home', 'personal', 'shopping', 'errands',
@@ -144,19 +146,18 @@ function getRemainingTaskTime(task) {
 }
 
 /**
- * בדיקה אם משימה היא "פרויקט" גדול שמחולק לבלוקים
- * משימות מעל 3 שעות נחשבות פרויקטים - הן מטופלות ע"י smartScheduler
+ * ✅ תיקון v1.1: בדיקה משופרת אם משימה היא "הורה" שלא צריך לספור
+ * משימה היא הורה אם:
+ * 1. יש לה is_project: true
+ * 2. או שיש לה ילדים עם parent_task_id
  */
-function isProjectTask(task) {
-  const duration = task.estimated_duration || 0;
-  return duration > 180; // יותר מ-3 שעות = פרויקט
-}
-
-/**
- * ✅ חדש: בדיקה אם משימה היא "הורה" שיש לה אינטרוולים
- * אם יש ילדים עם parent_task_id שמצביע על המשימה - היא הורה
- */
-function isParentWithIntervals(task, allTasks) {
+function isParentTask(task, allTasks) {
+  // בדיקה ישירה - אם המשימה מסומנת כפרויקט
+  if (task.is_project === true) {
+    return true;
+  }
+  
+  // בדיקה עקיפה - אם יש משימות אחרות שמצביעות על זו כהורה
   return allTasks.some(t => t.parent_task_id === task.id);
 }
 
@@ -167,9 +168,7 @@ function isParentWithIntervals(task, allTasks) {
  * - משימות שצריך להעביר למחר (אין מקום להיום)
  * - משימות שאפשר למשוך ממחר להיום (יש מקום)
  * 
- * ⚠️ לא מטפל בפרויקטים גדולים (מעל 3 שעות) - הם מחולקים לבלוקים ע"י smartScheduler
- * ⚠️ לא סופר משימות הורה שיש להן אינטרוולים - כדי לא לספור כפול!
- * ✅ חדש: מפריד בין משימות עבודה למשימות בית
+ * ⚠️ לא סופר משימות הורה - רק את האינטרוולים שלהן!
  */
 export function calculateAutoReschedule(tasks, editTask) {
   const now = new Date();
@@ -180,45 +179,42 @@ export function calculateAutoReschedule(tasks, editTask) {
   // בשישי-שבת - כל המשימות נחשבות כמשימות בית
   const isWeekend = dayOfWeek === 5 || dayOfWeek === 6;
   
-  // סינון משימות - רק משימות "רגילות", לא פרויקטים גדולים, לא הורים עם אינטרוולים
-  // ✅ חדש: מפרידים בין עבודה לבית
-  // ✅ תיקון: מסננים גם לפי is_project ישירות!
-  const todayTasks = tasks.filter(t => 
-    !t.is_completed && 
-    !t.is_project &&  // ✅ תיקון: סינון ישיר של משימות הורה
-    !isProjectTask(t) && 
-    !isParentWithIntervals(t, tasks) && 
-    (t.due_date === today || t.start_date === today)
-  );
+  // ✅ תיקון v1.1: סינון משופר - לא סופרים משימות הורה!
+  // משימה נספרת רק אם:
+  // 1. לא הושלמה
+  // 2. לא הורה (is_project !== true AND אין ילדים)
+  // 3. ליום הרלוונטי
+  const todayTasks = tasks.filter(t => {
+    // לא הושלמה
+    if (t.is_completed) return false;
+    
+    // ✅ תיקון: לא סופרים משימות הורה!
+    if (isParentTask(t, tasks)) return false;
+    
+    // ליום הנכון
+    return t.due_date === today || t.start_date === today;
+  });
   
-  // ✅ תיקון: בסופ"ש כל המשימות הן משימות בית
+  // בסופ"ש כל המשימות הן משימות בית
   const todayWorkTasks = isWeekend ? [] : todayTasks.filter(t => !isHomeTask(t));
   const todayHomeTasks = isWeekend ? todayTasks : todayTasks.filter(t => isHomeTask(t));
   
-  const tomorrowTasks = tasks.filter(t => 
-    !t.is_completed && 
-    !t.is_project &&  // ✅ תיקון: סינון ישיר של משימות הורה
-    !isProjectTask(t) && 
-    !isParentWithIntervals(t, tasks) && 
-    (t.due_date === tomorrow || t.start_date === tomorrow)
-  );
+  const tomorrowTasks = tasks.filter(t => {
+    if (t.is_completed) return false;
+    if (isParentTask(t, tasks)) return false;
+    return t.due_date === tomorrow || t.start_date === tomorrow;
+  });
   
   const tomorrowWorkTasks = tomorrowTasks.filter(t => !isHomeTask(t));
   
-  // ✅ תיקון: חישוב זמן פנוי - בסופ"ש רק זמן בית
+  // חישוב זמן פנוי - בסופ"ש רק זמן בית
   const remainingWorkToday = isWeekend ? 0 : getRemainingMinutesToday('work');
   const remainingHomeToday = getRemainingMinutesToday('home');
   
-  // ✅ תיקון: בסופ"ש משתמשים בזמן הבית לחישוב
+  // בסופ"ש משתמשים בזמן הבית לחישוב
   const effectiveRemainingTime = isWeekend ? remainingHomeToday : remainingWorkToday;
   
-  // ✅ תיקון מלא: לוגיקה חדשה להעברת משימות למחר
-  // 1. חישוב סך כל הזמן הדרוש
-  // 2. חישוב כמה זמן חסר
-  // 3. מיון מהפחות דחוף לדחוף
-  // 4. העברה למחר עד שמכסים את הזמן החסר
-  
-  // ✅ תיקון: בסופ"ש מחשבים את משימות הבית, בימים רגילים את משימות העבודה
+  // בסופ"ש מחשבים את משימות הבית, בימים רגילים את משימות העבודה
   const relevantTasks = isWeekend ? todayHomeTasks : todayWorkTasks;
   
   // חישוב סך הזמן הדרוש
@@ -235,7 +231,7 @@ export function calculateAutoReschedule(tasks, editTask) {
   const tasksToMoveToTomorrow = [];
   const tasksToKeepToday = [];
   
-  // ✅ חדש: זיהוי אינטרוולים לפי מספר
+  // זיהוי אינטרוולים לפי מספר
   const getIntervalInfo = (task) => {
     const match = task.title?.match(/\((\d+)\/(\d+)\)/);
     if (match) {
@@ -244,7 +240,7 @@ export function calculateAutoReschedule(tasks, editTask) {
     return null;
   };
   
-  // ✅ קיבוץ משימות: רגילות בנפרד, אינטרוולים לפי הורה
+  // קיבוץ משימות: רגילות בנפרד, אינטרוולים לפי הורה
   const regularTasks = [];
   const intervalsByParent = new Map(); // parent_id -> [tasks sorted by index]
   
@@ -269,7 +265,7 @@ export function calculateAutoReschedule(tasks, editTask) {
     });
   });
   
-  // ✅ תיקון: אם יש זמן חסר - להעביר משימות למחר
+  // אם יש זמן חסר - להעביר משימות למחר
   if (timeOverflow > 0) {
     // מיון משימות רגילות מהפחות דחוף לדחוף - כדי להעביר את הפחות דחופות קודם
     const sortedRegularForRemoval = [...regularTasks].sort((a, b) => {
@@ -307,7 +303,7 @@ export function calculateAutoReschedule(tasks, editTask) {
       }
     });
     
-    // ✅ טיפול באינטרוולים - להעביר מהסוף אם צריך
+    // טיפול באינטרוולים - להעביר מהסוף אם צריך
     intervalsByParent.forEach((intervals, parentId) => {
       // עוברים מהסוף להתחלה (האחרונים יועברו קודם)
       const reversedIntervals = [...intervals].reverse();
@@ -343,11 +339,11 @@ export function calculateAutoReschedule(tasks, editTask) {
     timeNeededToday += getRemainingTaskTime(task);
   });
   
-  // ✅ תיקון: שימוש בזמן האפקטיבי (עבודה או בית)
+  // שימוש בזמן האפקטיבי (עבודה או בית)
   const freeTimeToday = effectiveRemainingTime - timeNeededToday;
   
-  // ✅ תיקון: חישוב משימות שחורגות מסוף היום - דינמי לפי סוג היום
-  const DAY_END_MINUTES = isWeekend ? 22 * 60 : 16.25 * 60; // 22:00 בסופ"ש, 16:15 בימים רגילים
+  // חישוב משימות שחורגות מסוף היום - דינמי לפי סוג היום
+  const DAY_END_MINUTES = isWeekend ? 22 * 60 : WORK_HOURS.end * 60;
   const tasksOverflowingEndOfDay = [];
   
   tasksToKeepToday.forEach(task => {
@@ -371,12 +367,12 @@ export function calculateAutoReschedule(tasks, editTask) {
   // האם אפשר למשוך משימות ממחר?
   const tasksToMoveToToday = [];
   
-  // ✅ תיקון: בסופ"ש לא מציעים להקדים משימות עבודה!
+  // בסופ"ש לא מציעים להקדים משימות עבודה!
   // רק משימות בית יכולות להיות מוקדמות לסופ"ש
   if (freeTimeToday > 15) { // לפחות 15 דקות פנויות
     let usedFreeTime = 0;
     
-    // ✅ תיקון: בסופ"ש - רק משימות בית ממחר
+    // בסופ"ש - רק משימות בית ממחר
     // בימים רגילים - משימות עבודה ממחר
     const eligibleTomorrowTasks = isWeekend 
       ? tomorrowTasks.filter(t => isHomeTask(t))  // סופ"ש: רק משימות בית
@@ -402,20 +398,28 @@ export function calculateAutoReschedule(tasks, editTask) {
   return {
     today,
     tomorrow,
-    remainingWorkToday: effectiveRemainingTime,  // ✅ תיקון: מחזיר זמן אפקטיבי
+    remainingWorkToday: effectiveRemainingTime,
     timeNeededToday,
     freeTimeToday,
     tasksToMoveToTomorrow,
     tasksToMoveToToday,
     tasksToKeepToday,
-    tasksOverflowingEndOfDay,  // ✅ משימות שחורגות מסוף היום
-    isWeekend  // ✅ חדש: האם סופ"ש
+    tasksOverflowingEndOfDay,
+    isWeekend,
+    // ✅ debug info
+    _debug: {
+      totalTasks: tasks.length,
+      todayTasksCount: todayTasks.length,
+      relevantTasksCount: relevantTasks.length,
+      totalTimeNeeded,
+      effectiveRemainingTime,
+      timeOverflow
+    }
   };
 }
 
 /**
  * ביצוע הדחיות האוטומטיות
- * ✅ תיקון: שומר את כל נתוני המשימה המקוריים
  */
 export async function executeAutoReschedule(editTask, rescheduleData) {
   const { today, tomorrow, tasksToMoveToTomorrow, tasksToMoveToToday } = rescheduleData;
@@ -428,7 +432,7 @@ export async function executeAutoReschedule(editTask, rescheduleData) {
       task,
       action: 'moveToTomorrow',
       promise: editTask(task.id, {
-        // ✅ שומר את כל הנתונים המקוריים
+        // שומר את כל הנתונים המקוריים
         title: task.title,
         description: task.description,
         quadrant: task.quadrant,
@@ -437,7 +441,7 @@ export async function executeAutoReschedule(editTask, rescheduleData) {
         task_parameter: task.task_parameter,
         priority: task.priority,
         reminder_minutes: task.reminder_minutes,
-        // ✅ משנה רק את התאריכים
+        // משנה רק את התאריכים
         due_date: tomorrow,
         start_date: task.start_date === today ? tomorrow : task.start_date,
         due_time: null // איפוס השעה - יתוזמן מחדש
@@ -451,7 +455,7 @@ export async function executeAutoReschedule(editTask, rescheduleData) {
       task,
       action: 'moveToToday',
       promise: editTask(task.id, {
-        // ✅ שומר את כל הנתונים המקוריים
+        // שומר את כל הנתונים המקוריים
         title: task.title,
         description: task.description,
         quadrant: task.quadrant,
@@ -460,7 +464,7 @@ export async function executeAutoReschedule(editTask, rescheduleData) {
         task_parameter: task.task_parameter,
         priority: task.priority,
         reminder_minutes: task.reminder_minutes,
-        // ✅ משנה רק את התאריכים
+        // משנה רק את התאריכים
         due_date: today,
         start_date: task.start_date === tomorrow ? today : task.start_date,
         due_time: null
@@ -479,7 +483,7 @@ export async function executeAutoReschedule(editTask, rescheduleData) {
 }
 
 /**
- * ✅ פונקציה נוחה: חישוב וביצוע אוטומטי
+ * פונקציה נוחה: חישוב וביצוע אוטומטי
  */
 export async function autoRescheduleIfNeeded(tasks, editTask, options = {}) {
   const { silent = false, onlyCalculate = false } = options;

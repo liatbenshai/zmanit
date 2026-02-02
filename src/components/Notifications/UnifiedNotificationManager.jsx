@@ -1,19 +1,14 @@
 /**
- * מנהל התראות מאוחד - UnifiedNotificationManager v3.0
+ * מנהל התראות מאוחד - UnifiedNotificationManager v3.1
  * =====================================================
  * 
  * מערכת התראות יחידה ומרכזית!
- * מחליפה את כל המערכות הקודמות:
- * - smartAlertManager (נמחק)
- * - notificationService (נמחק)
- * - WhyNotStartedDetector (הועבר לכאן)
- * - IdleDetector (הועבר לכאן)
  * 
- * ✅ עקרונות:
- * 1. מקור אחד לכל ההתראות
- * 2. מניעת כפילויות מובנית
- * 3. תור התראות עם עדיפויות
- * 4. למידה מהתנהגות המשתמש
+ * ✅ תיקונים בגרסה 3.1:
+ * 1. מניעת התראות כפולות לאינטרוולים של אותה משימה
+ * 2. לא שולח התראות כשיש טיימר פעיל על משימה כלשהי
+ * 3. שיפור בדיקת משימות הוריות (is_project)
+ * 4. מניעת התראות על משימות שונות בזמן עבודה
  */
 
 import { useEffect, useRef, useCallback, useState } from 'react';
@@ -110,10 +105,12 @@ function getWorkHoursSettings(userId) {
 }
 
 /**
- * בדיקה אם יש טיימר פעיל (רץ או מושהה)
+ * ✅ תיקון v3.1: בדיקה משופרת אם יש טיימר פעיל
+ * בודקת את כל המקומות האפשריים לטיימר פעיל
  */
 function getActiveTimerInfo() {
   try {
+    // בדיקה 1: המפתח הראשי
     const activeTimerId = localStorage.getItem('zmanit_active_timer');
     
     if (activeTimerId && activeTimerId !== 'null' && activeTimerId !== 'undefined') {
@@ -121,41 +118,59 @@ function getActiveTimerInfo() {
       if (timerData) {
         const data = JSON.parse(timerData);
         
+        // טיימר רץ
         if (data.isRunning === true && data.startTime) {
-          return { taskId: activeTimerId, isRunning: true, isPaused: false };
+          return { taskId: activeTimerId, isRunning: true, isPaused: false, isInterrupted: false };
         }
         
+        // טיימר מושהה
         if (data.isPaused === true) {
           return { taskId: activeTimerId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
         }
+        
+        // ✅ תיקון: גם טיימר במצב הפרעה נחשב פעיל!
+        if (data.isInterrupted === true && data.startTime) {
+          return { taskId: activeTimerId, isRunning: false, isPaused: false, isInterrupted: true };
+        }
       }
     }
     
-    // סריקת כל הטיימרים
+    // בדיקה 2: סריקת כל הטיימרים (למקרה שהמפתח הראשי לא מעודכן)
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key?.startsWith('timer_v2_')) {
-        const data = JSON.parse(localStorage.getItem(key) || '{}');
-        const taskId = key.replace('timer_v2_', '');
-        
-        if (data.isRunning === true && data.startTime) {
-          localStorage.setItem('zmanit_active_timer', taskId);
-          return { taskId, isRunning: true, isPaused: false };
-        }
-        
-        if (data.isPaused === true) {
-          return { taskId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
+        try {
+          const data = JSON.parse(localStorage.getItem(key) || '{}');
+          const taskId = key.replace('timer_v2_', '');
+          
+          if (data.isRunning === true && data.startTime) {
+            // עדכון המפתח הראשי
+            localStorage.setItem('zmanit_active_timer', taskId);
+            return { taskId, isRunning: true, isPaused: false, isInterrupted: false };
+          }
+          
+          if (data.isPaused === true) {
+            return { taskId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
+          }
+          
+          if (data.isInterrupted === true && data.startTime) {
+            return { taskId, isRunning: false, isPaused: false, isInterrupted: true };
+          }
+        } catch (e) {
+          // התעלם משגיאות parsing
         }
       }
     }
     
-    // בדיקת zmanit_focus_paused
+    // בדיקה 3: מצב focus מושהה
     const pausedData = localStorage.getItem('zmanit_focus_paused');
     if (pausedData) {
-      const data = JSON.parse(pausedData);
-      if (data.isPaused && data.taskId) {
-        return { taskId: data.taskId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
-      }
+      try {
+        const data = JSON.parse(pausedData);
+        if (data.isPaused && data.taskId) {
+          return { taskId: data.taskId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
+        }
+      } catch (e) {}
     }
   } catch (e) {
     console.error('[Notifications] שגיאה בבדיקת טיימר:', e);
@@ -197,6 +212,16 @@ function logNotificationToHistory(type, title, message) {
   } catch (e) {}
 }
 
+/**
+ * ✅ תיקון v3.1: קבלת מזהה המשימה ההורית (אם יש)
+ * אם זה אינטרוול, מחזיר את ה-parent_task_id
+ * אחרת מחזיר את ה-id של המשימה עצמה
+ */
+function getParentTaskId(task) {
+  if (!task) return null;
+  return task.parent_task_id || task.id;
+}
+
 // ============================================
 // הוק ניהול התראות
 // ============================================
@@ -217,6 +242,9 @@ export function useUnifiedNotifications() {
   const lastActivityRef = useRef(Date.now());
   const prevTimerStateRef = useRef(null);
   const tasksRef = useRef(tasks);
+  
+  // ✅ תיקון v3.1: מעקב אחרי התראות למשימות הוריות (לא רק ID בודדים)
+  const notifiedParentTasksRef = useRef(new Set());
   
   // עדכון ref של משימות
   useEffect(() => {
@@ -267,6 +295,25 @@ export function useUnifiedNotifications() {
   }, []);
   
   /**
+   * ✅ תיקון v3.1: בדיקה אם כבר שלחנו התראה למשימה הורית זו
+   * מונע התראות כפולות לאינטרוולים של אותה משימה
+   */
+  const canNotifyForTask = useCallback((task, notificationType, minIntervalMinutes) => {
+    const parentId = getParentTaskId(task);
+    const key = `${parentId}-${notificationType}`;
+    return canNotify(key, minIntervalMinutes);
+  }, [canNotify]);
+  
+  /**
+   * ✅ תיקון v3.1: סימון שנשלחה התראה למשימה (כולל אינטרוולים)
+   */
+  const markNotifiedForTask = useCallback((task, notificationType) => {
+    const parentId = getParentTaskId(task);
+    const key = `${parentId}-${notificationType}`;
+    markNotified(key);
+  }, [markNotified]);
+  
+  /**
    * ניקוי התראות למשימה
    */
   const clearNotificationsForTask = useCallback((taskId) => {
@@ -294,16 +341,65 @@ export function useUnifiedNotifications() {
                         currentMinutes >= workSettings.startMinutes && 
                         currentMinutes <= workSettings.endMinutes;
     
-    // מצב טיימר
+    // ✅ תיקון v3.1: בדיקה משופרת של מצב טיימר
     const timerInfo = getActiveTimerInfo();
     const hasActiveTimer = timerInfo !== null;
     const hasRunningTimer = timerInfo?.isRunning === true;
+    const hasInterruptedTimer = timerInfo?.isInterrupted === true;
     
     // איפוס grace period כשטיימר נעצר
     if (prevTimerStateRef.current !== null && prevTimerStateRef.current !== hasActiveTimer && !hasActiveTimer) {
       sessionStartRef.current = Date.now();
     }
     prevTimerStateRef.current = hasActiveTimer;
+    
+    // ========================================
+    // ✅ תיקון v3.1: אם יש טיימר רץ או במצב הפרעה - 
+    // לא שולחים התראות על משימות אחרות!
+    // ========================================
+    if (hasRunningTimer || hasInterruptedTimer) {
+      const activeTaskId = timerInfo.taskId;
+      const activeTask = tasks.find(t => t.id === activeTaskId);
+      
+      // בודקים רק את המשימה הפעילה (אזהרת סיום זמן)
+      if (activeTask?.estimated_duration) {
+        const timeSpent = getElapsedTimeFromTimer(activeTask.id);
+        const remaining = activeTask.estimated_duration - timeSpent;
+        
+        // 5 דקות לסיום
+        if (remaining > 0 && remaining <= CONFIG.THRESHOLD.TIME_ENDING) {
+          if (canNotifyForTask(activeTask, 'ending-soon', 3)) {
+            if (hasPushPermission) {
+              sendNotification(`⏳ ${activeTask.title}`, {
+                body: `נשארו ${remaining} דקות`,
+                tag: `task-ending-${activeTask.id}`,
+                taskId: activeTask.id
+              });
+            }
+            toast(`⏳ נשארו ${remaining} דקות ל-${activeTask.title}`, { duration: 5000, icon: '⏰' });
+            markNotifiedForTask(activeTask, 'ending-soon');
+          }
+        }
+        
+        // הזמן נגמר
+        if (remaining <= 0) {
+          if (canNotifyForTask(activeTask, 'time-up', 5)) {
+            if (hasPushPermission) {
+              sendNotification(`🔔 הזמן נגמר: ${activeTask.title}`, {
+                body: 'הזמן המוקצב הסתיים',
+                tag: `task-timeup-${activeTask.id}`,
+                taskId: activeTask.id
+              });
+            }
+            toast.error(`🔔 הזמן נגמר: ${activeTask.title}`, { duration: 8000 });
+            markNotifiedForTask(activeTask, 'time-up');
+          }
+        }
+      }
+      
+      // ✅ תיקון v3.1: לא ממשיכים לבדוק משימות אחרות כשיש טיימר פעיל!
+      return;
+    }
     
     // ========================================
     // 1. בדיקת טיימר מושהה יותר מדי זמן
@@ -323,7 +419,8 @@ export function useUnifiedNotifications() {
           if (hasPushPermission) {
             sendNotification(`⏸️ ${taskTitle} מושהית`, {
               body: `המשימה מושהית כבר ${pausedMinutes} דקות`,
-              tag: 'paused-too-long'
+              tag: 'paused-too-long',
+              taskId: timerInfo.taskId
             });
           }
           
@@ -347,55 +444,16 @@ export function useUnifiedNotifications() {
     }
     
     // ========================================
-    // 2. אם יש טיימר רץ - בדיקות רק למשימה הפעילה
-    // ========================================
-    if (hasRunningTimer && timerInfo?.taskId) {
-      const activeTask = tasks.find(t => t.id === timerInfo.taskId);
-      if (activeTask?.estimated_duration) {
-        const timeSpent = getElapsedTimeFromTimer(activeTask.id);
-        const remaining = activeTask.estimated_duration - timeSpent;
-        
-        // 5 דקות לסיום
-        if (remaining > 0 && remaining <= CONFIG.THRESHOLD.TIME_ENDING) {
-          if (canNotify(`${activeTask.id}-ending-soon`, 3)) {
-            if (hasPushPermission) {
-              sendNotification(`⏳ ${activeTask.title}`, {
-                body: `נשארו ${remaining} דקות`,
-                tag: `task-ending-${activeTask.id}`
-              });
-            }
-            toast(`⏳ נשארו ${remaining} דקות ל-${activeTask.title}`, { duration: 5000, icon: '⏰' });
-            markNotified(`${activeTask.id}-ending-soon`);
-          }
-        }
-        
-        // הזמן נגמר
-        if (remaining <= 0) {
-          if (canNotify(`${activeTask.id}-time-up`, 5)) {
-            if (hasPushPermission) {
-              sendNotification(`🔔 הזמן נגמר: ${activeTask.title}`, {
-                body: 'הזמן המוקצב הסתיים',
-                tag: `task-timeup-${activeTask.id}`
-              });
-            }
-            toast.error(`🔔 הזמן נגמר: ${activeTask.title}`, { duration: 8000 });
-            markNotified(`${activeTask.id}-time-up`);
-          }
-        }
-      }
-      return; // יש טיימר רץ - לא בודקים משימות אחרות
-    }
-    
-    // ========================================
-    // 3. בשעות עבודה ללא טיימר - תזכורת
+    // 2. בשעות עבודה ללא טיימר - תזכורת
     // ========================================
     if (isWorkHours && !hasActiveTimer) {
       if (canNotify('work-hours-no-timer', CONFIG.MIN_INTERVAL.NO_TIMER)) {
+        // ✅ תיקון v3.1: מסננים משימות הוריות!
         const pendingTasks = tasks.filter(t => 
           t.due_date === today && 
           !t.is_completed && 
           t.due_time &&
-          !t.is_project
+          !t.is_project  // לא כוללים משימות הוריות
         );
         
         if (pendingTasks.length > 0) {
@@ -413,7 +471,8 @@ export function useUnifiedNotifications() {
             if (hasPushPermission) {
               sendNotification('⏰ את בשעות העבודה!', {
                 body: `המשימה הבאה: ${nextTask.title} (${nextTask.due_time})`,
-                tag: 'no-timer-warning'
+                tag: 'no-timer-warning',
+                taskId: nextTask.id
               });
             }
             
@@ -437,45 +496,59 @@ export function useUnifiedNotifications() {
     }
     
     // ========================================
-    // 4. בדיקת משימות היום (רק אם אין טיימר)
+    // 3. בדיקת משימות היום (רק אם אין טיימר!)
     // ========================================
     if (!hasActiveTimer) {
+      // ✅ תיקון v3.1: מסננים משימות הוריות!
       const todayTasks = tasks.filter(task => {
         if (task.is_completed || task.is_project || task.was_deferred) return false;
         const taskDate = task.due_date ? toLocalISODate(new Date(task.due_date)) : null;
         return taskDate === today && task.due_time;
       });
       
+      // ✅ תיקון v3.1: מעקב אחרי משימות הוריות שכבר קיבלו התראה
+      const notifiedParentIds = new Set();
+      
       todayTasks.forEach(task => {
+        // ✅ תיקון v3.1: אם זה אינטרוול, בודקים אם ההורה כבר קיבל התראה
+        const parentId = getParentTaskId(task);
+        if (notifiedParentIds.has(parentId)) {
+          return; // כבר שלחנו התראה למשימה הזו (או לאינטרוול אחר שלה)
+        }
+        
         const [hour, min] = task.due_time.split(':').map(Number);
         const taskStartMinutes = hour * 60 + (min || 0);
         const diffFromStart = taskStartMinutes - currentMinutes;
         
         // 5 דקות לפני התחלה
         if (diffFromStart > 0 && diffFromStart <= CONFIG.THRESHOLD.TASK_STARTING_SOON) {
-          if (canNotify(`${task.id}-before`, CONFIG.MIN_INTERVAL.TASK_STARTING)) {
+          if (canNotifyForTask(task, 'before', CONFIG.MIN_INTERVAL.TASK_STARTING)) {
             if (hasPushPermission) {
               sendNotification(`⏰ ${task.title}`, {
                 body: `מתחיל בעוד ${diffFromStart} דקות`,
-                tag: `task-before-${task.id}`
+                tag: `task-before-${parentId}`,
+                taskId: task.id
               });
             }
             toast(`⏰ ${task.title} מתחיל בעוד ${diffFromStart} דקות`, { duration: 5000 });
-            markNotified(`${task.id}-before`);
+            markNotifiedForTask(task, 'before');
+            notifiedParentIds.add(parentId);
           }
         }
         
         // בדיוק בזמן
         if (diffFromStart >= -1 && diffFromStart <= 1) {
-          if (canNotify(`${task.id}-ontime`, CONFIG.MIN_INTERVAL.TASK_STARTING)) {
+          if (canNotifyForTask(task, 'ontime', CONFIG.MIN_INTERVAL.TASK_STARTING)) {
             if (hasPushPermission) {
               sendNotification(`🔔 ${task.title}`, {
                 body: 'הגיע הזמן להתחיל!',
-                tag: `task-ontime-${task.id}`
+                tag: `task-ontime-${parentId}`,
+                taskId: task.id
               });
             }
             toast.success(`🔔 הגיע הזמן להתחיל: ${task.title}`, { duration: 8000 });
-            markNotified(`${task.id}-ontime`);
+            markNotifiedForTask(task, 'ontime');
+            notifiedParentIds.add(parentId);
           }
         }
         
@@ -483,7 +556,7 @@ export function useUnifiedNotifications() {
         if (diffFromStart < -CONFIG.THRESHOLD.TASK_LATE_MIN && 
             diffFromStart > -CONFIG.THRESHOLD.TASK_LATE_MAX) {
           if (!task.time_spent || task.time_spent === 0) {
-            if (canNotify(`${task.id}-late`, CONFIG.MIN_INTERVAL.TASK_OVERDUE)) {
+            if (canNotifyForTask(task, 'late', CONFIG.MIN_INTERVAL.TASK_OVERDUE)) {
               const lateMinutes = Math.abs(Math.round(diffFromStart));
               
               playSound?.('warning');
@@ -492,13 +565,15 @@ export function useUnifiedNotifications() {
               if (hasPushPermission) {
                 sendNotification(`🔴 ${task.title}`, {
                   body: `היית אמורה להתחיל לפני ${lateMinutes} דקות`,
-                  tag: `task-late-${task.id}`
+                  tag: `task-late-${parentId}`,
+                  taskId: task.id
                 });
               }
               
               // פופאפ משימה באיחור
               setOverdueTaskPopup(task);
-              markNotified(`${task.id}-late`);
+              markNotifiedForTask(task, 'late');
+              notifiedParentIds.add(parentId);
             }
           }
         }
@@ -506,7 +581,7 @@ export function useUnifiedNotifications() {
     }
     
     // ========================================
-    // 5. בדיקת אירועי Google Calendar
+    // 4. בדיקת אירועי Google Calendar
     // ========================================
     try {
       const calendarEventsData = localStorage.getItem('zmanit_calendar_events_today');
@@ -543,7 +618,7 @@ export function useUnifiedNotifications() {
       }
     } catch (e) {}
     
-  }, [tasks, permission, user?.id, canNotify, markNotified, sendNotification, playSound]);
+  }, [tasks, permission, user?.id, canNotify, canNotifyForTask, markNotified, markNotifiedForTask, sendNotification, playSound]);
   
   // הפעלת בדיקה תקופתית
   useEffect(() => {
