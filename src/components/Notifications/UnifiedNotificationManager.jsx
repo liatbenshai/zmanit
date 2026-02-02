@@ -440,13 +440,16 @@ export function useUnifiedNotifications() {
           markNotified('paused-timer-too-long');
         }
       }
-      return; // יש טיימר מושהה - לא בודקים דברים אחרים
+      // ✅ תיקון: לא עושים return כאן! ממשיכים לבדוק התראות אחרות
     }
     
     // ========================================
-    // 2. בשעות עבודה ללא טיימר - תזכורת
+    // 2. בשעות עבודה ללא טיימר פעיל (לא רץ ולא מושהה) - תזכורת
     // ========================================
-    if (isWorkHours && !hasActiveTimer) {
+    // ✅ תיקון: hasActiveTimer כולל גם מושהה, אז צריך לבדוק ספציפית
+    const hasNoWorkingTimer = !hasRunningTimer && !timerInfo?.isPaused && !hasInterruptedTimer;
+    
+    if (isWorkHours && hasNoWorkingTimer) {
       if (canNotify('work-hours-no-timer', CONFIG.MIN_INTERVAL.NO_TIMER)) {
         // ✅ תיקון v3.1: מסננים משימות הוריות!
         const pendingTasks = tasks.filter(t => 
@@ -496,9 +499,9 @@ export function useUnifiedNotifications() {
     }
     
     // ========================================
-    // 3. בדיקת משימות היום (רק אם אין טיימר!)
+    // 3. בדיקת משימות היום (רק אם אין טיימר רץ!)
     // ========================================
-    if (!hasActiveTimer) {
+    if (hasNoWorkingTimer) {
       // ✅ תיקון v3.1: מסננים משימות הוריות!
       const todayTasks = tasks.filter(task => {
         if (task.is_completed || task.is_project || task.was_deferred) return false;
