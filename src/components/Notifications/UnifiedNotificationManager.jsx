@@ -42,7 +42,7 @@ const CONFIG = {
     TASK_STARTING_SOON: 5,    // התראה 5 דק' לפני התחלה
     TASK_LATE_MIN: 2,         // משימה באיחור אחרי 2 דק'
     TASK_LATE_MAX: 30,        // לא מתריעים על יותר מ-30 דק' איחור
-    PAUSED_TIMER: 10,         // טיימר מושהה יותר מ-10 דק'
+    PAUSED_TIMER: 5,         // טיימר מושהה יותר מ-5 דק'
     TIME_ENDING: 5,           // 5 דק' לפני סיום זמן מוקצב
     IDLE_MINUTES: 5,          // זמן מת אחרי 5 דק'
   },
@@ -125,7 +125,17 @@ function getActiveTimerInfo() {
         
         // טיימר מושהה
         if (data.isPaused === true) {
-          return { taskId: activeTimerId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
+          // ✅ תיקון: אם אין pausedAt ב-timer_v2_, מנסים למצוא ב-zmanit_focus_paused
+          let pausedAt = data.pausedAt;
+          if (!pausedAt) {
+            try {
+              const focusPaused = JSON.parse(localStorage.getItem('zmanit_focus_paused') || '{}');
+              if (focusPaused.isPaused && focusPaused.taskId === activeTimerId) {
+                pausedAt = focusPaused.pausedAt;
+              }
+            } catch (e) {}
+          }
+          return { taskId: activeTimerId, isRunning: false, isPaused: true, pausedAt };
         }
         
         // טיימר במצב הפרעה נחשב פעיל
@@ -156,7 +166,16 @@ function getActiveTimerInfo() {
           }
           
           if (data.isPaused === true) {
-            return { taskId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
+            let pausedAt = data.pausedAt;
+            if (!pausedAt) {
+              try {
+                const focusPaused = JSON.parse(localStorage.getItem('zmanit_focus_paused') || '{}');
+                if (focusPaused.isPaused && focusPaused.taskId === taskId) {
+                  pausedAt = focusPaused.pausedAt;
+                }
+              } catch (e) {}
+            }
+            return { taskId, isRunning: false, isPaused: true, pausedAt };
           }
           
           if (data.isInterrupted === true && data.startTime) {
@@ -443,6 +462,7 @@ export function useUnifiedNotifications() {
           
           playSound?.('warning');
           logNotificationToHistory('paused', taskTitle, `מושהית ${pausedMinutes} דקות`);
+          toast(`⏸️ ${taskTitle} מושהית כבר ${pausedMinutes} דקות`, { duration: 10000, icon: '⏸️' });
           
           if (hasPushPermission) {
             sendNotification(`⏸️ ${taskTitle} מושהית`, {

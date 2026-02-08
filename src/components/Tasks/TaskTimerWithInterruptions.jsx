@@ -294,6 +294,7 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
         startTime: null,
         isRunning: false,
         isPaused: true,
+        pausedAt: new Date().toISOString(),
         isInterrupted: false,
         totalInterruptionSeconds,
         interruptions
