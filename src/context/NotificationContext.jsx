@@ -59,38 +59,24 @@ function isTimerActiveForOtherTask(taskId) {
       return false;
     }
     
-    // אם זו אותה משימה - מותר לשלוח (התראה על המשימה הפעילה)
+    // אם זו אותה משימה - מותר לשלוח
     if (taskId && activeTimerId === taskId) {
       return false;
     }
     
-    // בודקים אם הטיימר באמת פעיל
+    // בודקים אם הטיימר באמת פעיל - פורמט חדש
     const timerData = localStorage.getItem(`timer_v2_${activeTimerId}`);
     if (timerData) {
       const data = JSON.parse(timerData);
-      // טיימר נחשב פעיל אם הוא רץ, מושהה, או במצב הפרעה
       if (data.isRunning === true || data.isPaused === true || data.isInterrupted === true) {
-        // יש טיימר פעיל על משימה אחרת - לא לשלוח התראה
         return true;
       }
     }
     
-    // בדיקה נוספת: סריקת כל הטיימרים
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (key?.startsWith('timer_v2_')) {
-        const timerId = key.replace('timer_v2_', '');
-        
-        // אם זו אותה משימה - ממשיכים
-        if (taskId && timerId === taskId) continue;
-        
-        try {
-          const data = JSON.parse(localStorage.getItem(key) || '{}');
-          if (data.isRunning === true || data.isPaused === true || data.isInterrupted === true) {
-            return true; // יש טיימר פעיל על משימה אחרת
-          }
-        } catch (e) {}
-      }
+    // בודקים פורמט ישן
+    const oldTimerKey = `timer_${activeTimerId}_startTime`;
+    if (localStorage.getItem(oldTimerKey)) {
+      return true;
     }
     
     return false;

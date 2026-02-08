@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 const CONFIG = {
   // מרווחי בדיקה
   CHECK_INTERVAL_MS: 30 * 1000,        // בדיקה כל 30 שניות
-  GRACE_PERIOD_MS: 2 * 60 * 1000,      // 2 דקות חסד בתחילת סשן
+  GRACE_PERIOD_MS: 10 * 1000,           // 10 שניות חסד בתחילת סשן (היה 2 דקות - חסם התראות)
   
   // מרווחים בין התראות (בדקות)
   MIN_INTERVAL: {
@@ -128,14 +128,21 @@ function getActiveTimerInfo() {
           return { taskId: activeTimerId, isRunning: false, isPaused: true, pausedAt: data.pausedAt };
         }
         
-        // ✅ תיקון: גם טיימר במצב הפרעה נחשב פעיל!
+        // טיימר במצב הפרעה נחשב פעיל
         if (data.isInterrupted === true && data.startTime) {
           return { taskId: activeTimerId, isRunning: false, isPaused: false, isInterrupted: true };
         }
       }
+      
+      // ✅ תיקון: בדיקת מפתח ישן של TaskTimer (timer_{id}_startTime)
+      const oldTimerKey = `timer_${activeTimerId}_startTime`;
+      const oldStartTime = localStorage.getItem(oldTimerKey);
+      if (oldStartTime) {
+        return { taskId: activeTimerId, isRunning: true, isPaused: false, isInterrupted: false };
+      }
     }
     
-    // בדיקה 2: סריקת כל הטיימרים (למקרה שהמפתח הראשי לא מעודכן)
+    // בדיקה 2: סריקת כל הטיימרים timer_v2_
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i);
       if (key?.startsWith('timer_v2_')) {
@@ -144,7 +151,6 @@ function getActiveTimerInfo() {
           const taskId = key.replace('timer_v2_', '');
           
           if (data.isRunning === true && data.startTime) {
-            // עדכון המפתח הראשי
             localStorage.setItem('zmanit_active_timer', taskId);
             return { taskId, isRunning: true, isPaused: false, isInterrupted: false };
           }
@@ -162,7 +168,19 @@ function getActiveTimerInfo() {
       }
     }
     
-    // בדיקה 3: מצב focus מושהה
+    // בדיקה 3: סריקת מפתחות ישנים timer_{id}_startTime
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (key?.startsWith('timer_') && key?.endsWith('_startTime') && !key.startsWith('timer_v2_')) {
+        const taskId = key.replace('timer_', '').replace('_startTime', '');
+        if (taskId && taskId.length > 10) { // UUID is long enough
+          localStorage.setItem('zmanit_active_timer', taskId);
+          return { taskId, isRunning: true, isPaused: false, isInterrupted: false };
+        }
+      }
+    }
+    
+    // בדיקה 4: מצב focus מושהה
     const pausedData = localStorage.getItem('zmanit_focus_paused');
     if (pausedData) {
       try {
@@ -184,18 +202,28 @@ function getActiveTimerInfo() {
  */
 function getElapsedTimeFromTimer(taskId) {
   try {
+    // נסה קודם את הפורמט החדש
     const timerData = localStorage.getItem(`timer_v2_${taskId}`);
-    if (!timerData) return 0;
-    
-    const data = JSON.parse(timerData);
-    let totalMs = data.accumulatedTime || data.elapsed || 0;
-    
-    if (data.isRunning && data.startTime) {
-      const startTime = new Date(data.startTime).getTime();
-      totalMs += (Date.now() - startTime);
+    if (timerData) {
+      const data = JSON.parse(timerData);
+      let totalMs = data.accumulatedTime || data.elapsed || 0;
+      
+      if (data.isRunning && data.startTime) {
+        const startTime = new Date(data.startTime).getTime();
+        totalMs += (Date.now() - startTime);
+      }
+      
+      return Math.floor(totalMs / 60000);
     }
     
-    return Math.floor(totalMs / 60000);
+    // נסה את הפורמט הישן (timer_{id}_startTime)
+    const oldStartTime = localStorage.getItem(`timer_${taskId}_startTime`);
+    if (oldStartTime) {
+      const startTime = new Date(oldStartTime).getTime();
+      return Math.floor((Date.now() - startTime) / 60000);
+    }
+    
+    return 0;
   } catch (e) {
     return 0;
   }
@@ -533,7 +561,8 @@ export function useUnifiedNotifications() {
                 taskId: task.id
               });
             }
-            toast(`⏰ ${task.title} מתחיל בעוד ${diffFromStart} דקות`, { duration: 5000 });
+            playSound?.('default');
+            toast(`⏰ ${task.title} מתחיל בעוד ${diffFromStart} דקות`, { duration: 8000 });
             markNotifiedForTask(task, 'before');
             notifiedParentIds.add(parentId);
           }
@@ -549,7 +578,8 @@ export function useUnifiedNotifications() {
                 taskId: task.id
               });
             }
-            toast.success(`🔔 הגיע הזמן להתחיל: ${task.title}`, { duration: 8000 });
+            playSound?.('warning');
+            toast.success(`🔔 הגיע הזמן להתחיל: ${task.title}`, { duration: 10000 });
             markNotifiedForTask(task, 'ontime');
             notifiedParentIds.add(parentId);
           }

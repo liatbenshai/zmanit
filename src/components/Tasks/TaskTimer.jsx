@@ -405,13 +405,28 @@ function TaskTimer({ task, onUpdate, onComplete }) {
   const pauseTimer = async () => {
     setIsRunning(false);
     
-    // ✅ סנכרון עם מנהל ההתראות - טיימר מושהה
-    const accumulatedMs = elapsedSeconds * 1000;
-    syncTimerToNotificationManager(currentTask?.id, false, startTime, accumulatedMs);
+    // ✅ תיקון: סנכרון מצב מושהה עם מנהל ההתראות
+    if (currentTask?.id) {
+      try {
+        const accumulatedMs = elapsedSeconds * 1000;
+        const timerData = {
+          isRunning: false,
+          isPaused: true,
+          pausedAt: new Date().toISOString(),
+          startTime: startTime ? startTime.toISOString() : null,
+          accumulatedTime: accumulatedMs,
+          elapsed: accumulatedMs
+        };
+        localStorage.setItem(`timer_v2_${currentTask.id}`, JSON.stringify(timerData));
+        // לא מוחקים את zmanit_active_timer - מנהל ההתראות יבדוק isPaused
+      } catch (e) {
+        console.error('שגיאה בסנכרון השהייה:', e);
+      }
+    }
     
     // ✅ שמירת הזמן שעבד עד עכשיו
     if (elapsedSeconds >= 60) {
-      const result = await saveProgress(false, true); // שמירה בלי איפוס
+      const result = await saveProgress(false, true);
       if (result && result.success) {
         toast.success(`⏸️ הושהה! ${result.minutesToAdd} דקות נשמרו`, {
           duration: 3000,

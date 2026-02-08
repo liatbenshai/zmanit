@@ -184,7 +184,32 @@ export function SettingsProvider({ children }) {
 
       if (updateError) throw updateError;
 
-      setSettings(prev => ({ ...prev, ...newSettings }));
+      setSettings(prev => {
+        const updated = { ...prev, ...newSettings };
+        
+        // ✅ תיקון: סנכרון שעות עבודה ל-localStorage למנהל ההתראות
+        try {
+          const workHours = updated.work_hours;
+          const workDays = updated.work_days;
+          const enabledDays = Object.entries(workDays || {})
+            .filter(([_, v]) => v?.enabled)
+            .map(([k]) => parseInt(k));
+          
+          localStorage.setItem(`work_settings_${user.id}`, JSON.stringify({
+            workHours: {
+              startHour: Math.floor((workHours?.dayStart || 510) / 60),
+              startMinute: (workHours?.dayStart || 510) % 60,
+              endHour: Math.floor((workHours?.dayEnd || 975) / 60),
+              endMinute: (workHours?.dayEnd || 975) % 60,
+              workDays: enabledDays.length > 0 ? enabledDays : [0, 1, 2, 3, 4]
+            }
+          }));
+        } catch (e) {
+          console.warn('שגיאה בסנכרון הגדרות ל-localStorage:', e);
+        }
+        
+        return updated;
+      });
       toast.success('ההגדרות נשמרו');
     } catch (err) {
       console.error('Error saving settings:', err);
@@ -326,6 +351,30 @@ export function SettingsProvider({ children }) {
   useEffect(() => {
     loadSettings();
   }, [loadSettings]);
+  
+  // ✅ סנכרון שעות עבודה ל-localStorage בכל שינוי הגדרות
+  useEffect(() => {
+    if (!user?.id || loading) return;
+    try {
+      const workHours = settings.work_hours;
+      const workDays = settings.work_days;
+      const enabledDays = Object.entries(workDays || {})
+        .filter(([_, v]) => v?.enabled)
+        .map(([k]) => parseInt(k));
+      
+      localStorage.setItem(`work_settings_${user.id}`, JSON.stringify({
+        workHours: {
+          startHour: Math.floor((workHours?.dayStart || 510) / 60),
+          startMinute: (workHours?.dayStart || 510) % 60,
+          endHour: Math.floor((workHours?.dayEnd || 975) / 60),
+          endMinute: (workHours?.dayEnd || 975) % 60,
+          workDays: enabledDays.length > 0 ? enabledDays : [0, 1, 2, 3, 4]
+        }
+      }));
+    } catch (e) {
+      // לא קריטי
+    }
+  }, [settings.work_hours, settings.work_days, user?.id, loading]);
 
   const value = {
     // מצב
