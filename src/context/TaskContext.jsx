@@ -46,30 +46,41 @@ function calculateNextAvailableTime(tasks, duration = 30) {
     return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
   };
   
-  // מציאת כל המשימות להיום עם שעה
+  // ✅ תיקון: רק משימות של היום עם תאריך מפורש ושעה
+  // משימות בלי תאריך לא נחשבות כמשימות היום!
   const todayTasks = (tasks || []).filter(t => 
-    (t.due_date === todayISO || !t.due_date) && 
+    t.due_date === todayISO && 
     !t.is_completed && 
     t.due_time
   );
   
   if (todayTasks.length === 0) {
-    // אין משימות - מתחילים עכשיו או מתחילת שעות העבודה
+    // אין משימות היום - מתחילים עכשיו (או מתחילת שעות העבודה)
     const startMinutes = Math.max(currentMinutes, scheduleStart);
     const roundedMinutes = Math.ceil(startMinutes / 5) * 5;
     return minutesToTime(roundedMinutes);
   }
   
-  // מציאת זמן הסיום של המשימה האחרונה
+  // מציאת זמן הסיום של המשימה האחרונה שעדיין רלוונטית
+  // ✅ תיקון: בודקים רק משימות שזמנן עדיין לא עבר לגמרי, או שעבר אבל עוד רצות
   let latestEndMinutes = currentMinutes;
   
   for (const t of todayTasks) {
     const [h, m] = t.due_time.split(':').map(Number);
     const taskStart = h * 60 + (m || 0);
     const taskEnd = taskStart + (t.estimated_duration || 30);
-    if (taskEnd > latestEndMinutes) {
+    
+    // רק משימות שזמן הסיום שלהן בעתיד משפיעות על השיבוץ
+    if (taskEnd > currentMinutes && taskEnd > latestEndMinutes) {
       latestEndMinutes = taskEnd;
     }
+  }
+  
+  // אם כל המשימות כבר הסתיימו — מתחילים מעכשיו
+  if (latestEndMinutes <= currentMinutes) {
+    const roundedMinutes = Math.ceil((currentMinutes + 5) / 5) * 5;
+    if (roundedMinutes >= scheduleEnd) return null;
+    return minutesToTime(roundedMinutes);
   }
   
   // הוספת 5 דקות הפסקה
