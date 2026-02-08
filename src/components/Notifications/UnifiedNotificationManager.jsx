@@ -488,31 +488,35 @@ export function useUnifiedNotifications() {
         );
         
         if (pendingTasks.length > 0) {
-          const nextTask = pendingTasks
+          // ✅ תיקון: מחפשים רק משימות שכבר הגיע זמנן או שיגיע תוך 5 דקות
+          // לא מתריעים על משימות עתידיות!
+          const relevantTask = pendingTasks
             .sort((a, b) => a.due_time.localeCompare(b.due_time))
             .find(t => {
               const [h, m] = t.due_time.split(':').map(Number);
-              return (h * 60 + (m || 0)) >= currentMinutes - 30;
+              const taskMinutes = h * 60 + (m || 0);
+              // רק משימות שזמנן עבר או שמתחילות בעוד 5 דקות לכל היותר
+              return taskMinutes <= currentMinutes + 5 && taskMinutes >= currentMinutes - 30;
             });
           
-          if (nextTask) {
+          if (relevantTask) {
             playSound?.('warning');
-            logNotificationToHistory('no_timer', 'את בשעות העבודה!', nextTask.title);
+            logNotificationToHistory('no_timer', 'את בשעות העבודה!', relevantTask.title);
             
             if (hasPushPermission) {
               sendNotification('⏰ את בשעות העבודה!', {
-                body: `המשימה הבאה: ${nextTask.title} (${nextTask.due_time})`,
+                body: `המשימה הבאה: ${relevantTask.title} (${relevantTask.due_time})`,
                 tag: 'no-timer-warning',
-                taskId: nextTask.id
+                taskId: relevantTask.id
               });
             }
             
             setProcrastinationPopup({
               type: 'no-timer',
               title: '⏰ את בשעות העבודה!',
-              message: `אין טיימר פעיל. המשימה הבאה: "${nextTask.title}" (${nextTask.due_time})`,
-              taskId: nextTask.id,
-              taskTitle: nextTask.title,
+              message: `אין טיימר פעיל. המשימה הבאה: "${relevantTask.title}" (${relevantTask.due_time})`,
+              taskId: relevantTask.id,
+              taskTitle: relevantTask.title,
               actions: [
                 { id: 'start_task', label: '▶️ התחל משימה', primary: true },
                 { id: 'snooze_10', label: '⏱️ הזכר בעוד 10 דק׳' },
