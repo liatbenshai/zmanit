@@ -527,6 +527,9 @@ function TaskTimer({ task, onUpdate, onComplete }) {
           // עדכון localStorage
           if (currentTask?.id) {
             localStorage.setItem(timerStorageKey, now.toISOString());
+            // ✅ תיקון: סנכרון timer_v2_ אחרי שמירה אוטומטית
+            // מנהל ההתראות משתמש בנתונים האלה לחישוב זמן שנותר
+            syncTimerToNotificationManager(currentTask.id, true, now, 0);
           }
           // מאפסים את elapsedSeconds כי הזמן כבר נשמר
           setElapsedSeconds(0);
@@ -918,6 +921,9 @@ function TaskTimer({ task, onUpdate, onComplete }) {
                 <Button
                   onClick={() => {
                     setIsRunning(true);
+                    // ✅ תיקון: סנכרון עם מנהל ההתראות כשחוזרים מהשהייה
+                    const timerStartTime = startTime || new Date();
+                    syncTimerToNotificationManager(currentTask?.id, true, timerStartTime, elapsedSeconds * 1000);
                     toast.success('▶ ממשיכה לעבוד!');
                   }}
                   className="w-full bg-gradient-to-r from-blue-500 to-indigo-600 hover:from-blue-600 hover:to-indigo-700 text-white font-bold shadow-lg text-lg py-3"

@@ -37,7 +37,7 @@ function calculateNextAvailableTime(tasks, duration = 30) {
   
   // שעות עבודה
   const scheduleStart = 8.5 * 60;  // 08:30
-  const scheduleEnd = 16 * 60;     // 16:00
+  const scheduleEnd = 16.25 * 60;  // 16:15 (תואם להגדרות המערכת)
   
   // פונקציית עזר - המרת דקות לפורמט HH:MM
   const minutesToTime = (minutes) => {

@@ -24,11 +24,26 @@ function DailyProgressCard({ tasks, currentTime }) {
   
   // סטטיסטיקות היום
   const stats = useMemo(() => {
-    const todayTasks = tasks.filter(t => t.due_date === today && !t.deleted_at);
+    // ✅ תיקון: מסננים משימות הוריות (is_project) - סופרים רק אינטרוולים
+    // כדי למנוע ספירה כפולה (הורה + ילדים)
+    const todayTasks = tasks.filter(t => {
+      if (t.deleted_at) return false;
+      if (t.due_date !== today) return false;
+      // לא סופרים משימות הוריות - האינטרוולים שלהן ייספרו בנפרד
+      if (t.is_project && tasks.some(child => child.parent_task_id === t.id)) return false;
+      return true;
+    });
     const completed = todayTasks.filter(t => t.is_completed);
     const pending = todayTasks.filter(t => !t.is_completed);
-    
-    const plannedMinutes = pending.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
+
+    // ✅ תיקון: חישוב זמן רק עבור אינטרוולים של היום
+    // time_spent הוא הזמן שהושקע באינטרוול הספציפי, לא במשימה השלמה
+    const plannedMinutes = pending.reduce((sum, t) => {
+      const estimated = t.estimated_duration || 30;
+      const spent = t.time_spent || 0;
+      // מה שנותר לעשות באינטרוול הזה
+      return sum + Math.max(0, estimated - spent);
+    }, 0);
     const completedMinutes = completed.reduce((sum, t) => sum + (t.time_spent || t.estimated_duration || 30), 0);
     
     // זמן שנשאר ביום

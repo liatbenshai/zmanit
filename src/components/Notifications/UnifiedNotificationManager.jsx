@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 const CONFIG = {
   // מרווחי בדיקה
   CHECK_INTERVAL_MS: 30 * 1000,        // בדיקה כל 30 שניות
-  GRACE_PERIOD_MS: 10 * 1000,           // 10 שניות חסד בתחילת סשן (היה 2 דקות - חסם התראות)
+  GRACE_PERIOD_MS: 30 * 1000,           // 30 שניות חסד בתחילת סשן (מספיק לטעינת נתונים)
   
   // מרווחים בין התראות (בדקות)
   MIN_INTERVAL: {
@@ -410,8 +410,11 @@ export function useUnifiedNotifications() {
       
       // בודקים רק את המשימה הפעילה (אזהרת סיום זמן)
       if (activeTask?.estimated_duration) {
-        const timeSpent = getElapsedTimeFromTimer(activeTask.id);
-        const remaining = activeTask.estimated_duration - timeSpent;
+        // ✅ תיקון: כולל את time_spent מהDB + זמן הסשן הנוכחי מהטיימר
+        const timerElapsed = getElapsedTimeFromTimer(activeTask.id);
+        const dbTimeSpent = parseInt(activeTask.time_spent) || 0;
+        const totalTimeSpent = dbTimeSpent + timerElapsed;
+        const remaining = activeTask.estimated_duration - totalTimeSpent;
         
         // 5 דקות לסיום
         if (remaining > 0 && remaining <= CONFIG.THRESHOLD.TIME_ENDING) {
