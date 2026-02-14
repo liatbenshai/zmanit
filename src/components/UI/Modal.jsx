@@ -73,23 +73,23 @@ function Modal({
               className={`
                 w-full ${sizes[size]}
                 bg-white dark:bg-gray-800
-                rounded-2xl shadow-xl
-                max-h-[90vh] overflow-y-auto
+                rounded-2xl shadow-elevated
+                max-h-[90vh] overflow-hidden flex flex-col
               `}
               onClick={(e) => e.stopPropagation()}
             >
-              {/* כותרת */}
+              {/* כותרת - sticky */}
               {(title || showClose) && (
-                <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700">
+                <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-700/60 flex-shrink-0">
                   {title && (
-                    <h2 className="text-lg font-bold text-gray-900 dark:text-white">
+                    <h2 className="text-base font-bold text-gray-900 dark:text-white">
                       {title}
                     </h2>
                   )}
                   {showClose && (
                     <button
                       onClick={onClose}
-                      className="p-2 rounded-lg text-gray-500 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                      className="p-2 -ml-2 rounded-xl text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
                       aria-label="סגור"
                     >
                       <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -100,8 +100,8 @@ function Modal({
                 </div>
               )}
 
-              {/* תוכן */}
-              <div className="p-4">
+              {/* תוכן - scrollable */}
+              <div className="p-5 overflow-y-auto flex-1 scrollbar-thin">
                 {children}
               </div>
             </motion.div>

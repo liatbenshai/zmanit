@@ -278,7 +278,7 @@ function Dashboard({ onNavigate }) {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 dark:from-gray-900 dark:to-slate-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50/50 dark:from-gray-900 dark:via-gray-900 dark:to-slate-900 p-4 pb-24 md:pb-4">
       {/* התראת משימה חדשה */}
       <AnimatePresence>
         {showTaskAlert && currentTask && (
@@ -286,7 +286,7 @@ function Dashboard({ onNavigate }) {
             initial={{ opacity: 0, y: -50, scale: 0.9 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: -50, scale: 0.9 }}
-            className="fixed top-4 left-4 right-4 z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-4 border-r-4 border-blue-500"
+            className="fixed top-4 left-4 right-4 z-50 bg-white dark:bg-gray-800 rounded-2xl shadow-elevated p-4 border-r-4 border-blue-500"
           >
             <div className="flex items-center gap-3">
               <span className="text-3xl">{currentTaskType?.icon}</span>
@@ -304,15 +304,19 @@ function Dashboard({ onNavigate }) {
         <motion.div
           initial={{ opacity: 0, y: -20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="text-center py-4"
+          className="text-center pt-2 pb-1"
         >
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
-            {getGreeting()}, {user?.user_metadata?.name?.split(' ')[0] || 'שלום'}! 👋
-          </h1>
-          <p className="text-gray-500 dark:text-gray-400 text-sm mt-1">
-            {hebrewDate}
-          </p>
-          <div className="text-5xl font-light text-gray-800 dark:text-gray-200 mt-2 font-mono">
+          <div className="flex items-center justify-center gap-3">
+            <div>
+              <h1 className="text-xl font-bold text-gray-900 dark:text-white">
+                {getGreeting()}, {user?.user_metadata?.name?.split(' ')[0] || 'שלום'}!
+              </h1>
+              <p className="text-gray-400 dark:text-gray-500 text-xs mt-0.5">
+                {hebrewDate}
+              </p>
+            </div>
+          </div>
+          <div className="text-4xl font-light text-gray-700 dark:text-gray-300 mt-2 font-mono tracking-wider">
             {currentTime}
           </div>
         </motion.div>
@@ -326,10 +330,10 @@ function Dashboard({ onNavigate }) {
           animate={{ opacity: 1, scale: 1 }}
           transition={{ delay: 0.1 }}
           className={`
-            rounded-2xl p-5 shadow-lg
-            ${currentTask 
-              ? `${currentTaskType?.color} border-2` 
-              : 'bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700'
+            rounded-2xl p-5 shadow-card
+            ${currentTask
+              ? `${currentTaskType?.color} border-2`
+              : 'bg-white dark:bg-gray-800 border border-gray-100 dark:border-gray-700/60'
             }
           `}
         >
@@ -338,17 +342,19 @@ function Dashboard({ onNavigate }) {
               <div className="flex items-center justify-between mb-3">
                 <div className="flex items-center gap-2">
                   <span className="text-2xl">{currentTaskType?.icon}</span>
-                  <span className="text-xs font-medium opacity-75">עכשיו</span>
+                  <span className="badge bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                    עכשיו
+                  </span>
                 </div>
                 <div className={`text-2xl font-bold font-mono ${getTimeColor(timeRemaining)}`}>
                   {timeRemaining > 0 ? formatMinutes(timeRemaining) : '⏰ נגמר הזמן!'}
                 </div>
               </div>
-              
-              <h2 className="text-xl font-bold mb-3">{currentTask.title}</h2>
-              
+
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-3">{currentTask.title}</h2>
+
               {/* פס התקדמות */}
-              <div className="relative h-3 bg-black/10 rounded-full overflow-hidden mb-2">
+              <div className="relative h-2.5 bg-black/10 rounded-full overflow-hidden mb-2">
                 <motion.div
                   className={`absolute top-0 right-0 h-full rounded-full ${getProgressColor(progressPercent)}`}
                   initial={{ width: 0 }}
@@ -356,20 +362,20 @@ function Dashboard({ onNavigate }) {
                   transition={{ duration: 0.5 }}
                 />
               </div>
-              
-              <div className="flex justify-between text-sm opacity-75">
+
+              <div className="flex justify-between text-xs text-gray-500 dark:text-gray-400">
                 <span>{currentTask.due_time}</span>
                 <span>{minutesToTime(currentTask.endMinutes)}</span>
               </div>
             </>
           ) : (
-            <div className="text-center py-6">
+            <div className="text-center py-8">
               <span className="text-4xl mb-3 block">☕</span>
-              <h2 className="text-xl font-medium text-gray-700 dark:text-gray-300">
+              <h2 className="text-lg font-medium text-gray-600 dark:text-gray-300">
                 אין משימה כרגע
               </h2>
               {nextTask && (
-                <p className="text-gray-500 dark:text-gray-400 mt-2">
+                <p className="text-gray-400 dark:text-gray-500 text-sm mt-1.5">
                   הבאה ב-{nextTask.due_time}
                 </p>
               )}
@@ -398,25 +404,25 @@ function Dashboard({ onNavigate }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.4 }}
-          className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow border border-gray-100 dark:border-gray-700"
+          className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-card border border-gray-100 dark:border-gray-700/60"
         >
-          <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
-            <span>📅</span> היום
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-2 text-sm">
+            <span>📅</span> משימות היום
           </h3>
-          
+
           {todayTasks.length === 0 ? (
-            <div className="text-center py-4 text-gray-500">
+            <div className="text-center py-6 text-gray-400 dark:text-gray-500 text-sm">
               אין משימות מתוכננות להיום
             </div>
           ) : (
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="space-y-1 max-h-64 overflow-y-auto scrollbar-thin">
               {todayTasks.map((task, index) => {
                 const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
                 const start = timeToMinutes(task.due_time);
                 const end = start + (task.estimated_duration || 30);
                 const isPast = currentMinutes >= end;
                 const isCurrent = currentTask?.id === task.id;
-                
+
                 return (
                   <motion.div
                     key={task.id}
@@ -424,31 +430,31 @@ function Dashboard({ onNavigate }) {
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: 0.05 * index }}
                     className={`
-                      flex items-center gap-3 p-2 rounded-lg transition-all
-                      ${isCurrent 
-                        ? 'bg-blue-50 dark:bg-blue-900/20 ring-2 ring-blue-500' 
-                        : isPast 
-                          ? 'opacity-50' 
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                      flex items-center gap-3 p-2.5 rounded-xl transition-all
+                      ${isCurrent
+                        ? 'bg-blue-50 dark:bg-blue-900/20 ring-1 ring-blue-400/50'
+                        : isPast
+                          ? 'opacity-40'
+                          : 'hover:bg-gray-50 dark:hover:bg-gray-700/50'
                       }
                     `}
                   >
-                    <div className="text-sm font-mono text-gray-500 w-12">
+                    <div className="text-xs font-mono text-gray-400 dark:text-gray-500 w-10 text-center">
                       {task.due_time}
                     </div>
-                    <div className={`w-8 h-8 rounded flex items-center justify-center text-sm ${taskType.color}`}>
+                    <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${taskType.color}`}>
                       {taskType.icon}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className={`font-medium truncate ${isPast ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'}`}>
+                      <div className={`font-medium text-sm truncate ${isPast ? 'line-through text-gray-400' : 'text-gray-900 dark:text-white'}`}>
                         {task.title}
                       </div>
-                      <div className="text-xs text-gray-500">
+                      <div className="text-xs text-gray-400 dark:text-gray-500">
                         {formatMinutes(task.estimated_duration || 30)}
                       </div>
                     </div>
                     {isCurrent && (
-                      <span className="px-2 py-1 bg-blue-500 text-white text-xs rounded-full animate-pulse">
+                      <span className="badge bg-blue-500 text-white text-[10px] animate-pulse">
                         עכשיו
                       </span>
                     )}
@@ -468,18 +474,18 @@ function Dashboard({ onNavigate }) {
         >
           <button
             onClick={() => onNavigate?.('day')}
-            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow border border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 transition-all flex items-center justify-center gap-2"
+            className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-card hover:shadow-card-hover border border-gray-100 dark:border-gray-700/60 hover:border-blue-200 dark:hover:border-blue-700 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
           >
             <span className="text-xl">📋</span>
-            <span className="font-medium text-gray-700 dark:text-gray-300">תצוגה יומית</span>
+            <span className="font-medium text-gray-700 dark:text-gray-300 text-sm">תצוגה יומית</span>
           </button>
-          
+
           <button
             onClick={() => onNavigate?.('week')}
-            className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow border border-gray-100 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-700 transition-all flex items-center justify-center gap-2"
+            className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-card hover:shadow-card-hover border border-gray-100 dark:border-gray-700/60 hover:border-blue-200 dark:hover:border-blue-700 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
           >
             <span className="text-xl">📅</span>
-            <span className="font-medium text-gray-700 dark:text-gray-300">תצוגת שבוע</span>
+            <span className="font-medium text-gray-700 dark:text-gray-300 text-sm">תצוגת שבוע</span>
           </button>
         </motion.div>
 
@@ -492,15 +498,15 @@ function Dashboard({ onNavigate }) {
         >
           <button
             onClick={() => setShowQuickAdd(true)}
-            className="bg-yellow-50 dark:bg-yellow-900/20 rounded-xl p-3 border border-yellow-200 dark:border-yellow-800 hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-all flex items-center justify-center gap-2"
+            className="bg-amber-50 dark:bg-amber-900/20 rounded-2xl p-3.5 border border-amber-200/60 dark:border-amber-800/40 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
           >
             <span className="text-lg">⚡</span>
-            <span className="font-medium text-yellow-700 dark:text-yellow-300 text-sm">משהו צץ</span>
+            <span className="font-medium text-amber-700 dark:text-amber-300 text-sm">משהו צץ</span>
           </button>
-          
+
           <button
             onClick={() => setShowUrgent(true)}
-            className="bg-red-50 dark:bg-red-900/20 rounded-xl p-3 border border-red-200 dark:border-red-800 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all flex items-center justify-center gap-2"
+            className="bg-red-50 dark:bg-red-900/20 rounded-2xl p-3.5 border border-red-200/60 dark:border-red-800/40 hover:bg-red-100 dark:hover:bg-red-900/30 transition-all flex items-center justify-center gap-2 active:scale-[0.98]"
           >
             <span className="text-lg">🚨</span>
             <span className="font-medium text-red-700 dark:text-red-300 text-sm">דחוף!</span>
@@ -516,7 +522,7 @@ function Dashboard({ onNavigate }) {
             setSelectedTaskDate(today);
             setShowAddTask(true);
           }}
-          className="w-full bg-gradient-to-r from-blue-500 to-purple-600 text-white rounded-xl p-4 shadow-lg hover:shadow-xl transition-all flex items-center justify-center gap-2 font-medium"
+          className="w-full bg-gradient-to-l from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl p-4 shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 font-medium active:scale-[0.98]"
         >
           <span className="text-xl">📥</span>
           <span>הוסף עבודה חדשה</span>
@@ -527,12 +533,12 @@ function Dashboard({ onNavigate }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.65 }}
-          className="bg-white dark:bg-gray-800 rounded-xl p-4 shadow border border-gray-100 dark:border-gray-700"
+          className="bg-white dark:bg-gray-800 rounded-2xl p-4 shadow-card border border-gray-100 dark:border-gray-700/60"
         >
-          <h3 className="font-medium text-gray-700 dark:text-gray-300 mb-3 flex items-center gap-2">
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200 mb-3 flex items-center gap-2 text-sm">
             <span>📆</span> הוסף משימה ליום...
           </h3>
-          <div className="flex gap-2 overflow-x-auto pb-2">
+          <div className="flex gap-2 overflow-x-auto pb-1 scrollbar-hide">
             {(() => {
               const days = [];
               const dayNames = ['א׳', 'ב׳', 'ג׳', 'ד׳', 'ה׳', 'ו׳', 'ש׳'];
@@ -543,7 +549,7 @@ function Dashboard({ onNavigate }) {
                 const dayNum = date.getDay();
                 const isWeekend = dayNum === 5 || dayNum === 6;
                 const isToday = i === 0;
-                
+
                 days.push(
                   <button
                     key={dateISO}
@@ -553,18 +559,18 @@ function Dashboard({ onNavigate }) {
                     }}
                     disabled={isWeekend}
                     className={`
-                      flex-shrink-0 w-14 py-2 px-1 rounded-lg text-center transition-all
-                      ${isWeekend 
-                        ? 'bg-gray-100 dark:bg-gray-700 text-gray-400 cursor-not-allowed'
+                      flex-shrink-0 w-14 py-2.5 px-1 rounded-xl text-center transition-all active:scale-95
+                      ${isWeekend
+                        ? 'bg-gray-50 dark:bg-gray-700/50 text-gray-300 dark:text-gray-600 cursor-not-allowed'
                         : isToday
-                          ? 'bg-blue-500 text-white hover:bg-blue-600'
-                          : 'bg-gray-100 dark:bg-gray-700 hover:bg-blue-100 dark:hover:bg-blue-900/30 text-gray-700 dark:text-gray-300'
+                          ? 'bg-blue-500 text-white shadow-md hover:bg-blue-600'
+                          : 'bg-gray-50 dark:bg-gray-700/50 hover:bg-blue-50 dark:hover:bg-blue-900/20 text-gray-700 dark:text-gray-300'
                       }
                     `}
                   >
-                    <div className="text-xs opacity-75">{dayNames[dayNum]}</div>
-                    <div className="font-bold">{date.getDate()}</div>
-                    {isToday && <div className="text-[10px]">היום</div>}
+                    <div className="text-[10px] opacity-70">{dayNames[dayNum]}</div>
+                    <div className="font-bold text-base">{date.getDate()}</div>
+                    {isToday && <div className="text-[9px] font-medium">היום</div>}
                   </button>
                 );
               }
@@ -578,44 +584,55 @@ function Dashboard({ onNavigate }) {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           transition={{ delay: 0.7 }}
-          className="flex gap-2 justify-center flex-wrap"
+          className="bg-white dark:bg-gray-800 rounded-2xl shadow-card border border-gray-100 dark:border-gray-700/60 overflow-hidden"
         >
-          <button
-            onClick={() => setShowDailySummary(true)}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-green-600 dark:hover:text-green-400 flex items-center gap-1"
-          >
-            <span>📊</span> סיכום יומי
-          </button>
-          <button
-            onClick={() => setShowTimeGaps(true)}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 flex items-center gap-1"
-          >
-            <span>📈</span> איפה הזמן הלך?
-          </button>
-          <button
-            onClick={() => setShowInterruptions(true)}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-orange-600 dark:hover:text-orange-400 flex items-center gap-1"
-          >
-            <span>⏸️</span> ניתוח הפרעות
-          </button>
-          <button
-            onClick={() => setShowWeeklyReview(true)}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1"
-          >
-            <span>📋</span> סקירה שבועית
-          </button>
-          <button
-            onClick={() => setShowClientTracker(true)}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1"
-          >
-            <span>👥</span> לקוחות
-          </button>
-          <button
-            onClick={() => setShowPreferences(true)}
-            className="px-4 py-2 text-sm text-gray-600 dark:text-gray-400 hover:text-blue-600 dark:hover:text-blue-400 flex items-center gap-1"
-          >
-            <span>⚙️</span> העדפות
-          </button>
+          <h3 className="font-semibold text-gray-800 dark:text-gray-200 px-4 pt-4 pb-2 text-sm flex items-center gap-2">
+            <span>📊</span> דוחות וכלים
+          </h3>
+          <div className="grid grid-cols-3 gap-px bg-gray-100 dark:bg-gray-700/50">
+            <button
+              onClick={() => setShowDailySummary(true)}
+              className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors active:scale-[0.98]"
+            >
+              <span className="text-lg">📊</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">סיכום יומי</span>
+            </button>
+            <button
+              onClick={() => setShowTimeGaps(true)}
+              className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors active:scale-[0.98]"
+            >
+              <span className="text-lg">📈</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">לאן הלך הזמן?</span>
+            </button>
+            <button
+              onClick={() => setShowInterruptions(true)}
+              className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors active:scale-[0.98]"
+            >
+              <span className="text-lg">⏸️</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">הפרעות</span>
+            </button>
+            <button
+              onClick={() => setShowWeeklyReview(true)}
+              className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors active:scale-[0.98]"
+            >
+              <span className="text-lg">📋</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">סקירה שבועית</span>
+            </button>
+            <button
+              onClick={() => setShowClientTracker(true)}
+              className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors active:scale-[0.98]"
+            >
+              <span className="text-lg">👥</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">לקוחות</span>
+            </button>
+            <button
+              onClick={() => setShowPreferences(true)}
+              className="flex flex-col items-center gap-1.5 py-3 px-2 bg-white dark:bg-gray-800 hover:bg-gray-50 dark:hover:bg-gray-700/50 transition-colors active:scale-[0.98]"
+            >
+              <span className="text-lg">⚙️</span>
+              <span className="text-xs font-medium text-gray-600 dark:text-gray-400">העדפות</span>
+            </button>
+          </div>
         </motion.div>
 
         {/* 🤖 המלצות חכמות */}

@@ -171,31 +171,35 @@ function DailyProgressCard({ tasks, currentTime }) {
     <motion.div
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      className="bg-white dark:bg-gray-800 rounded-2xl shadow-lg border border-gray-100 dark:border-gray-700 overflow-hidden"
+      className="bg-white dark:bg-gray-800 rounded-2xl shadow-card border border-gray-100 dark:border-gray-700/60 overflow-hidden"
     >
       {/* כותרת עם אחוז גדול */}
-      <div className="p-5 bg-gradient-to-r from-slate-50 to-blue-50 dark:from-gray-800 dark:to-slate-800">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-lg font-bold text-gray-800 dark:text-white">
-            📊 ההתקדמות שלך היום
+      <div className="p-5">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-semibold text-gray-800 dark:text-gray-200 flex items-center gap-2">
+            <span>📊</span> ההתקדמות שלך היום
           </h2>
-          <div className={`text-sm font-medium ${getPaceColor()}`}>
+          <div className={`text-xs font-medium px-2.5 py-1 rounded-full ${
+            stats.pace > 10 ? 'bg-green-50 dark:bg-green-900/20 text-green-600 dark:text-green-400' :
+            stats.pace < -10 ? 'bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400' :
+            'bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400'
+          }`}>
             {getPaceText()}
           </div>
         </div>
-        
+
         {/* אחוז גדול */}
-        <div className="flex items-end gap-4 mb-4">
-          <div className="text-6xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+        <div className="flex items-end gap-3 mb-4">
+          <div className="text-5xl font-bold text-gradient leading-none">
             {stats.progressPercent}%
           </div>
-          <div className="text-gray-500 dark:text-gray-400 pb-2">
+          <div className="text-gray-400 dark:text-gray-500 pb-1 text-sm">
             {stats.completed}/{stats.total} משימות
           </div>
         </div>
-        
+
         {/* פס התקדמות משימות */}
-        <div className="relative h-4 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden mb-2">
+        <div className="relative h-3 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden mb-1.5">
           <motion.div
             className={`absolute top-0 right-0 h-full rounded-full bg-gradient-to-l ${getProgressColor()}`}
             initial={{ width: 0 }}
@@ -203,36 +207,36 @@ function DailyProgressCard({ tasks, currentTime }) {
             transition={{ duration: 0.8, ease: "easeOut" }}
           />
           {/* סמן התקדמות צפויה */}
-          <div 
-            className="absolute top-0 h-full w-0.5 bg-gray-400 dark:bg-gray-500"
+          <div
+            className="absolute top-0 h-full w-0.5 bg-gray-400/50 dark:bg-gray-500/50"
             style={{ right: `${stats.dayProgressPercent}%` }}
             title={`התקדמות צפויה: ${stats.dayProgressPercent}%`}
           />
         </div>
-        
-        <div className="flex justify-between text-xs text-gray-500">
+
+        <div className="flex justify-between text-[10px] text-gray-400 dark:text-gray-500">
           <span>התקדמות במשימות</span>
-          <span>הקו = איפה צריך להיות לפי השעה</span>
+          <span>הקו = איפה צריך להיות</span>
         </div>
       </div>
 
       {/* סטטיסטיקות */}
-      <div className="grid grid-cols-4 gap-2 p-4 border-t border-gray-100 dark:border-gray-700">
-        <div className="text-center p-2">
-          <div className="text-2xl font-bold text-green-500">{stats.completed}</div>
-          <div className="text-xs text-gray-500">הושלמו</div>
+      <div className="grid grid-cols-4 gap-px bg-gray-100 dark:bg-gray-700/50">
+        <div className="stat-card rounded-none bg-white dark:bg-gray-800 py-3">
+          <div className="stat-value text-green-500">{stats.completed}</div>
+          <div className="stat-label">הושלמו</div>
         </div>
-        <div className="text-center p-2">
-          <div className="text-2xl font-bold text-blue-500">{stats.pending}</div>
-          <div className="text-xs text-gray-500">ממתינות</div>
+        <div className="stat-card rounded-none bg-white dark:bg-gray-800 py-3">
+          <div className="stat-value text-blue-500">{stats.pending}</div>
+          <div className="stat-label">ממתינות</div>
         </div>
-        <div className="text-center p-2">
-          <div className="text-2xl font-bold text-purple-500">{Math.round(stats.effectiveMinutesLeft)}</div>
-          <div className="text-xs text-gray-500">דק' נשארו</div>
+        <div className="stat-card rounded-none bg-white dark:bg-gray-800 py-3">
+          <div className="stat-value text-purple-500">{Math.round(stats.effectiveMinutesLeft)}</div>
+          <div className="stat-label">דק' נשארו</div>
         </div>
-        <div className="text-center p-2">
-          <div className="text-2xl font-bold text-orange-500">{stats.bufferTime}</div>
-          <div className="text-xs text-gray-500">דק' בלת"ם</div>
+        <div className="stat-card rounded-none bg-white dark:bg-gray-800 py-3">
+          <div className="stat-value text-amber-500">{stats.bufferTime}</div>
+          <div className="stat-label">דק' בלת"ם</div>
         </div>
       </div>
 
@@ -242,25 +246,25 @@ function DailyProgressCard({ tasks, currentTime }) {
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           className={`p-4 border-t ${
-            recommendation.type === 'warning' ? 'bg-orange-50 dark:bg-orange-900/20 border-orange-200' :
-            recommendation.type === 'behind' ? 'bg-red-50 dark:bg-red-900/20 border-red-200' :
-            recommendation.type === 'ahead' ? 'bg-green-50 dark:bg-green-900/20 border-green-200' :
-            recommendation.type === 'done' ? 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200' :
-            'bg-blue-50 dark:bg-blue-900/20 border-blue-200'
+            recommendation.type === 'warning' ? 'bg-amber-50 dark:bg-amber-900/10 border-amber-100 dark:border-amber-800/30' :
+            recommendation.type === 'behind' ? 'bg-red-50 dark:bg-red-900/10 border-red-100 dark:border-red-800/30' :
+            recommendation.type === 'ahead' ? 'bg-green-50 dark:bg-green-900/10 border-green-100 dark:border-green-800/30' :
+            recommendation.type === 'done' ? 'bg-emerald-50 dark:bg-emerald-900/10 border-emerald-100 dark:border-emerald-800/30' :
+            'bg-blue-50 dark:bg-blue-900/10 border-blue-100 dark:border-blue-800/30'
           }`}
         >
           <div className="flex items-start gap-3">
-            <span className="text-2xl">{recommendation.icon}</span>
-            <div className="flex-1">
-              <div className="font-medium text-gray-800 dark:text-white">
+            <span className="text-xl">{recommendation.icon}</span>
+            <div className="flex-1 min-w-0">
+              <div className="font-semibold text-sm text-gray-800 dark:text-white">
                 {recommendation.title}
               </div>
-              <div className="text-sm text-gray-600 dark:text-gray-300">
+              <div className="text-xs text-gray-600 dark:text-gray-300 mt-0.5 leading-relaxed">
                 {recommendation.message}
               </div>
             </div>
             {recommendation.action && (
-              <button className="px-3 py-1 bg-white dark:bg-gray-700 rounded-lg text-sm font-medium shadow-sm hover:shadow transition-shadow">
+              <button className="flex-shrink-0 px-3 py-1.5 bg-white dark:bg-gray-700 rounded-lg text-xs font-medium shadow-sm hover:shadow transition-shadow border border-gray-100 dark:border-gray-600">
                 {recommendation.action}
               </button>
             )}
@@ -269,10 +273,10 @@ function DailyProgressCard({ tasks, currentTime }) {
       )}
 
       {/* מידע על בלת"מים */}
-      <div className="p-3 bg-gray-50 dark:bg-gray-900/50 border-t border-gray-100 dark:border-gray-700">
-        <div className="flex items-center justify-between text-xs text-gray-500">
-          <span>💡 המערכת למדה שאת צריכה ~{stats.bufferTime} דק' ביום לבלת"מים</span>
-          <button className="text-blue-500 hover:underline">פרטים</button>
+      <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900/30 border-t border-gray-100 dark:border-gray-700/60">
+        <div className="flex items-center justify-between text-[11px] text-gray-400 dark:text-gray-500">
+          <span>💡 ~{stats.bufferTime} דק' ביום לבלת"מים (לפי הלמידה)</span>
+          <button className="text-blue-500 hover:text-blue-600 font-medium">פרטים</button>
         </div>
       </div>
     </motion.div>

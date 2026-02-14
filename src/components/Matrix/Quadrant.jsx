@@ -31,9 +31,9 @@ function Quadrant({
     <div
       className={`
         ${colorClass} border-2 ${borderColor}
-        rounded-xl overflow-hidden
+        rounded-2xl overflow-hidden
         transition-all duration-200
-        ${isDropTarget ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-900 scale-[1.02]' : ''}
+        ${isDropTarget ? 'ring-2 ring-blue-500 ring-offset-2 dark:ring-offset-gray-900 scale-[1.01]' : ''}
         ${isDragging ? 'bg-opacity-50' : ''}
         ${isMobile ? 'min-h-[60vh]' : 'min-h-[300px]'}
       `}
@@ -53,13 +53,14 @@ function Quadrant({
       {/* רשימת משימות */}
       <div className="p-3 space-y-2 max-h-[400px] overflow-y-auto scrollbar-thin">
         {tasks.length === 0 ? (
-          <div className="text-center py-8 text-gray-500 dark:text-gray-400">
+          <div className="text-center py-10 text-gray-400 dark:text-gray-500">
+            <div className="text-3xl mb-2 opacity-50">📝</div>
             <p className="text-sm">אין משימות</p>
             <button
               onClick={onAddTask}
-              className="mt-2 text-blue-600 dark:text-blue-400 hover:underline text-sm"
+              className="mt-2 text-blue-500 dark:text-blue-400 hover:text-blue-600 text-sm font-medium"
             >
-              + הוסף משימה ראשונה
+              + הוסף משימה
             </button>
           </div>
         ) : (

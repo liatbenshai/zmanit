@@ -20,7 +20,7 @@ function Header() {
   useEffect(() => {
     const savedTheme = localStorage.getItem('theme');
     const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-    
+
     if (savedTheme === 'dark' || (!savedTheme && prefersDark)) {
       document.documentElement.classList.add('dark');
       setDarkMode(true);
@@ -31,7 +31,7 @@ function Header() {
   const toggleDarkMode = () => {
     const newMode = !darkMode;
     setDarkMode(newMode);
-    
+
     if (newMode) {
       document.documentElement.classList.add('dark');
       localStorage.setItem('theme', 'dark');
@@ -73,45 +73,55 @@ function Header() {
   ];
 
   return (
-    <header className="sticky top-0 z-30 bg-white/80 dark:bg-gray-900/80 backdrop-blur-lg border-b border-gray-200 dark:border-gray-700">
+    <header className="sticky top-0 z-30 glass">
       <div className="container mx-auto px-4">
-        <div className="flex items-center justify-between h-16">
+        <div className="flex items-center justify-between h-14">
           {/* לוגו */}
-          <Link to="/dashboard" className="flex items-center gap-2">
-            <span className="text-2xl">⏰</span>
-            <span className="font-bold text-xl text-gray-900 dark:text-white hidden sm:block">
-              ניהול זמן
+          <Link to="/dashboard" className="flex items-center gap-2 group">
+            <span className="text-2xl group-hover:scale-110 transition-transform">⏰</span>
+            <span className="font-bold text-lg text-gradient hidden sm:block">
+              זמנית
             </span>
           </Link>
 
           {/* ניווט - דסקטופ */}
-          <nav className="hidden md:flex items-center gap-1">
-            {navLinks.map(link => (
-              <Link
-                key={link.path}
-                to={link.path}
-                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                  location.pathname === link.path
-                    ? 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
-                }`}
-              >
-                <span>{link.icon}</span>
-                <span>{link.label}</span>
-              </Link>
-            ))}
+          <nav className="hidden md:flex items-center gap-1 bg-gray-100/60 dark:bg-gray-800/60 rounded-xl p-1">
+            {navLinks.map(link => {
+              const isActive = location.pathname === link.path;
+              return (
+                <Link
+                  key={link.path}
+                  to={link.path}
+                  className={`relative flex items-center gap-1.5 px-3.5 py-2 rounded-lg transition-all duration-200 text-sm font-medium ${
+                    isActive
+                      ? 'text-blue-700 dark:text-blue-300'
+                      : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+                  }`}
+                >
+                  {isActive && (
+                    <motion.div
+                      layoutId="headerActiveTab"
+                      className="absolute inset-0 bg-white dark:bg-gray-700 rounded-lg shadow-sm"
+                      transition={{ type: 'spring', duration: 0.35, bounce: 0.15 }}
+                    />
+                  )}
+                  <span className="relative z-10">{link.icon}</span>
+                  <span className="relative z-10">{link.label}</span>
+                </Link>
+              );
+            })}
           </nav>
 
           {/* פעולות */}
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1.5">
             {/* ✅ כפתור סנכרון */}
             <button
               onClick={handleSync}
               disabled={isSyncing || loading}
-              className={`p-2 rounded-lg transition-colors ${
+              className={`p-2 rounded-xl transition-all duration-200 ${
                 isSyncing || loading
                   ? 'text-blue-500 animate-spin'
-                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800'
+                  : 'text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200'
               }`}
               aria-label="סנכרון נתונים"
               title={`גרסה ${dataVersion} | עדכון אחרון: ${new Date(lastUpdated).toLocaleTimeString('he-IL')}`}
@@ -122,7 +132,7 @@ function Header() {
             {/* כפתור מצב כהה */}
             <button
               onClick={toggleDarkMode}
-              className="p-2 rounded-lg text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="p-2 rounded-xl text-gray-500 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800 hover:text-gray-700 dark:hover:text-gray-200 transition-all duration-200"
               aria-label={darkMode ? 'מצב בהיר' : 'מצב כהה'}
             >
               {darkMode ? '☀️' : '🌙'}
@@ -132,12 +142,12 @@ function Header() {
             <div className="relative">
               <button
                 onClick={() => setShowUserMenu(!showUserMenu)}
-                className="flex items-center gap-2 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                className="flex items-center gap-2 p-1.5 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 transition-all duration-200"
               >
-                <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white font-medium">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-medium text-sm shadow-sm">
                   {user?.profile?.full_name?.charAt(0) || user?.email?.charAt(0) || '?'}
                 </div>
-                <span className="hidden sm:block text-gray-700 dark:text-gray-300 text-sm">
+                <span className="hidden sm:block text-gray-700 dark:text-gray-300 text-sm font-medium">
                   {user?.profile?.full_name || 'משתמש'}
                 </span>
               </button>
@@ -145,55 +155,59 @@ function Header() {
               {/* תפריט נפתח */}
               {showUserMenu && (
                 <>
-                  <div 
-                    className="fixed inset-0 z-10" 
+                  <div
+                    className="fixed inset-0 z-10"
                     onClick={() => setShowUserMenu(false)}
                   />
                   <motion.div
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
-                    className="absolute left-0 mt-2 w-48 bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 z-20 overflow-hidden"
+                    initial={{ opacity: 0, y: -10, scale: 0.95 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -10, scale: 0.95 }}
+                    className="absolute left-0 mt-2 w-52 bg-white dark:bg-gray-800 rounded-2xl shadow-elevated border border-gray-100 dark:border-gray-700 z-20 overflow-hidden"
                   >
-                    <div className="p-3 border-b border-gray-200 dark:border-gray-700">
-                      <p className="font-medium text-gray-900 dark:text-white text-sm">
+                    <div className="p-4 border-b border-gray-100 dark:border-gray-700">
+                      <p className="font-semibold text-gray-900 dark:text-white text-sm">
                         {user?.profile?.full_name || 'משתמש'}
                       </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate">
+                      <p className="text-xs text-gray-500 dark:text-gray-400 truncate mt-0.5">
                         {user?.email}
                       </p>
                     </div>
-                    
+
                     {/* קישורים בנייד */}
-                    <div className="md:hidden py-2">
+                    <div className="md:hidden py-1">
                       {navLinks.map(link => (
                         <Link
                           key={link.path}
                           to={link.path}
                           onClick={() => setShowUserMenu(false)}
-                          className="flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                          className={`flex items-center gap-2.5 px-4 py-2.5 transition-colors ${
+                            location.pathname === link.path
+                              ? 'text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20'
+                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
                         >
                           <span>{link.icon}</span>
-                          <span>{link.label}</span>
+                          <span className="text-sm font-medium">{link.label}</span>
                         </Link>
                       ))}
                     </div>
-                    
-                    <div className="py-2">
+
+                    <div className="py-1">
                       <Link
                         to="/settings"
                         onClick={() => setShowUserMenu(false)}
-                        className="hidden md:flex items-center gap-2 px-4 py-2 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        className="hidden md:flex items-center gap-2.5 px-4 py-2.5 text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                       >
                         <span>⚙️</span>
-                        <span>הגדרות</span>
+                        <span className="text-sm font-medium">הגדרות</span>
                       </Link>
                       <button
                         onClick={handleLogout}
-                        className="w-full flex items-center gap-2 px-4 py-2 text-red-600 dark:text-red-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                        className="w-full flex items-center gap-2.5 px-4 py-2.5 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors"
                       >
                         <span>🚪</span>
-                        <span>צא מהמערכת</span>
+                        <span className="text-sm font-medium">צא מהמערכת</span>
                       </button>
                     </div>
                   </motion.div>
@@ -208,4 +222,3 @@ function Header() {
 }
 
 export default Header;
-
