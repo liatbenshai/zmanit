@@ -16,31 +16,31 @@ function MobileNav() {
   ];
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 md:hidden z-40 bg-white dark:bg-gray-900 border-t border-gray-200 dark:border-gray-700 safe-area-inset-bottom">
-      <div className="flex justify-around items-center h-16 px-2">
+    <nav className="fixed bottom-0 left-0 right-0 md:hidden z-40 glass-bottom safe-area-inset-bottom">
+      <div className="flex justify-around items-center h-16 px-1">
         {navLinks.map(link => {
           const isActive = location.pathname === link.path;
-          
+
           return (
             <Link
               key={link.path}
               to={link.path}
-              className="flex flex-col items-center justify-center flex-1 py-2 relative"
+              className="flex flex-col items-center justify-center flex-1 py-1.5 relative"
             >
               {isActive && (
                 <motion.div
                   layoutId="activeTab"
-                  className="absolute inset-0 bg-blue-50 dark:bg-blue-900/30 rounded-xl mx-1"
+                  className="absolute inset-x-1 -top-0.5 h-0.5 bg-blue-500 rounded-full"
                   transition={{ type: 'spring', duration: 0.3 }}
                 />
               )}
-              <span className={`text-xl relative z-10 ${isActive ? 'scale-110' : ''} transition-transform`}>
+              <span className={`text-xl transition-transform duration-200 ${isActive ? 'scale-110' : ''}`}>
                 {link.icon}
               </span>
-              <span className={`text-xs mt-1 relative z-10 ${
-                isActive 
-                  ? 'text-blue-600 dark:text-blue-400 font-medium' 
-                  : 'text-gray-500 dark:text-gray-400'
+              <span className={`text-[11px] mt-0.5 font-medium transition-colors ${
+                isActive
+                  ? 'text-blue-600 dark:text-blue-400'
+                  : 'text-gray-400 dark:text-gray-500'
               }`}>
                 {link.label}
               </span>
@@ -53,4 +53,3 @@ function MobileNav() {
 }
 
 export default MobileNav;
-

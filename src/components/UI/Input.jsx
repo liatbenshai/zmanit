@@ -23,15 +23,15 @@ const Input = forwardRef(({
   return (
     <div className={className}>
       {label && (
-        <label 
+        <label
           htmlFor={inputId}
-          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1"
+          className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5"
         >
           {label}
           {required && <span className="text-red-500 mr-1">*</span>}
         </label>
       )}
-      
+
       <input
         ref={ref}
         id={inputId}
@@ -46,14 +46,16 @@ const Input = forwardRef(({
         autoComplete={autoComplete}
         className={`
           input-field
-          ${error ? 'border-red-500 focus:ring-red-500' : ''}
-          ${disabled ? 'opacity-50 cursor-not-allowed' : ''}
+          ${error ? 'border-red-400 focus:ring-red-500 focus:border-red-500 bg-red-50/50 dark:bg-red-900/10' : ''}
+          ${disabled ? 'opacity-50 cursor-not-allowed bg-gray-50 dark:bg-gray-800/50' : ''}
         `}
         {...props}
       />
-      
+
       {error && (
-        <p className="mt-1 text-sm text-red-500">{error}</p>
+        <p className="mt-1.5 text-xs text-red-500 flex items-center gap-1">
+          <span>⚠</span> {error}
+        </p>
       )}
     </div>
   );

@@ -8,9 +8,22 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        sans: ['Arial', 'Tahoma', 'sans-serif']
+        sans: ['Rubik', 'Arial', 'Tahoma', 'sans-serif']
       },
       colors: {
+        // צבע ראשי (alias ל-blue)
+        primary: {
+          50: '#EFF6FF',
+          100: '#DBEAFE',
+          200: '#BFDBFE',
+          300: '#93C5FD',
+          400: '#60A5FA',
+          500: '#3B82F6',
+          600: '#2563EB',
+          700: '#1D4ED8',
+          800: '#1E40AF',
+          900: '#1E3A8A'
+        },
         // צבעי הרבעים
         urgent: {
           50: '#FEF2F2',
@@ -44,7 +57,9 @@ export default {
       animation: {
         'slide-in': 'slideIn 0.3s ease-out',
         'fade-in': 'fadeIn 0.2s ease-out',
-        'bounce-subtle': 'bounceSubtle 0.3s ease-out'
+        'bounce-subtle': 'bounceSubtle 0.3s ease-out',
+        'shimmer': 'shimmer 2s infinite linear',
+        'progress': 'progress 1s ease-out forwards'
       },
       keyframes: {
         slideIn: {
@@ -58,10 +73,23 @@ export default {
         bounceSubtle: {
           '0%, 100%': { transform: 'scale(1)' },
           '50%': { transform: 'scale(1.02)' }
+        },
+        shimmer: {
+          '0%': { backgroundPosition: '-200% 0' },
+          '100%': { backgroundPosition: '200% 0' }
+        },
+        progress: {
+          '0%': { width: '0%' },
+          '100%': { width: 'var(--progress-width)' }
         }
+      },
+      boxShadow: {
+        'card': '0 1px 3px 0 rgb(0 0 0 / 0.06), 0 1px 2px -1px rgb(0 0 0 / 0.06)',
+        'card-hover': '0 4px 6px -1px rgb(0 0 0 / 0.08), 0 2px 4px -2px rgb(0 0 0 / 0.06)',
+        'elevated': '0 10px 15px -3px rgb(0 0 0 / 0.08), 0 4px 6px -4px rgb(0 0 0 / 0.04)',
+        'nav': '0 -1px 3px 0 rgb(0 0 0 / 0.05)'
       }
     }
   },
   plugins: []
 };
-

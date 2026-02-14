@@ -113,14 +113,14 @@ function TaskCard({
       onMouseEnter={() => setShowActions(true)}
       onMouseLeave={() => setShowActions(false)}
       className={`
-        bg-white dark:bg-gray-800/80 
-        rounded-lg p-3 
-        border border-gray-200 dark:border-gray-700
+        bg-white dark:bg-gray-800/90
+        rounded-xl p-3.5
+        border border-gray-100 dark:border-gray-700/60
         cursor-pointer
         transition-all duration-200
-        hover:shadow-md hover:border-blue-300 dark:hover:border-blue-600
-        ${currentTask.is_completed ? 'opacity-60' : ''}
-        ${deleting ? 'opacity-50 scale-95' : ''}
+        hover:shadow-card-hover hover:border-blue-200 dark:hover:border-blue-700
+        ${currentTask.is_completed ? 'opacity-50' : ''}
+        ${deleting ? 'opacity-30 scale-95' : ''}
       `}
     >
       <div className="flex items-start gap-3">
@@ -128,16 +128,16 @@ function TaskCard({
         <button
           onClick={handleToggleComplete}
           className={`
-            flex-shrink-0 w-5 h-5 mt-0.5 rounded border-2 
-            transition-all duration-200
-            ${currentTask.is_completed 
-              ? 'bg-green-500 border-green-500 text-white' 
-              : 'border-gray-300 dark:border-gray-600 hover:border-green-500'
+            flex-shrink-0 w-6 h-6 mt-0.5 rounded-md border-2
+            transition-all duration-200 flex items-center justify-center
+            ${currentTask.is_completed
+              ? 'bg-green-500 border-green-500 text-white'
+              : 'border-gray-300 dark:border-gray-600 hover:border-green-400 hover:bg-green-50 dark:hover:bg-green-900/20'
             }
           `}
         >
           {currentTask.is_completed && (
-            <svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
             </svg>
           )}
@@ -146,35 +146,36 @@ function TaskCard({
         {/* תוכן */}
         <div className="flex-1 min-w-0">
           {/* כותרת */}
-          <div className="flex items-center gap-2 flex-wrap">
-            <p className={`
-              font-medium text-gray-900 dark:text-white text-sm
-              ${currentTask.is_completed ? 'line-through text-gray-500' : ''}
-            `}>
-              {currentTask.title}
-            </p>
-            {/* תגית דחיפות */}
+          <p className={`
+            font-medium text-gray-900 dark:text-white text-sm leading-snug
+            ${currentTask.is_completed ? 'line-through text-gray-400 dark:text-gray-500' : ''}
+          `}>
+            {currentTask.title}
+          </p>
+
+          {/* תגיות */}
+          <div className="flex items-center gap-1.5 flex-wrap mt-1.5">
             {currentTask.priority === 'urgent' && (
-              <span className="text-xs px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 rounded-full">
-                🔴 דחוף
+              <span className="badge bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-300 text-[10px]">
+                דחוף
               </span>
             )}
             {currentTask.priority === 'high' && (
-              <span className="text-xs px-2 py-0.5 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full">
-                🟡 בינוני
+              <span className="badge bg-amber-100 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300 text-[10px]">
+                בינוני
               </span>
             )}
             {isProject && (
-              <span className="text-xs px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full">
+              <span className="badge bg-blue-100 dark:bg-blue-900/30 text-blue-600 dark:text-blue-300 text-[10px]">
                 פרויקט
               </span>
             )}
             {isSubtask && (
-              <span className="text-xs px-2 py-0.5 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 rounded-full">
+              <span className="badge bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-300 text-[10px]">
                 שלב
               </span>
             )}
-            <span className="text-xs px-2 py-0.5 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-full flex items-center gap-1">
+            <span className="badge bg-gray-100 dark:bg-gray-700/60 text-gray-500 dark:text-gray-400 text-[10px]">
               {category.icon} {category.name}
             </span>
           </div>
@@ -188,50 +189,48 @@ function TaskCard({
 
           {/* כפתור טיימר לכל משימה */}
           {!currentTask.is_completed && (
-            <div className="mt-2">
+            <div className="mt-2 flex items-center gap-2">
               <button
                 onClick={(e) => {
                   e.stopPropagation();
                   setShowTimer(!showTimer);
                 }}
-                className="text-xs px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded hover:bg-blue-200 dark:hover:bg-blue-900/50 flex items-center gap-1"
+                className="badge bg-blue-50 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/40 transition-colors text-[11px]"
               >
-                ⏱️ {showTimer ? 'הסתר טיימר' : 'טיימר'}
+                ⏱️ {showTimer ? 'הסתר' : 'טיימר'}
               </button>
               {currentTask.time_spent > 0 && (
-                <span className="text-xs text-gray-500 dark:text-gray-400 mr-2">
-                  • {currentTask.time_spent} דקות
+                <span className="text-[11px] text-gray-400 dark:text-gray-500">
+                  {currentTask.time_spent} דק'
                 </span>
               )}
             </div>
           )}
-          
+
           {/* התקדמות למשימה רגילה */}
           {!isProject && !isSubtask && currentTask.estimated_duration && regularTaskProgress !== null && (
-            <div className="mt-2">
-              <div className="flex items-center justify-between text-xs mb-1">
-                <span className="text-gray-600 dark:text-gray-400">התקדמות</span>
+            <div className="mt-2.5">
+              <div className="flex items-center justify-between text-[11px] mb-1">
+                <span className="text-gray-500 dark:text-gray-400">התקדמות</span>
                 <span className={`font-medium ${
-                  regularTaskProgress >= 100 
-                    ? 'text-red-600 dark:text-red-400' 
-                    : 'text-blue-600 dark:text-blue-400'
+                  regularTaskProgress >= 100
+                    ? 'text-red-500 dark:text-red-400'
+                    : 'text-blue-500 dark:text-blue-400'
                 }`}>
-                  {regularTaskProgress >= 100 
-                    ? `חריגה: +${(currentTask.time_spent || 0) - currentTask.estimated_duration} דק'`
-                    : `נותרו ${currentTask.estimated_duration - (currentTask.time_spent || 0)} דק'`
+                  {regularTaskProgress >= 100
+                    ? `+${(currentTask.time_spent || 0) - currentTask.estimated_duration} דק' חריגה`
+                    : `${currentTask.estimated_duration - (currentTask.time_spent || 0)} דק' נותרו`
                   }
                 </span>
               </div>
-              <div className="w-full h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <div className="w-full h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all duration-300 ${
-                    regularTaskProgress >= 100 
-                      ? 'bg-red-500' 
-                      : regularTaskProgress >= 75 
-                      ? 'bg-orange-500' 
-                      : regularTaskProgress >= 50 
-                      ? 'bg-yellow-500' 
-                      : 'bg-green-500'
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    regularTaskProgress >= 100
+                      ? 'bg-red-500'
+                      : regularTaskProgress >= 75
+                      ? 'bg-amber-500'
+                      : 'bg-blue-500'
                   }`}
                   style={{ width: `${Math.min(100, regularTaskProgress)}%` }}
                 />
@@ -241,44 +240,39 @@ function TaskCard({
           
           {/* סטטוס פרויקט */}
           {isProject && (
-            <div className="mt-2 space-y-2">
+            <div className="mt-2.5 space-y-2">
               {/* התקדמות */}
               {projectProgress !== null && (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
-                    <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
+                    <span className="text-[11px] text-gray-500 dark:text-gray-400">
                       התקדמות פרויקט
                     </span>
-                    <span className="text-xs font-bold text-blue-600 dark:text-blue-400">
+                    <span className="text-[11px] font-bold text-blue-600 dark:text-blue-400">
                       {projectProgress}%
                     </span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <div className="flex-1 h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-                      <div 
-                        className={`h-full transition-all duration-300 ${
-                          projectProgress >= 100 
-                            ? 'bg-green-500' 
-                            : projectProgress >= 75 
-                            ? 'bg-blue-500' 
-                            : projectProgress >= 50 
-                            ? 'bg-yellow-500' 
-                            : 'bg-orange-500'
-                        }`}
-                        style={{ width: `${projectProgress}%` }}
-                      />
-                    </div>
+                  <div className="flex-1 h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-300 ${
+                        projectProgress >= 100
+                          ? 'bg-green-500'
+                          : projectProgress >= 75
+                          ? 'bg-blue-500'
+                          : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${projectProgress}%` }}
+                    />
                   </div>
                   {projectProgressByTime !== null && projectProgressByCompletion !== null && (
-                    <div className="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400">
+                    <div className="flex items-center gap-3 text-[10px] text-gray-400 dark:text-gray-500">
                       <span>זמן: {projectProgressByTime}%</span>
-                      <span>•</span>
                       <span>שלבים: {projectProgressByCompletion}%</span>
                     </div>
                   )}
                 </div>
               )}
-              
+
               {/* שלבים קרובים */}
               {upcomingSubtasks.length > 0 && (
                 <div className="space-y-1">
@@ -286,25 +280,25 @@ function TaskCard({
                     <div
                       key={idx}
                       className={`
-                        text-xs px-2 py-1 rounded
-                        ${isSubtaskOverdue(st) 
-                          ? 'bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-400' 
-                          : 'bg-orange-50 dark:bg-orange-900/20 text-orange-700 dark:text-orange-400'}
+                        text-[11px] px-2.5 py-1.5 rounded-lg
+                        ${isSubtaskOverdue(st)
+                          ? 'bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400'
+                          : 'bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400'}
                       `}
                     >
                       <span className="font-medium">{st.title}</span>
                       {st.due_date && (
-                        <span className="mr-1"> • {getRelativeDate(st.due_date)}</span>
+                        <span className="mr-1 opacity-75"> • {getRelativeDate(st.due_date)}</span>
                       )}
                     </div>
                   ))}
                 </div>
               )}
-              
+
               {/* מספר שלבים */}
               {subtasks.length > 0 && (
-                <div className="text-xs text-gray-500 dark:text-gray-400">
-                  {subtasks.filter(st => st.is_completed).length} / {subtasks.length} שלבים הושלמו
+                <div className="text-[11px] text-gray-400 dark:text-gray-500">
+                  {subtasks.filter(st => st.is_completed).length}/{subtasks.length} שלבים
                 </div>
               )}
             </div>
@@ -313,24 +307,24 @@ function TaskCard({
           {/* תאריך יעד */}
           {currentTask.due_date && (
             <div className={`
-              flex items-center gap-1 mt-2 text-xs
-              ${isOverdue ? 'text-red-600 dark:text-red-400' : 
-                isDueToday ? 'text-orange-600 dark:text-orange-400' : 
-                'text-gray-500 dark:text-gray-400'}
+              flex items-center gap-1.5 mt-2 text-[11px]
+              ${isOverdue ? 'text-red-500 dark:text-red-400' :
+                isDueToday ? 'text-amber-500 dark:text-amber-400' :
+                'text-gray-400 dark:text-gray-500'}
             `}>
               <span>📅</span>
               <span>{getRelativeDate(currentTask.due_date)}</span>
               {currentTask.due_time && (
                 <span>• {formatTime(currentTask.due_time)}</span>
               )}
-              {isOverdue && <span className="font-medium">(באיחור)</span>}
+              {isOverdue && <span className="font-semibold">(באיחור)</span>}
             </div>
           )}
         </div>
 
         {/* כפתורי פעולה */}
         <div className={`
-          flex gap-1 transition-opacity duration-200
+          flex gap-0.5 transition-opacity duration-200
           ${showActions ? 'opacity-100' : 'opacity-0 md:opacity-0'}
         `}>
           <button
@@ -338,7 +332,7 @@ function TaskCard({
               e.stopPropagation();
               onEdit();
             }}
-            className="p-1.5 rounded hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+            className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors"
             title="ערוך"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -347,7 +341,7 @@ function TaskCard({
           </button>
           <button
             onClick={handleDelete}
-            className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 text-gray-500 hover:text-red-600"
+            className="p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20 text-gray-400 hover:text-red-500 transition-colors"
             title="מחק"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -86,24 +86,27 @@ function Matrix({ onAddTask, onEditTask }) {
       {/* תצוגת נייד - טאבים */}
       <div className="md:hidden">
         {/* טאבי הרבעים */}
-        <div className="flex gap-1 mb-4 overflow-x-auto pb-2">
-          {quadrants.map(quadrant => (
-            <button
-              key={quadrant.id}
-              onClick={() => setMobileActiveQuadrant(quadrant.id)}
-              className={`
-                flex items-center gap-2 px-3 py-2 rounded-lg whitespace-nowrap
-                transition-all duration-200
-                ${mobileActiveQuadrant === quadrant.id
-                  ? `${quadrant.colorClass} border-2 ${quadrant.borderColor}`
-                  : 'bg-gray-100 dark:bg-gray-800'
-                }
-              `}
-            >
-              <span>{quadrant.icon}</span>
-              <span className="text-sm font-medium">{quadrant.title}</span>
-            </button>
-          ))}
+        <div className="flex gap-1.5 mb-4 overflow-x-auto pb-1 scrollbar-hide">
+          {quadrants.map(quadrant => {
+            const isActive = mobileActiveQuadrant === quadrant.id;
+            return (
+              <button
+                key={quadrant.id}
+                onClick={() => setMobileActiveQuadrant(quadrant.id)}
+                className={`
+                  flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl whitespace-nowrap
+                  transition-all duration-200 text-sm font-medium
+                  ${isActive
+                    ? `${quadrant.colorClass} border-2 ${quadrant.borderColor} shadow-sm`
+                    : 'bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 text-gray-500 dark:text-gray-400'
+                  }
+                `}
+              >
+                <span>{quadrant.icon}</span>
+                <span>{quadrant.title}</span>
+              </button>
+            );
+          })}
         </div>
 
         {/* הרבע הנבחר */}
