@@ -1,14 +1,20 @@
 /**
- * מנוע שיבוץ חכם - גרסה 4 מתוקנת
- * =====================================
+ * מנוע שיבוץ חכם - גרסה 4 מתוקנת + משודרג
+ * ==========================================
  * 
  * תיקון: שעות עבודה נקראות מההגדרות של המשתמש
  * ✅ תמיכה בזמני בית/משפחה
+ * ✅ Validation + Error Handling
+ * ✅ Centralized Configuration
  */
 
 import { WORK_HOURS, HOME_HOURS, getScheduleByType } from '../config/workSchedule';
 import { getTaskType } from '../config/taskTypes';
 import { toLocalISODate } from './dateTimeHelpers';
+import ValidationService from '../services/ValidationService';
+import ErrorHandler from '../services/ErrorHandler';
+import Logger from '../services/Logger';
+import ConfigService from '../services/ConfigService';
 
 // ============================================
 // הגדרות ברירת מחדל (משמשות רק אם אין הגדרות)
@@ -64,90 +70,158 @@ export const BLOCK_TYPES = {
 };
 
 // ============================================
-// פונקציה ראשית
+// פונקציה ראשית משודרגת
 // ============================================
 
 export function smartScheduleWeekV4(weekStart, allTasks) {
-  const config = SMART_SCHEDULE_CONFIG;
+  const startTime = Date.now();
   
-  const today = new Date();
-  const todayISO = toLocalISODate(today);
-  
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekEnd.getDate() + 6);
-  const weekEndISO = toLocalISODate(weekEnd);
-  const weekStartISO = toLocalISODate(weekStart);
-  
-  // שלב 1: יצירת מבנה ימים
-  const days = initializeDays(weekStart, config);
-  
-  // שלב 2: בדיקה אם זה שבוע בעבר
-  if (weekEndISO < todayISO) {
-    return createEmptyWeekPlan(weekStartISO, days);
+  try {
+    // === Step 1: Validate inputs ===
+    ErrorHandler.assertNotNull(weekStart, 'weekStart');
+    ErrorHandler.assertNotNull(allTasks, 'allTasks');
+    
+    if (!Array.isArray(allTasks)) {
+      throw ErrorHandler.createError('allTasks must be an array', 'INVALID_INPUT', { type: typeof allTasks });
+    }
+
+    // Validate all tasks
+    const taskValidation = ValidationService.validateTasks(allTasks);
+    if (!taskValidation.valid && taskValidation.errors.length > 0) {
+      Logger.warn('Invalid tasks detected', { errors: taskValidation.errors });
+      // Filter out invalid tasks, don't fail
+      const validTasks = allTasks.filter((task, index) => {
+        return !taskValidation.errors.some(e => e.index === index);
+      });
+      Logger.info(`Filtered ${allTasks.length - validTasks.length} invalid tasks`);
+      allTasks = validTasks;
+    }
+
+    const config = SMART_SCHEDULE_CONFIG;
+    
+    const today = new Date();
+    const todayISO = toLocalISODate(today);
+    
+    const weekEnd = new Date(weekStart);
+    weekEnd.setDate(weekEnd.getDate() + 6);
+    const weekEndISO = toLocalISODate(weekEnd);
+    const weekStartISO = toLocalISODate(weekStart);
+
+    Logger.info('Scheduling week', { weekStart: weekStartISO, weekEnd: weekEndISO, taskCount: allTasks.length });
+    
+    // שלב 1: יצירת מבנה ימים
+    const days = initializeDays(weekStart, config);
+    
+    // שלב 2: בדיקה אם זה שבוע בעבר
+    if (weekEndISO < todayISO) {
+      Logger.info('Week is in the past, returning empty plan');
+      return createEmptyWeekPlan(weekStartISO, days);
+    }
+    
+    // שלב 3: הפרדת משימות לסוגים
+    const { googleEvents, flexibleTasks, completedTasks } = categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO);
+    Logger.debug('Tasks categorized', { google: googleEvents.length, flexible: flexibleTasks.length, completed: completedTasks.length });
+    
+    // שלב 4: שיבוץ אירועי גוגל קודם (הם קבועים!)
+    scheduleGoogleEvents(googleEvents, days, config);
+    
+    // שלב 5: שיבוץ משימות גמישות סביב האירועים הקבועים
+    const sortedTasks = prioritizeTasks(flexibleTasks, todayISO);
+    const schedulingResult = scheduleFlexibleTasks(sortedTasks, days, todayISO, config);
+    
+    // שלב 6: שיבוץ משימות שהושלמו (לתצוגה)
+    scheduleCompletedTasks(completedTasks, days, config);
+    
+    // שלב 7: יצירת המלצות
+    const recommendations = generateRecommendations(days, schedulingResult, config);
+    
+    // שלב 8: חישוב סטטיסטיקות
+    const stats = calculateStats(days, schedulingResult, config);
+
+    const result = {
+      weekStart: weekStartISO,
+      days: days.map(d => formatDayForOutput(d, config)),
+      summary: stats,
+      warnings: schedulingResult.warnings,
+      unscheduledTasks: schedulingResult.unscheduledTasks,
+      recommendations,
+      isCurrentWeek: weekStartISO <= todayISO && todayISO <= weekEndISO
+    };
+
+    Logger.logPerformance('smartScheduleWeekV4', startTime, {
+      weekStart: weekStartISO,
+      tasksScheduled: schedulingResult.scheduledTasks || 0,
+      unscheduledCount: schedulingResult.unscheduledTasks?.length || 0
+    });
+
+    return result;
+    
+  } catch (error) {
+    Logger.error('Scheduling failed', error);
+    return ErrorHandler.handle(error, {
+      function: 'smartScheduleWeekV4',
+      input: { weekStart, taskCount: allTasks?.length }
+    });
   }
-  
-  // שלב 3: הפרדת משימות לסוגים
-  const { googleEvents, flexibleTasks, completedTasks } = categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO);
-  
-  // שלב 4: שיבוץ אירועי גוגל קודם (הם קבועים!)
-  scheduleGoogleEvents(googleEvents, days, config);
-  
-  // שלב 5: שיבוץ משימות גמישות סביב האירועים הקבועים
-  const sortedTasks = prioritizeTasks(flexibleTasks, todayISO);
-  const schedulingResult = scheduleFlexibleTasks(sortedTasks, days, todayISO, config);
-  
-  // שלב 6: שיבוץ משימות שהושלמו (לתצוגה)
-  scheduleCompletedTasks(completedTasks, days, config);
-  
-  // שלב 7: יצירת המלצות
-  const recommendations = generateRecommendations(days, schedulingResult, config);
-  
-  // שלב 8: חישוב סטטיסטיקות
-  const stats = calculateStats(days, schedulingResult, config);
-  
-  return {
-    weekStart: weekStartISO,
-    days: days.map(d => formatDayForOutput(d, config)),
-    summary: stats,
-    warnings: schedulingResult.warnings,
-    unscheduledTasks: schedulingResult.unscheduledTasks,
-    recommendations,
-    isCurrentWeek: weekStartISO <= todayISO && todayISO <= weekEndISO
-  };
 }
 
 // ============================================
-// הפרדת משימות לסוגים
+// הפרדת משימות לסוגים - משודרגת
 // ============================================
 
 function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
-  const googleEvents = [];
-  const flexibleTasks = [];
-  const completedTasks = [];
-  
-  for (const task of allTasks) {
-    if (task.is_project) continue;
+  try {
+    ErrorHandler.assertNotNull(allTasks, 'allTasks');
+    ErrorHandler.assert(Array.isArray(allTasks), 'allTasks must be an array');
+
+    const googleEvents = [];
+    const flexibleTasks = [];
+    const completedTasks = [];
     
-    if (task.is_completed) {
-      if (task.due_date && task.due_date >= weekStartISO && task.due_date <= weekEndISO) {
-        completedTasks.push(task);
+    for (const task of allTasks) {
+      // Skip invalid tasks
+      if (!task || !task.id) {
+        Logger.warn('Skipping invalid task', { task });
+        continue;
       }
-      continue;
-    }
-    
-    if (task.is_from_google || task.google_event_id) {
-      googleEvents.push({
+
+      if (task.is_project) continue;
+      
+      if (task.is_completed) {
+        if (task.due_date && task.due_date >= weekStartISO && task.due_date <= weekEndISO) {
+          completedTasks.push(task);
+        }
+        continue;
+      }
+      
+      if (task.is_from_google || task.google_event_id) {
+        googleEvents.push({
+          ...task,
+          isFixed: true,
+          blockType: BLOCK_TYPES.GOOGLE_EVENT
+        });
+        continue;
+      }
+      
+      flexibleTasks.push({
         ...task,
-        isFixed: true,
-        blockType: BLOCK_TYPES.GOOGLE_EVENT
+        isFixed: false,
+        blockType: BLOCK_TYPES.FLEXIBLE_TASK
       });
-      continue;
     }
-    
-    flexibleTasks.push({
-      ...task,
-      isFixed: false,
-      blockType: BLOCK_TYPES.FLEXIBLE_TASK
+
+    Logger.debug('Tasks categorization complete', {
+      googleEvents: googleEvents.length,
+      flexibleTasks: flexibleTasks.length,
+      completedTasks: completedTasks.length
+    });
+
+    return { googleEvents, flexibleTasks, completedTasks };
+  } catch (error) {
+    Logger.error('Task categorization failed', error);
+    throw ErrorHandler.createError('Failed to categorize tasks', 'CATEGORIZATION_ERROR', { error: error.message });
+  }
+}
     });
   }
   
