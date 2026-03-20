@@ -11,6 +11,16 @@
 import { WORK_HOURS, HOME_HOURS, getScheduleByType } from '../config/workSchedule';
 import { getTaskType } from '../config/taskTypes';
 import { toLocalISODate } from './dateTimeHelpers';
+import {
+  timeToMinutes,
+  minutesToTime,
+  findFreeSlots,
+  isHomeTask,
+  createBlock,
+  validateTaskForScheduling,
+  calculateDayStats,
+  isOverbooked
+} from './schedulerHelpers';
 import ValidationService from '../services/ValidationService';
 import ErrorHandler from '../services/ErrorHandler';
 import Logger from '../services/Logger';
@@ -68,6 +78,51 @@ export const BLOCK_TYPES = {
   BREAK: 'break',
   LUNCH: 'lunch'
 };
+
+// ============================================
+// Safe Scheduling Entry Point
+// ============================================
+
+export async function scheduleWeekSafe(weekStart, allTasks) {
+  const startTime = Date.now();
+  
+  try {
+    Logger.info('Starting week scheduling', {
+      weekStart: weekStart?.toISOString?.(),
+      taskCount: allTasks?.length
+    });
+
+    const result = smartScheduleWeekV4(weekStart, allTasks);
+
+    Logger.logPerformance('scheduleWeekSafe', startTime, {
+      success: true,
+      taskCount: allTasks.length,
+      daysScheduled: result.days?.length
+    });
+
+    return {
+      success: true,
+      data: result
+    };
+  } catch (error) {
+    Logger.error('Week scheduling failed', error);
+
+    Logger.logPerformance('scheduleWeekSafe', startTime, {
+      success: false,
+      error: error.message
+    });
+
+    const errorResp = ErrorHandler.handle(error, {
+      function: 'scheduleWeekSafe',
+      input: { weekStart, taskCount: allTasks?.length }
+    });
+
+    return {
+      success: false,
+      ...errorResp
+    };
+  }
+}
 
 // ============================================
 // פונקציה ראשית משודרגת
@@ -222,62 +277,138 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
     throw ErrorHandler.createError('Failed to categorize tasks', 'CATEGORIZATION_ERROR', { error: error.message });
   }
 }
-    });
-  }
-  
-  return { googleEvents, flexibleTasks, completedTasks };
-}
 
 // ============================================
-// שיבוץ אירועי גוגל (קבועים!)
+// שיבוץ אירועי גוגל (קבועים!) - משודרג
 // ============================================
 
 function scheduleGoogleEvents(googleEvents, days, config) {
-  for (const event of googleEvents) {
-    if (!event.due_date || !event.due_time) continue;
+  try {
+    ErrorHandler.assertNotNull(googleEvents, 'googleEvents');
+    ErrorHandler.assertNotNull(days, 'days');
+    ErrorHandler.assertNotNull(config, 'config');
     
-    const targetDay = days.find(d => d.date === event.due_date);
-    if (!targetDay) continue;
-    
-    const startMinutes = timeToMinutes(event.due_time);
-    const duration = event.estimated_duration || 60;
-    const endMinutes = startMinutes + duration;
-    
-    const block = {
-      id: `google-${event.id}`,
-      taskId: event.id,
-      task: event,
-      type: event.task_type || 'meeting',
-      taskType: event.task_type || 'meeting',
-      priority: 'fixed',
-      title: `📅 ${event.title}`,
-      startMinute: startMinutes,
-      endMinute: endMinutes,
-      startTime: minutesToTime(startMinutes),
-      endTime: minutesToTime(endMinutes),
-      duration: duration,
-      dayDate: targetDay.date,
-      isFixed: true,
-      isGoogleEvent: true,
-      blockType: BLOCK_TYPES.GOOGLE_EVENT,
-      canMove: false,
-      canResize: false
-    };
-    
-    targetDay.blocks.push(block);
-    targetDay.fixedMinutes = (targetDay.fixedMinutes || 0) + duration;
-    
-    // ✅ שימוש בשעות היום הספציפי
-    const dayStart = targetDay.dayStart || config.defaultDayStart;
-    const dayEnd = targetDay.dayEnd || config.defaultDayEnd;
-    
-    if (startMinutes >= dayStart && endMinutes <= dayEnd) {
-      targetDay.totalScheduledMinutes += duration;
+    ErrorHandler.assert(Array.isArray(googleEvents), 'googleEvents must be an array');
+    ErrorHandler.assert(Array.isArray(days), 'days must be an array');
+
+    let successCount = 0;
+    let skippedCount = 0;
+    const errors = [];
+
+    for (const event of googleEvents) {
+      try {
+        // Validation
+        if (!event || !event.id) {
+          skippedCount++;
+          continue;
+        }
+
+        if (!event.due_date || !event.due_time) {
+          Logger.debug(`Skipping Google event ${event.id} - missing date/time`);
+          skippedCount++;
+          continue;
+        }
+
+        // Validate time format
+        if (!ValidationService.isValidTime(event.due_time)) {
+          Logger.warn(`Invalid time format for event ${event.id}: ${event.due_time}`);
+          continue;
+        }
+
+        const targetDay = days.find(d => d.date === event.due_date);
+        if (!targetDay) {
+          Logger.debug(`No day found for event ${event.id} on ${event.due_date}`);
+          continue;
+        }
+
+        // Get valid duration
+        const duration = Math.max(1, event.estimated_duration || 60);
+        
+        // Validate duration
+        if (duration > 480) { // Max 8 hours
+          Logger.warn(`Event duration too long (${duration}m), capping to 480m`, { eventId: event.id });
+        }
+
+        const startMinutes = timeToMinutes(event.due_time);
+        
+        // Validate start time
+        if (startMinutes < 0 || startMinutes > 1440) {
+          Logger.warn(`Invalid start minutes ${startMinutes} for event ${event.id}`);
+          continue;
+        }
+
+        const endMinutes = startMinutes + duration;
+
+        const block = {
+          id: `google-${event.id}`,
+          taskId: event.id,
+          task: event,
+          type: event.task_type || 'meeting',
+          taskType: event.task_type || 'meeting',
+          priority: 'fixed',
+          title: `📅 ${event.title || 'Google Event'}`,
+          startMinute: startMinutes,
+          endMinute: endMinutes,
+          startTime: minutesToTime(startMinutes),
+          endTime: minutesToTime(endMinutes),
+          duration: duration,
+          dayDate: targetDay.date,
+          isFixed: true,
+          isGoogleEvent: true,
+          blockType: BLOCK_TYPES.GOOGLE_EVENT,
+          canMove: false,
+          canResize: false
+        };
+
+        // Check for conflicts
+        if (ValidationService.hasTimeConflict(startMinutes, endMinutes, targetDay.blocks)) {
+          Logger.warn(`Time conflict detected for event ${event.id}`, {
+            time: event.due_time,
+            date: event.due_date
+          });
+          // Still add, but mark as conflicted
+          block.hasConflict = true;
+        }
+
+        targetDay.blocks.push(block);
+        targetDay.fixedMinutes = (targetDay.fixedMinutes || 0) + duration;
+
+        // Get day hours
+        const dayStart = targetDay.dayStart || config.defaultDayStart;
+        const dayEnd = targetDay.dayEnd || config.defaultDayEnd;
+
+        if (startMinutes >= dayStart && endMinutes <= dayEnd) {
+          targetDay.totalScheduledMinutes = (targetDay.totalScheduledMinutes || 0) + duration;
+        }
+
+        successCount++;
+      } catch (eventError) {
+        Logger.warn(`Error scheduling Google event ${event?.id}`, eventError);
+        errors.push({ eventId: event?.id, error: eventError.message });
+      }
     }
-  }
-  
-  for (const day of days) {
-    day.blocks.sort((a, b) => a.startMinute - b.startMinute);
+
+    // Sort blocks by start time
+    for (const day of days) {
+      if (day.blocks && day.blocks.length > 1) {
+        day.blocks.sort((a, b) => a.startMinute - b.startMinute);
+      }
+    }
+
+    Logger.info('Google events scheduled', {
+      total: googleEvents.length,
+      success: successCount,
+      skipped: skippedCount,
+      errors: errors.length
+    });
+
+    if (errors.length > 0) {
+      Logger.warn('Some Google events failed to schedule', { errors });
+    }
+
+  } catch (error) {
+    Logger.error('Google events scheduling failed', error);
+    throw ErrorHandler.createError('Failed to schedule Google events', 'GOOGLE_EVENTS_ERROR', { error: error.message });
   }
 }
 
