@@ -24,7 +24,8 @@ import toast from 'react-hot-toast';
 
 const CONFIG = {
   // כש-IdleDetector פעיל (פופאפ המזכירה), נמנעים מפופאפ no-timer כפול
-  USE_LEGACY_IDLE_POPUP: true,
+  // הוחזר ל-false כדי לשמור fallback כשהפופאפ הישן לא קופץ
+  USE_LEGACY_IDLE_POPUP: false,
 
   // מרווחי בדיקה
   CHECK_INTERVAL_MS: 30 * 1000,        // בדיקה כל 30 שניות
@@ -173,6 +174,9 @@ function getActiveTimerInfo() {
         if (data.isInterrupted === true && data.startTime) {
           return { taskId: activeTimerId, isRunning: false, isPaused: false, isInterrupted: true };
         }
+      } else {
+        // מפתח יתום - מנקים כדי לא לחסום מנגנון התראות
+        localStorage.removeItem('zmanit_active_timer');
       }
       
       // ✅ תיקון: בדיקת מפתח ישן של TaskTimer (timer_{id}_startTime)

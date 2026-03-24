@@ -208,7 +208,8 @@ function IdleDetector() {
       if (activeTimerData) {
         try {
           const data = JSON.parse(activeTimerData);
-          if (data?.isRunning && !data?.isInterrupted) {
+          const hasValidStart = !!data?.startTime;
+          if (data?.isRunning && !data?.isInterrupted && hasValidStart) {
             hasRunningTimer = true;
           } else if (data?.isPaused || data?.isInterrupted) {
             hasPausedTimer = true;
@@ -217,6 +218,9 @@ function IdleDetector() {
             pausedSince = pauseTime ? new Date(pauseTime) : null;
           }
         } catch (e) {}
+      } else {
+        // מפתח טיימר יתום - מנקים כדי לא לחסום התראות
+        localStorage.removeItem('zmanit_active_timer');
       }
     }
 
@@ -225,7 +229,8 @@ function IdleDetector() {
       if (key?.startsWith('timer_v2_')) {
         try {
           const data = JSON.parse(localStorage.getItem(key));
-          if (data?.isRunning && !data?.isInterrupted) {
+          const hasValidStart = !!data?.startTime;
+          if (data?.isRunning && !data?.isInterrupted && hasValidStart) {
             hasRunningTimer = true;
           } else if (data?.isRunning && data?.isInterrupted) {
             // טיימר מושהה
