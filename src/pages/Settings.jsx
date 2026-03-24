@@ -548,6 +548,11 @@ function WorkSettings({ user }) {
   
   // אפשרויות דקות
   const minuteOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+  const breakPresets = [
+    { key: 'gentle', label: 'עדין', value: 8, hint: 'יותר מרווח נשימה' },
+    { key: 'balanced', label: 'מאוזן', value: 6, hint: 'ברירת מחדל מומלצת' },
+    { key: 'strict', label: 'קשוח', value: 4, hint: 'שומר על רצף חזק' }
+  ];
   
   // פורמט שעה לתצוגה
   const formatTime = (hour, minute) => {
@@ -652,6 +657,25 @@ function WorkSettings({ user }) {
       <div className="space-y-3">
         <h3 className="font-medium text-gray-700 dark:text-gray-300">פוקוס והפסקות</h3>
         <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+          <label className="block text-sm text-gray-500 mb-2">פריסט מהיר</label>
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
+            {breakPresets.map((preset) => (
+              <button
+                key={preset.key}
+                type="button"
+                onClick={() => setWorkHours(w => ({ ...w, maxDailyBreaks: preset.value }))}
+                className={`p-2 rounded-lg border text-right transition-colors ${
+                  workHours.maxDailyBreaks === preset.value
+                    ? 'bg-blue-100 dark:bg-blue-900/30 border-blue-400 text-blue-700 dark:text-blue-300'
+                    : 'bg-white dark:bg-gray-700 border-gray-200 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:border-blue-300'
+                }`}
+              >
+                <div className="font-medium">{preset.label}</div>
+                <div className="text-xs opacity-80">{preset.hint}</div>
+              </button>
+            ))}
+          </div>
+
           <label className="block text-sm text-gray-500 mb-2">מקסימום הפסקות ביום (לפני התראה)</label>
           <select
             value={workHours.maxDailyBreaks}
