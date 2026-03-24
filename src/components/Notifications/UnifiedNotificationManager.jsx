@@ -23,6 +23,9 @@ import toast from 'react-hot-toast';
 // ============================================
 
 const CONFIG = {
+  // כש-IdleDetector פעיל (פופאפ המזכירה), נמנעים מפופאפ no-timer כפול
+  USE_LEGACY_IDLE_POPUP: true,
+
   // מרווחי בדיקה
   CHECK_INTERVAL_MS: 30 * 1000,        // בדיקה כל 30 שניות
   GRACE_PERIOD_MS: 30 * 1000,           // 30 שניות חסד בתחילת סשן (מספיק לטעינת נתונים)
@@ -528,7 +531,7 @@ export function useUnifiedNotifications() {
     // ✅ תיקון: hasActiveTimer כולל גם מושהה, אז צריך לבדוק ספציפית
     const hasNoWorkingTimer = !hasRunningTimer && !timerInfo?.isPaused && !hasInterruptedTimer;
     
-    if (isWorkHours && hasNoWorkingTimer) {
+    if (isWorkHours && hasNoWorkingTimer && !CONFIG.USE_LEGACY_IDLE_POPUP) {
       if (canNotify('work-hours-no-timer', CONFIG.MIN_INTERVAL.NO_TIMER)) {
         // ✅ תיקון v3.1: מסננים משימות הוריות!
         const pendingTasks = tasks.filter(t => 

@@ -19,6 +19,7 @@ import MobileNav from './components/Layout/MobileNav';
 import InstallPrompt from './components/PWA/InstallPrompt';
 import UrgentTaskButton from './components/Productivity/UrgentTaskButton';
 import EndOfDayPopup from './components/Productivity/EndOfDayPopup';
+import IdleDetector from './components/Productivity/IdleDetector';
 // ✅ מנהל התראות מאוחד v3.0 - מקור יחיד לכל ההתראות!
 // מחליף: IdleDetector, WhyNotStartedDetector, smartAlertManager, notificationService
 import UnifiedNotificationManager from './components/Notifications/UnifiedNotificationManager';
@@ -60,6 +61,9 @@ function App() {
 
       {/* סיכום סוף יום */}
       {user && <EndOfDayPopup />}
+
+      {/* פופאפ המזכירה - אין טיימר פעיל / חוסר פעילות */}
+      {user && <IdleDetector />}
 
       {/* ✅ מנהל התראות מאוחד v3.0 - מטפל בהכל! */}
       {user && <UnifiedNotificationManager />}
