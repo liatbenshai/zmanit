@@ -585,6 +585,44 @@ function WorkSettings({ user }) {
     if (avg >= 4.5) return breakPresets.find(p => p.key === 'balanced');
     return breakPresets.find(p => p.key === 'strict');
   }, [weeklyBreakStats, breakPresets]);
+
+  const todayForecast = useMemo(() => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const startMinutes = (workHours.startHour * 60) + workHours.startMinute;
+    const endMinutes = (workHours.endHour * 60) + workHours.endMinute;
+    const dayDuration = Math.max(1, endMinutes - startMinutes);
+    const elapsedInWindow = Math.max(0, Math.min(dayDuration, currentMinutes - startMinutes));
+    const progress = elapsedInWindow / dayDuration;
+
+    const todayISO = new Date().toISOString().split('T')[0];
+    const actualBreaksToday = parseInt(localStorage.getItem(`zmanit_break_count_${todayISO}`) || '0', 10) || 0;
+
+    if (progress <= 0) {
+      return {
+        actualBreaksToday,
+        projectedBreaks: actualBreaksToday,
+        status: 'early',
+        message: 'היום עוד לא התחיל לפי שעות העבודה שלך.'
+      };
+    }
+
+    const projectedBreaks = Math.round((actualBreaksToday / Math.max(progress, 0.05)) * 10) / 10;
+    const threshold = workHours.maxDailyBreaks ?? 6;
+    const ratio = projectedBreaks / Math.max(1, threshold);
+    let status = 'ok';
+    let message = 'נראה שאת בקצב טוב ביחס ליעד היומי.';
+
+    if (ratio >= 1.15) {
+      status = 'risk';
+      message = 'לפי הקצב הנוכחי יש סיכון לחרוג מהיעד היומי.';
+    } else if (ratio >= 0.9) {
+      status = 'watch';
+      message = 'את קרובה ליעד היומי. כדאי לשמור על רצף פוקוס.';
+    }
+
+    return { actualBreaksToday, projectedBreaks, status, message };
+  }, [workHours]);
   
   // פורמט שעה לתצוגה
   const formatTime = (hour, minute) => {
@@ -742,6 +780,20 @@ function WorkSettings({ user }) {
         </div>
 
         <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className={`mb-4 p-3 rounded-lg border ${
+            todayForecast.status === 'risk'
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800'
+              : todayForecast.status === 'watch'
+                ? 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-800'
+                : 'bg-emerald-50 dark:bg-emerald-900/20 border-emerald-200 dark:border-emerald-800'
+          }`}>
+            <div className="text-sm font-medium text-gray-800 dark:text-gray-100">תחזית להיום בזמן אמת</div>
+            <div className="text-xs text-gray-600 dark:text-gray-300 mt-1">
+              עד עכשיו: {todayForecast.actualBreaksToday} | תחזית לסוף היום: {todayForecast.projectedBreaks} | יעד: {workHours.maxDailyBreaks}
+            </div>
+            <div className="text-xs mt-1 font-medium text-gray-700 dark:text-gray-200">{todayForecast.message}</div>
+          </div>
+
           <div className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">מגמת פוקוס שבועית (הפסקות ליום)</div>
           <div className="grid grid-cols-7 gap-1">
             {weeklyBreakStats.days.map((d) => {
