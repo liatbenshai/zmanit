@@ -14,6 +14,7 @@ import toast from 'react-hot-toast';
 
 const FOCUS_WORK_SECONDS = 45 * 60;
 const FOCUS_BREAK_SECONDS = 5 * 60;
+const DAILY_BREAK_WARNING_THRESHOLD = 6;
 
 /**
  * פורמט זמן MM:SS
@@ -32,6 +33,10 @@ function formatMinutes(minutes) {
   const hours = Math.floor(minutes / 60);
   const mins = minutes % 60;
   return mins > 0 ? `${hours}:${mins.toString().padStart(2, '0')}` : `${hours} שעות`;
+}
+
+function getTodayISO() {
+  return new Date().toISOString().split('T')[0];
 }
 
 /**
@@ -61,6 +66,8 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
   const [completedFocusCycles, setCompletedFocusCycles] = useState(0);
   const [sessionWorkMinutes, setSessionWorkMinutes] = useState(0);
   const [showSessionSummary, setShowSessionSummary] = useState(false);
+  const [breakCountToday, setBreakCountToday] = useState(0);
+  const [warnedBreakCountToday, setWarnedBreakCountToday] = useState(false);
   
   // ✅ כלל 5 הדקות
   const {
@@ -85,6 +92,7 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
   
   // מפתח localStorage
   const timerStorageKey = task ? `timer_v2_${task.id}` : null;
+  const breakCountStorageKey = `zmanit_break_count_${getTodayISO()}`;
   
   // חישובים
   const timeSpent = task?.time_spent ? parseInt(task.time_spent) : 0;
@@ -114,6 +122,16 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
       return 0;
     }
   }, [task, editTask]);
+
+  useEffect(() => {
+    try {
+      const savedBreaks = parseInt(localStorage.getItem(breakCountStorageKey) || '0', 10);
+      setBreakCountToday(Number.isNaN(savedBreaks) ? 0 : savedBreaks);
+    } catch {
+      setBreakCountToday(0);
+    }
+    setWarnedBreakCountToday(false);
+  }, [breakCountStorageKey]);
   
   // ===== טעינה מ-localStorage =====
   useEffect(() => {
@@ -327,6 +345,13 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
         const saved = await saveElapsedToTask();
         setSessionWorkMinutes(prev => prev + (saved || 45));
         setCompletedFocusCycles(prev => prev + 1);
+        const updatedBreakCount = breakCountToday + 1;
+        setBreakCountToday(updatedBreakCount);
+        localStorage.setItem(breakCountStorageKey, String(updatedBreakCount));
+        if (updatedBreakCount >= DAILY_BREAK_WARNING_THRESHOLD && !warnedBreakCountToday) {
+          toast.error('שימי לב: יש הרבה הפסקות היום. כדאי לחזור לפוקוס רציף.', { duration: 4500 });
+          setWarnedBreakCountToday(true);
+        }
         setIsRunning(false);
         setElapsedSeconds(0);
         setFocusPhase('break');
@@ -341,7 +366,18 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
     };
 
     handlePhaseTransition();
-  }, [focusModeEnabled, isRunning, isPaused, elapsedSeconds, phaseDuration, focusPhase, saveElapsedToTask]);
+  }, [
+    focusModeEnabled,
+    isRunning,
+    isPaused,
+    elapsedSeconds,
+    phaseDuration,
+    focusPhase,
+    saveElapsedToTask,
+    breakCountToday,
+    breakCountStorageKey,
+    warnedBreakCountToday
+  ]);
   
   // ===== אין משימה =====
   if (!task) {
@@ -591,7 +627,7 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
 
       {focusModeEnabled && (
         <div className="mt-3 text-xs text-gray-600 dark:text-gray-300 bg-white/60 dark:bg-gray-800/50 rounded-lg p-2">
-          מחזורים הושלמו: <b>{completedFocusCycles}</b> | דקות פוקוס בסשן: <b>{sessionWorkMinutes}</b>
+          מחזורים הושלמו: <b>{completedFocusCycles}</b> | דקות פוקוס בסשן: <b>{sessionWorkMinutes}</b> | הפסקות היום: <b>{breakCountToday}</b>
         </div>
       )}
       
