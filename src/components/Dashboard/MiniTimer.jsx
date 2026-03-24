@@ -12,6 +12,9 @@ import PreTaskCheckin from '../Learning/PreTaskCheckin'; // ✅ צ'ק-אין ל�
 import { logTimerStop } from '../Learning/EscapeWindowDetector'; // ✅ רישום עצירות
 import toast from 'react-hot-toast';
 
+const FOCUS_WORK_SECONDS = 45 * 60;
+const FOCUS_BREAK_SECONDS = 5 * 60;
+
 /**
  * פורמט זמן MM:SS
  */
@@ -35,7 +38,7 @@ function formatMinutes(minutes) {
  * MiniTimer Component
  */
 export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask }) {
-  const { editTask, updateTaskTime, addTask, tasks } = useTasks();
+  const { editTask } = useTasks();
   
   // 🆕 משימה מקומית שמתעדכנת
   const [localTask, setLocalTask] = useState(taskProp);
@@ -53,6 +56,11 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
   const [isPaused, setIsPaused] = useState(false);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [startTime, setStartTime] = useState(null);
+  const [focusModeEnabled, setFocusModeEnabled] = useState(false);
+  const [focusPhase, setFocusPhase] = useState('work'); // work | break
+  const [completedFocusCycles, setCompletedFocusCycles] = useState(0);
+  const [sessionWorkMinutes, setSessionWorkMinutes] = useState(0);
+  const [showSessionSummary, setShowSessionSummary] = useState(false);
   
   // ✅ כלל 5 הדקות
   const {
@@ -86,6 +94,26 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
   const remaining = Math.max(0, estimated - totalSpent);
   const progress = estimated > 0 ? Math.min(100, Math.round((totalSpent / estimated) * 100)) : 0;
   const isOverTime = totalSpent > estimated && estimated > 0;
+  const phaseDuration = focusModeEnabled
+    ? (focusPhase === 'work' ? FOCUS_WORK_SECONDS : FOCUS_BREAK_SECONDS)
+    : null;
+  const phaseRemaining = phaseDuration ? Math.max(0, phaseDuration - elapsedSeconds) : null;
+
+  const saveElapsedToTask = useCallback(async () => {
+    if (!task || elapsedSecondsRef.current < 60) return 0;
+
+    const minutesToAdd = Math.floor(elapsedSecondsRef.current / 60);
+    const newTimeSpent = (task.time_spent || 0) + minutesToAdd;
+
+    try {
+      await editTask(task.id, { time_spent: newTimeSpent });
+      setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
+      setElapsedSeconds(elapsedSecondsRef.current % 60);
+      return minutesToAdd;
+    } catch (e) {
+      return 0;
+    }
+  }, [task, editTask]);
   
   // ===== טעינה מ-localStorage =====
   useEffect(() => {
@@ -213,22 +241,16 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
     
     // שמירת הזמן
     if (elapsedSecondsRef.current >= 60 && task) {
-      const minutesToAdd = Math.floor(elapsedSecondsRef.current / 60);
-      const newTimeSpent = (task.time_spent || 0) + minutesToAdd;
-      
-      try {
-        await editTask(task.id, { time_spent: newTimeSpent });
-        // 🆕 עדכון state מקומי
-        setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
+      const minutesToAdd = await saveElapsedToTask();
+      if (minutesToAdd > 0) {
         toast.success(`⏸️ ${minutesToAdd} דקות נשמרו`, { duration: 2000 });
-        setElapsedSeconds(elapsedSecondsRef.current % 60); // שמירת השאריות
-      } catch (e) {
+      } else {
         toast.error('שגיאה בשמירה');
       }
     } else {
       toast('⏸️ מושהה', { duration: 1500 });
     }
-  }, [task, editTask]);
+  }, [task, saveElapsedToTask]);
   
   const resumeTimer = useCallback(() => {
     setIsRunning(true);
@@ -261,16 +283,9 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
     
     // שמירת הזמן לפני עצירה
     if (elapsedSecondsRef.current >= 60 && task) {
-      const minutesToAdd = Math.floor(elapsedSecondsRef.current / 60);
-      const newTimeSpent = (task.time_spent || 0) + minutesToAdd;
-      
-      try {
-        await editTask(task.id, { time_spent: newTimeSpent });
-        // 🆕 עדכון state מקומי
-        setLocalTask(prev => prev ? { ...prev, time_spent: newTimeSpent } : null);
+      const minutesToAdd = await saveElapsedToTask();
+      if (minutesToAdd > 0) {
         toast.success(`⏹️ ${minutesToAdd} דקות נשמרו`, { duration: 2000 });
-      } catch (e) {
-        // ignore
       }
     }
     
@@ -283,7 +298,10 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
     if (timerStorageKey) {
       localStorage.removeItem(timerStorageKey);
     }
-  }, [task, editTask, timerStorageKey]);
+    if (focusModeEnabled && (sessionWorkMinutes > 0 || completedFocusCycles > 0)) {
+      setShowSessionSummary(true);
+    }
+  }, [task, timerStorageKey, focusModeEnabled, sessionWorkMinutes, completedFocusCycles, saveElapsedToTask]);
   
   // עצירה רגילה
   const stopTimer = stopTimerInternal;
@@ -295,6 +313,35 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
       onComplete(task);
     }
   }, [task, onComplete, stopTimerInternal]);
+
+  const nextStepText = remaining > 0
+    ? `נשארו בערך ${formatMinutes(remaining)} למשימה הזו.`
+    : 'אפשר לעבור למשימה הבאה מהדשבורד.';
+
+  useEffect(() => {
+    if (!focusModeEnabled || !isRunning || isPaused || !phaseDuration) return;
+    if (elapsedSeconds < phaseDuration) return;
+
+    const handlePhaseTransition = async () => {
+      if (focusPhase === 'work') {
+        const saved = await saveElapsedToTask();
+        setSessionWorkMinutes(prev => prev + (saved || 45));
+        setCompletedFocusCycles(prev => prev + 1);
+        setIsRunning(false);
+        setElapsedSeconds(0);
+        setFocusPhase('break');
+        localStorage.removeItem('zmanit_active_timer');
+        toast('🧘 זמן הפסקה! 5 דקות', { icon: '☕', duration: 3500 });
+      } else {
+        setIsRunning(false);
+        setElapsedSeconds(0);
+        setFocusPhase('work');
+        toast('🎯 חוזרים לפוקוס 45 דקות', { icon: '🚀', duration: 3000 });
+      }
+    };
+
+    handlePhaseTransition();
+  }, [focusModeEnabled, isRunning, isPaused, elapsedSeconds, phaseDuration, focusPhase, saveElapsedToTask]);
   
   // ===== אין משימה =====
   if (!task) {
@@ -304,6 +351,30 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
         <div className="text-gray-500 dark:text-gray-400">
           אין משימות להיום
         </div>
+        <AnimatePresence>
+          {showSessionSummary && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              className="mt-4 text-right bg-white dark:bg-gray-800 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800"
+            >
+              <div className="font-bold text-gray-900 dark:text-white mb-1">סיכום סשן פוקוס</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">מחזורים: {completedFocusCycles} | דקות פוקוס: {sessionWorkMinutes}</div>
+              <div className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">{nextStepText}</div>
+              <button
+                onClick={() => {
+                  setShowSessionSummary(false);
+                  setSessionWorkMinutes(0);
+                  setCompletedFocusCycles(0);
+                }}
+                className="mt-3 w-full py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium"
+              >
+                מעולה, הבנתי
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
     );
   }
@@ -353,6 +424,23 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
             <span className="text-2xl">▶️</span>
             <span>התחל לעבוד!</span>
           </button>
+
+          <button
+            onClick={() => {
+              setFocusModeEnabled(prev => !prev);
+              setFocusPhase('work');
+              setCompletedFocusCycles(0);
+              setSessionWorkMinutes(0);
+            }}
+            className={`w-full py-3 rounded-xl text-white font-medium shadow-md transition-all flex items-center justify-center gap-2 ${
+              focusModeEnabled
+                ? 'bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700'
+                : 'bg-gradient-to-r from-slate-500 to-gray-600 hover:from-slate-600 hover:to-gray-700'
+            }`}
+          >
+            <span>🎯</span>
+            <span>{focusModeEnabled ? 'מצב פוקוס 45/5 פעיל' : 'הפעל מצב פוקוס 45/5'}</span>
+          </button>
           
           {/* ✅ כפתור 5 דקות - להתחלה קלה */}
           <button
@@ -389,6 +477,30 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
           taskTitle={task.title}
           taskDuration={estimated}
         />
+        <AnimatePresence>
+          {showSessionSummary && (
+            <motion.div
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: 12 }}
+              className="mt-4 text-right bg-white dark:bg-gray-800 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800"
+            >
+              <div className="font-bold text-gray-900 dark:text-white mb-1">סיכום סשן פוקוס</div>
+              <div className="text-sm text-gray-600 dark:text-gray-300">מחזורים: {completedFocusCycles} | דקות פוקוס: {sessionWorkMinutes}</div>
+              <div className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">{nextStepText}</div>
+              <button
+                onClick={() => {
+                  setShowSessionSummary(false);
+                  setSessionWorkMinutes(0);
+                  setCompletedFocusCycles(0);
+                }}
+                className="mt-3 w-full py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium"
+              >
+                מעולה, הבנתי
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </motion.div>
     );
   }
@@ -408,7 +520,7 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
       <div className="flex items-center justify-between mb-3">
         <div className="flex-1 min-w-0">
           <div className={`text-xs mb-1 ${isOverTime ? 'text-red-600 dark:text-red-400' : 'text-green-600 dark:text-green-400'}`}>
-            {isPaused ? '⏸️ מושהה' : '🔴 עובד עכשיו'}
+            {isPaused ? '⏸️ מושהה' : (focusModeEnabled ? (focusPhase === 'work' ? '🔴 פוקוס 45' : '☕ הפסקה 5') : '🔴 עובד עכשיו')}
           </div>
           <div className="font-medium text-gray-900 dark:text-white truncate">
             {task.title}
@@ -423,7 +535,9 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
             {formatTime(elapsedSeconds)}
           </div>
           <div className="text-xs text-gray-500 dark:text-gray-400">
-            {isOverTime ? `+${formatMinutes(totalSpent - estimated)} חריגה` : `${formatMinutes(remaining)} נותרו`}
+            {focusModeEnabled && phaseRemaining !== null
+              ? `נותרו ${formatTime(phaseRemaining)} לשלב`
+              : (isOverTime ? `+${formatMinutes(totalSpent - estimated)} חריגה` : `${formatMinutes(remaining)} נותרו`)}
           </div>
         </div>
       </div>
@@ -474,6 +588,12 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
           ✅ סיימתי
         </button>
       </div>
+
+      {focusModeEnabled && (
+        <div className="mt-3 text-xs text-gray-600 dark:text-gray-300 bg-white/60 dark:bg-gray-800/50 rounded-lg p-2">
+          מחזורים הושלמו: <b>{completedFocusCycles}</b> | דקות פוקוס בסשן: <b>{sessionWorkMinutes}</b>
+        </div>
+      )}
       
       {/* קישור למשימה המלאה */}
       {onNavigateToTask && (
@@ -484,6 +604,30 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
           לפרטים מלאים →
         </button>
       )}
+      <AnimatePresence>
+        {showSessionSummary && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            className="mt-4 text-right bg-white dark:bg-gray-800 rounded-xl p-4 border border-emerald-200 dark:border-emerald-800"
+          >
+            <div className="font-bold text-gray-900 dark:text-white mb-1">סיכום סשן פוקוס</div>
+            <div className="text-sm text-gray-600 dark:text-gray-300">מחזורים: {completedFocusCycles} | דקות פוקוס: {sessionWorkMinutes}</div>
+            <div className="text-sm text-emerald-700 dark:text-emerald-300 mt-1">{nextStepText}</div>
+            <button
+              onClick={() => {
+                setShowSessionSummary(false);
+                setSessionWorkMinutes(0);
+                setCompletedFocusCycles(0);
+              }}
+              className="mt-3 w-full py-2 rounded-lg bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium"
+            >
+              מעולה, הבנתי
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }
