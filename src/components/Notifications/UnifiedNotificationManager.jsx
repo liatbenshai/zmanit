@@ -136,6 +136,27 @@ function getRemainingWorkMinutesToday(workSettings, now = new Date()) {
   return workSettings.endMinutes - currentMinutes;
 }
 
+function getMinutesUntilNextCalendarEvent(now = new Date()) {
+  try {
+    const raw = localStorage.getItem('zmanit_calendar_events_today');
+    if (!raw) return null;
+    const events = JSON.parse(raw);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    const upcoming = events
+      .filter(e => e?.start?.dateTime)
+      .map(e => {
+        const d = new Date(e.start.dateTime);
+        return d.getHours() * 60 + d.getMinutes();
+      })
+      .filter(m => m > currentMinutes)
+      .sort((a, b) => a - b);
+    if (!upcoming.length) return null;
+    return upcoming[0] - currentMinutes;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * ✅ תיקון v3.1: בדיקה משופרת אם יש טיימר פעיל
  * בודקת את כל המקומות האפשריים לטיימר פעיל
@@ -560,7 +581,17 @@ export function useUnifiedNotifications() {
           // אם אין משימה עם שעה רלוונטית - לוקחים משימה לא מתוזמנת לפי עדיפות
           if (!relevantTask && untimedTasks.length > 0) {
             const priorityOrder = { urgent: 0, high: 1, normal: 2 };
-            relevantTask = [...untimedTasks].sort((a, b) => {
+            const minutesToCalendar = getMinutesUntilNextCalendarEvent(now);
+            let candidates = [...untimedTasks];
+            // התראה הקשרית: אם יש אירוע קרוב, נעדיף משימה קצרה
+            if (minutesToCalendar && minutesToCalendar <= 25) {
+              const shortCandidates = candidates.filter(t => (parseInt(t.estimated_duration, 10) || 30) <= minutesToCalendar);
+              if (shortCandidates.length > 0) {
+                candidates = shortCandidates;
+              }
+            }
+
+            relevantTask = candidates.sort((a, b) => {
               const aScore = priorityOrder[a.priority] ?? 2;
               const bScore = priorityOrder[b.priority] ?? 2;
               if (aScore !== bScore) return aScore - bScore;

@@ -218,6 +218,14 @@ function SmartDashboard() {
     return { first, second };
   }, [todayTasks]);
 
+  // "מה עכשיו" - בחירה חכמה של המשימה הבאה לביצוע
+  const nowTask = useMemo(() => {
+    if (!todayTasks.remaining.length) return null;
+    const urgent = todayTasks.remaining.find(t => t.priority === 'urgent' || t.quadrant === 1);
+    if (urgent) return urgent;
+    return todayTasks.remaining[0];
+  }, [todayTasks]);
+
   // מד "איך היום עובר"
   const dayMood = useMemo(() => {
     const hour = new Date().getHours();
@@ -442,6 +450,38 @@ function SmartDashboard() {
             </button>
           )}
         </motion.div>
+
+        {/* ===== מה עכשיו - CTA אחד ברור ===== */}
+        {nowTask && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.18 }}
+            className="bg-gradient-to-l from-blue-600 to-indigo-700 rounded-2xl p-5 mb-5 text-white shadow-lg"
+          >
+            <div className="flex items-start justify-between gap-3">
+              <div>
+                <div className="text-sm opacity-85">מה עכשיו?</div>
+                <div className="text-xl font-bold mt-1">{nowTask.title}</div>
+                <div className="text-sm opacity-85 mt-1">
+                  {nowTask.due_time ? `🕐 ${nowTask.due_time}` : '🕐 להתחיל עכשיו'} | ⏱️ {nowTask.estimated_duration || 30} דק׳
+                </div>
+              </div>
+              {(nowTask.priority === 'urgent' || nowTask.quadrant === 1) && (
+                <span className="text-xs bg-red-500/90 px-2 py-1 rounded-full">דחוף</span>
+              )}
+            </div>
+            <button
+              onClick={() => {
+                localStorage.setItem('start_task_id', nowTask.id);
+                window.location.href = '/daily';
+              }}
+              className="w-full mt-4 py-3 bg-white text-indigo-700 rounded-xl font-bold hover:bg-indigo-50 transition-colors"
+            >
+              ▶️ התחילי עכשיו
+            </button>
+          </motion.div>
+        )}
         
         {/* ===== שורת סטטיסטיקות ===== */}
         <motion.div 
