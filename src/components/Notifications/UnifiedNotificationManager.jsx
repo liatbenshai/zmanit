@@ -535,7 +535,7 @@ export function useUnifiedNotifications() {
     // ✅ תיקון: hasActiveTimer כולל גם מושהה, אז צריך לבדוק ספציפית
     const hasNoWorkingTimer = !hasRunningTimer && !timerInfo?.isPaused && !hasInterruptedTimer;
     
-    if (isWorkHours && hasNoWorkingTimer && !CONFIG.USE_LEGACY_IDLE_POPUP) {
+    if ((isWorkHours || tasks.some(t => !t.is_completed && !t.is_project && t.due_date === today)) && hasNoWorkingTimer && !CONFIG.USE_LEGACY_IDLE_POPUP) {
       if (canNotify('work-hours-no-timer', CONFIG.MIN_INTERVAL.NO_TIMER)) {
         // ✅ תיקון v3.1: מסננים משימות הוריות!
         const pendingTasks = tasks.filter(t => 

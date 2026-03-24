@@ -187,6 +187,24 @@ function IdleDetector() {
   const [isWorkHours, setIsWorkHours] = useState(true);
   const [currentMessage, setCurrentMessage] = useState('');
 
+  // יש משימה מתוזמנת להיום שכבר הגיע הזמן להתחיל (או עבר)
+  const hasActionableScheduledTask = useMemo(() => {
+    if (!tasks || tasks.length === 0) return false;
+
+    const now = new Date();
+    const today = toLocalISODate(now);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+
+    return tasks.some(t => {
+      if (t.is_completed || t.deleted_at || !t.due_time) return false;
+      const taskDate = t.due_date ? toLocalISODate(new Date(t.due_date)) : null;
+      if (taskDate !== today) return false;
+      const [h, m] = t.due_time.split(':').map(Number);
+      const taskMinutes = h * 60 + (m || 0);
+      return taskMinutes <= currentMinutes + 5;
+    });
+  }, [tasks]);
+
   // בחירת הודעה אקראית
   const getRandomMessage = useCallback((type, minutes) => {
     const messages = MANAGER_MESSAGES[type];
@@ -308,7 +326,8 @@ function IdleDetector() {
       const inWorkHours = checkWorkHours();
       setIsWorkHours(inWorkHours);
       
-      if (!inWorkHours) {
+      // אם אין שעות עבודה כרגע, אבל יש משימה מתוזמנת שכבר צריך להתחיל - ממשיכים בכל זאת
+      if (!inWorkHours && !hasActionableScheduledTask) {
         setShowAlert(false);
         return;
       }
@@ -344,9 +363,10 @@ function IdleDetector() {
         const minutesIdle = Math.floor((now - lastActivity) / 60000);
         setIdleMinutes(minutesIdle);
         
-        if (minutesIdle >= IDLE_THRESHOLD_MINUTES && !showAlert) {
+        if ((minutesIdle >= IDLE_THRESHOLD_MINUTES || hasActionableScheduledTask) && !showAlert) {
           setAlertType('idle');
-          setCurrentMessage(getRandomMessage('idle', minutesIdle));
+          const displayMinutes = Math.max(minutesIdle, IDLE_THRESHOLD_MINUTES);
+          setCurrentMessage(getRandomMessage('idle', displayMinutes));
           setShowAlert(true);
         }
       }
@@ -359,7 +379,7 @@ function IdleDetector() {
     const interval = setInterval(checkIdleStatus, CHECK_INTERVAL_SECONDS * 1000);
 
     return () => clearInterval(interval);
-  }, [user, lastActivity, showAlert, alertDismissedAt, checkTimerStatus, checkWorkHours, getRandomMessage]);
+  }, [user, lastActivity, showAlert, alertDismissedAt, checkTimerStatus, checkWorkHours, getRandomMessage, hasActionableScheduledTask]);
 
   // טיפול בתשובה
   const handleResponse = useCallback(async (reason) => {
