@@ -16,6 +16,7 @@ import { useTasks } from '../../hooks/useTasks';
 import { useAuth } from '../../hooks/useAuth';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import Modal from '../UI/Modal';
+import AutoScheduler from '../SmartScheduler/AutoScheduler';
 import toast from 'react-hot-toast';
 
 // ========================================
@@ -59,6 +60,7 @@ function SmartDashboard() {
   // State
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
+  const [showAutoScheduler, setShowAutoScheduler] = useState(false);
   const [dailyNotes, setDailyNotes] = useState('');
   const [streak, setStreak] = useState(0);
   
@@ -228,6 +230,39 @@ function SmartDashboard() {
     if (diff >= -30) return { emoji: '😐', position: 60 };
     return { emoji: '😅', position: 80 };
   }, [stats.progress]);
+
+  // אמינות תכנון: כמה עמדנו בהתחייבות הזמן/דדליין
+  const reliability = useMemo(() => {
+    if (!tasks) return { score: 0, onTime: 0, delayed: 0, label: 'אין נתונים' };
+
+    const completedToday = tasks.filter(t => t.is_completed && t.due_date === todayISO);
+    if (completedToday.length === 0) {
+      return { score: 0, onTime: 0, delayed: 0, label: 'אין נתונים להיום' };
+    }
+
+    let onTime = 0;
+    let delayed = 0;
+
+    completedToday.forEach(t => {
+      if (!t.due_time || !t.completed_at) {
+        onTime += 1;
+        return;
+      }
+
+      const dueAt = new Date(`${t.due_date}T${t.due_time}:00`);
+      const completedAt = new Date(t.completed_at);
+      if (!Number.isNaN(dueAt.getTime()) && completedAt <= dueAt) {
+        onTime += 1;
+      } else {
+        delayed += 1;
+      }
+    });
+
+    const score = Math.round((onTime / completedToday.length) * 100);
+    const label = score >= 85 ? 'מצוין' : score >= 60 ? 'טוב' : 'דורש שיפור';
+
+    return { score, onTime, delayed, label };
+  }, [tasks, todayISO]);
 
   // ========================================
   // פעולות
@@ -439,6 +474,33 @@ function SmartDashboard() {
             <div className="text-xs text-purple-600">ממוצע שבועי</div>
           </div>
         </motion.div>
+
+        {/* ===== אמינות תכנון + שיבוץ אוטומטי ===== */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+          className="bg-white/85 backdrop-blur rounded-2xl p-5 mb-5 shadow-md border border-purple-100"
+        >
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <div className="text-sm text-gray-500">אמינות תכנון היום</div>
+              <div className="text-2xl font-bold text-gray-800">{reliability.score}%</div>
+            </div>
+            <div className="text-right">
+              <div className="text-sm font-medium text-purple-600">{reliability.label}</div>
+              <div className="text-xs text-gray-500">
+                בזמן: {reliability.onTime} | איחור: {reliability.delayed}
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowAutoScheduler(true)}
+            className="w-full py-3 bg-gradient-to-l from-indigo-500 to-purple-600 text-white rounded-xl font-medium hover:from-indigo-600 hover:to-purple-700 transition-colors"
+          >
+            🤖 סדר לי את היום בלחיצה
+          </button>
+        </motion.div>
         
         {/* ===== מד דחיינות vs התקדמות ===== */}
         <motion.div 
@@ -543,7 +605,7 @@ function SmartDashboard() {
             <span className="text-xl">📆</span>
             <span className="text-xs mt-1">שבועי</span>
           </Link>
-          <Link to="/tasks" className="flex flex-col items-center text-gray-400 hover:text-purple-500 transition-colors">
+          <Link to="/daily" className="flex flex-col items-center text-gray-400 hover:text-purple-500 transition-colors">
             <span className="text-xl">📋</span>
             <span className="text-xs mt-1">משימות</span>
           </Link>
@@ -575,6 +637,15 @@ function SmartDashboard() {
           }}
           onCancel={() => { setShowTaskForm(false); setEditingTask(null); }}
         />
+      </Modal>
+
+      {/* ===== מודל שיבוץ אוטומטי ===== */}
+      <Modal
+        isOpen={showAutoScheduler}
+        onClose={() => setShowAutoScheduler(false)}
+        title="🤖 שיבוץ אוטומטי חכם"
+      >
+        <AutoScheduler />
       </Modal>
       
     </div>
