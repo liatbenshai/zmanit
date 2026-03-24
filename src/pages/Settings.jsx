@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
 import { useAuth } from '../hooks/useAuth';
 import { supabase } from '../services/supabase';
@@ -553,6 +553,38 @@ function WorkSettings({ user }) {
     { key: 'balanced', label: 'מאוזן', value: 6, hint: 'ברירת מחדל מומלצת' },
     { key: 'strict', label: 'קשוח', value: 4, hint: 'שומר על רצף חזק' }
   ];
+
+  const weeklyBreakStats = useMemo(() => {
+    const stats = [];
+    const today = new Date();
+
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date(today);
+      d.setDate(today.getDate() - i);
+      const iso = d.toISOString().split('T')[0];
+      const key = `zmanit_break_count_${iso}`;
+      const count = parseInt(localStorage.getItem(key) || '0', 10) || 0;
+      stats.push({
+        date: iso,
+        dayShort: d.toLocaleDateString('he-IL', { weekday: 'short' }),
+        count
+      });
+    }
+
+    const average = stats.length
+      ? Math.round((stats.reduce((sum, s) => sum + s.count, 0) / stats.length) * 10) / 10
+      : 0;
+    const maxCount = stats.reduce((max, s) => Math.max(max, s.count), 0);
+
+    return { days: stats, average, maxCount };
+  }, [workHours.maxDailyBreaks]);
+
+  const recommendedPreset = useMemo(() => {
+    const avg = weeklyBreakStats.average;
+    if (avg >= 7) return breakPresets.find(p => p.key === 'gentle');
+    if (avg >= 4.5) return breakPresets.find(p => p.key === 'balanced');
+    return breakPresets.find(p => p.key === 'strict');
+  }, [weeklyBreakStats, breakPresets]);
   
   // פורמט שעה לתצוגה
   const formatTime = (hour, minute) => {
@@ -657,6 +689,26 @@ function WorkSettings({ user }) {
       <div className="space-y-3">
         <h3 className="font-medium text-gray-700 dark:text-gray-300">פוקוס והפסקות</h3>
         <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+          <div className="mb-3 p-3 rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800">
+            <div className="text-sm font-medium text-blue-800 dark:text-blue-300">
+              🤖 המלצה אוטומטית: {recommendedPreset?.label}
+            </div>
+            <div className="text-xs text-blue-700 dark:text-blue-400 mt-1">
+              ממוצע הפסקות שבועי: {weeklyBreakStats.average} ליום
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                if (recommendedPreset) {
+                  setWorkHours(w => ({ ...w, maxDailyBreaks: recommendedPreset.value }));
+                }
+              }}
+              className="mt-2 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium"
+            >
+              החל פריסט מומלץ
+            </button>
+          </div>
+
           <label className="block text-sm text-gray-500 mb-2">פריסט מהיר</label>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mb-3">
             {breakPresets.map((preset) => (
@@ -687,6 +739,35 @@ function WorkSettings({ user }) {
             ))}
           </select>
           <p className="text-xs text-gray-500 mt-2">אחרי כמות זו, הטיימר יציג תזכורת לחזור לרצף פוקוס.</p>
+        </div>
+
+        <div className="p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+          <div className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">מגמת פוקוס שבועית (הפסקות ליום)</div>
+          <div className="grid grid-cols-7 gap-1">
+            {weeklyBreakStats.days.map((d) => {
+              const height = weeklyBreakStats.maxCount > 0
+                ? Math.max(8, Math.round((d.count / weeklyBreakStats.maxCount) * 56))
+                : 8;
+              return (
+                <div key={d.date} className="text-center">
+                  <div className="h-16 flex items-end justify-center">
+                    <div
+                      className={`w-6 rounded-t ${
+                        d.count > workHours.maxDailyBreaks
+                          ? 'bg-red-400'
+                          : d.count >= Math.max(1, workHours.maxDailyBreaks - 1)
+                            ? 'bg-yellow-400'
+                            : 'bg-emerald-400'
+                      }`}
+                      style={{ height: `${height}px` }}
+                    />
+                  </div>
+                  <div className="text-[10px] text-gray-500 mt-1">{d.dayShort}</div>
+                  <div className="text-xs font-medium text-gray-700 dark:text-gray-300">{d.count}</div>
+                </div>
+              );
+            })}
+          </div>
         </div>
       </div>
 
