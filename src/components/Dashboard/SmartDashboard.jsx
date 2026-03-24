@@ -17,6 +17,7 @@ import { useAuth } from '../../hooks/useAuth';
 import SimpleTaskForm from '../DailyView/SimpleTaskForm';
 import Modal from '../UI/Modal';
 import AutoScheduler from '../SmartScheduler/AutoScheduler';
+import MiniTimer from './MiniTimer';
 import toast from 'react-hot-toast';
 
 // ========================================
@@ -225,6 +226,10 @@ function SmartDashboard() {
     if (urgent) return urgent;
     return todayTasks.remaining[0];
   }, [todayTasks]);
+
+  const timerTask = useMemo(() => {
+    return nowTask || todayTasks.remaining[0] || null;
+  }, [nowTask, todayTasks]);
 
   // מד "איך היום עובר"
   const dayMood = useMemo(() => {
@@ -482,6 +487,32 @@ function SmartDashboard() {
             </button>
           </motion.div>
         )}
+
+        {/* ===== טיימר פוקוס מהיר (כולל 45/5) ===== */}
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.19 }}
+          className="mb-5"
+        >
+          <MiniTimer
+            task={timerTask}
+            onComplete={async (task) => {
+              try {
+                await editTask(task.id, {
+                  is_completed: true,
+                  completed_at: new Date().toISOString()
+                });
+                toast.success('✅ משימה הושלמה');
+              } catch (e) {
+                toast.error('שגיאה בסימון המשימה כהושלמה');
+              }
+            }}
+            onNavigateToTask={() => {
+              window.location.href = '/daily';
+            }}
+          />
+        </motion.div>
         
         {/* ===== שורת סטטיסטיקות ===== */}
         <motion.div 
