@@ -232,6 +232,7 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
     const googleEvents = [];
     const flexibleTasks = [];
     const completedTasks = [];
+    const seenTaskIds = new Set();
     
     for (const task of allTasks) {
       // Skip invalid tasks
@@ -239,8 +240,16 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
         Logger.warn('Skipping invalid task', { task });
         continue;
       }
+      if (seenTaskIds.has(task.id)) {
+        continue;
+      }
+      seenTaskIds.add(task.id);
+      if (task.deleted_at) continue;
 
       if (task.is_project) continue;
+      // תכנון שבועי: מציגים רק משימות עם תאריך יעד עד סוף השבוע (כולל פיגור)
+      if (!task.due_date) continue;
+      if (task.due_date > weekEndISO) continue;
       
       if (task.is_completed) {
         if (task.due_date && task.due_date >= weekStartISO && task.due_date <= weekEndISO) {
@@ -478,6 +487,8 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
         if (!d.isHomeDay) return false;
       } else {
         if (!d.isWorkDay) return false;
+        // לא משבצים עבודת משימות לשבת
+        if (d.dayOfWeek === 6) return false;
       }
       if (d.date < todayISO) return false;
       if (task.start_date && d.date < task.start_date) return false;

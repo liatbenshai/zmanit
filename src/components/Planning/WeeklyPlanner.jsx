@@ -48,6 +48,10 @@ function WeeklyPlanner() {
     
     return weekPlan;
   }, [tasks, weekStart]);
+  const visibleDays = useMemo(
+    () => (plan?.days || []).filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4),
+    [plan]
+  );
 
   // ניווט - תיקון כיוון לעברית (RTL)
   const goToPrevWeek = () => setWeekOffset(w => w - 1);
@@ -207,7 +211,7 @@ function WeeklyPlanner() {
       {/* תצוגת שבוע */}
       {viewMode === 'week' ? (
         <div className="flex gap-2">
-          {plan.days.map((day, idx) => (
+          {visibleDays.map((day, idx) => (
             <div key={day.date} className="flex-1">
               <DayColumn
                 day={day}
@@ -226,8 +230,8 @@ function WeeklyPlanner() {
         </div>
       ) : (
         <DayDetailView
-          day={selectedDay || plan.days.find(d => isToday(d.date)) || plan.days[0]}
-          allDays={plan.days}
+          day={selectedDay || visibleDays.find(d => isToday(d.date)) || visibleDays[0]}
+          allDays={visibleDays}
           onBack={() => setViewMode('week')}
           onAddTask={handleAddTask}
           onEditTask={handleEditTask}
@@ -452,7 +456,7 @@ function DayColumn({ day, isToday, onAddTask, onEditTask, onComplete, onStartTim
         )}
       </div>
 
-      {/* כפתור הוספה - גם בסופי שבוע! */}
+      {/* כפתור הוספה */}
       <button
         onClick={onAddTask}
         className="p-2 text-center text-gray-400 hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 border-t border-gray-200 dark:border-gray-700 transition-colors text-sm"
