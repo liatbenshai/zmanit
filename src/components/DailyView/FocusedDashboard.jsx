@@ -1,0 +1,704 @@
+import { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { useTasks } from '../../hooks/useTasks';
+import { TASK_TYPES } from '../../config/taskTypes';
+import { formatDuration } from '../../config/workSchedule';
+import SimpleTaskForm from './SimpleTaskForm';
+import TaskTimerWithInterruptions from '../Tasks/TaskTimerWithInterruptions';
+import Modal from '../UI/Modal';
+import Button from '../UI/Button';
+import toast from 'react-hot-toast';
+import { supabase } from '../../services/supabase';
+
+// 🧠 כפתורי ADHD
+import { AddWeekTaskButton, PanicButton, TimerEndDialog } from '../ADHD';
+
+/**
+ * דשבורד ממוקד - תצוגה נקייה למה שחשוב עכשיו
+ */
+function FocusedDashboard() {
+  const { tasks, loading, toggleComplete, loadTasks, addTask, editTask, updateTaskTime, dataVersion } = useTasks();
+  const [showTaskForm, setShowTaskForm] = useState(false);
+  const [editingTask, setEditingTask] = useState(null);
+  const [showCompleted, setShowCompleted] = useState(false);
+  const [activeTaskId, setActiveTaskId] = useState(null);
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const notifiedTasks = useRef(new Set());
+  const audioRef = useRef(null);
+  
+  // 🆕 State לדיאלוג סיום משימה
+  const [showEndDialog, setShowEndDialog] = useState(false);
+  const [taskToEnd, setTaskToEnd] = useState(null);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  
+  // 🔧 שמירת זמן עבודה למשימה
+  const currentTimeRef = useRef({}); // { taskId: totalMinutes }
+
+  // יצירת אלמנט אודיו להתראות
+  useEffect(() => {
+    audioRef.current = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2teleEs+m9LLqWs4JFCl3OsAAADv7+/v7+/v7+/v7+/v7+/v');
+  }, []);
+
+  // בקשת הרשאה להתראות
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'granted') {
+      setNotificationsEnabled(true);
+    }
+  }, []);
+
+  // ✅ בדיקה אם יש משימה להפעלה מהתראה
+  useEffect(() => {
+    const startTaskId = localStorage.getItem('start_task_id');
+    if (startTaskId) {
+      setActiveTaskId(startTaskId);
+      localStorage.removeItem('start_task_id');
+      toast.success('🎯 משימה נבחרה - התחל לעבוד!');
+    }
+  }, []);
+
+  const requestNotificationPermission = async () => {
+    if ('Notification' in window) {
+      const permission = await Notification.requestPermission();
+      setNotificationsEnabled(permission === 'granted');
+      if (permission === 'granted') {
+        toast.success('🔔 התראות הופעלו!');
+      }
+    }
+  };
+
+  // משימות להיום - פילטר אחיד עם דשבורד
+  const todayTasks = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return tasks
+      .filter(t => {
+        if (t.deleted_at) return false;
+        
+        // סינון משימות שהושלמו
+        if (!showCompleted && t.is_completed) return false;
+        
+        // משימות עם תאריך היום
+        if (t.due_date === today) return true;
+        if (t.start_date === today && !t.due_date) return true;
+        
+        // משימות באיחור (due_date בעבר) - רק אם לא הושלמו
+        if (!t.is_completed && t.due_date && t.due_date < today) return true;
+        
+        return false;
+      })
+      .sort((a, b) => {
+        // משימות שהושלמו בסוף
+        if (a.is_completed !== b.is_completed) {
+          return a.is_completed ? 1 : -1;
+        }
+        
+        // משימות באיחור קודם
+        const aOverdue = a.due_date && a.due_date < today;
+        const bOverdue = b.due_date && b.due_date < today;
+        if (aOverdue && !bOverdue) return -1;
+        if (!aOverdue && bOverdue) return 1;
+        
+        // לפי שעה
+        if (a.due_time && b.due_time) {
+          return a.due_time.localeCompare(b.due_time);
+        }
+        if (a.due_time) return -1;
+        if (b.due_time) return 1;
+        
+        // לפי עדיפות
+        const priorityOrder = { urgent: 0, high: 1, normal: 2, low: 3 };
+        return (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
+      });
+  }, [tasks, showCompleted, dataVersion]);
+
+  // המשימה הנוכחית (הבאה בתור)
+  const currentTask = useMemo(() => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    // מציאת משימה פעילה או הבאה בתור
+    const activeTasks = todayTasks.filter(t => !t.is_completed);
+    
+    // אם יש משימה עם טיימר פעיל
+    if (activeTaskId) {
+      const activeTask = activeTasks.find(t => t.id === activeTaskId);
+      if (activeTask) return activeTask;
+    }
+    
+    // מציאת המשימה הבאה לפי שעה
+    for (const task of activeTasks) {
+      if (task.due_time) {
+        const [h, m] = task.due_time.split(':').map(Number);
+        const taskMinutes = h * 60 + (m || 0);
+        const taskEnd = taskMinutes + (task.estimated_duration || 30);
+        
+        // משימה שהגיע זמנה או עוברת עכשיו
+        if (currentMinutes >= taskMinutes - 5 && currentMinutes <= taskEnd) {
+          return task;
+        }
+      }
+    }
+    
+    // אחרת - המשימה הראשונה ברשימה
+    return activeTasks[0] || null;
+  }, [todayTasks, activeTaskId]);
+
+  // משימות קרובות (ב-15 הדקות הבאות)
+  const upcomingTasks = useMemo(() => {
+    const now = new Date();
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    
+    return todayTasks.filter(t => {
+      if (t.is_completed || !t.due_time) return false;
+      if (t.id === currentTask?.id) return false;
+      
+      const [h, m] = t.due_time.split(':').map(Number);
+      const taskMinutes = h * 60 + (m || 0);
+      const diff = taskMinutes - currentMinutes;
+      
+      return diff > 0 && diff <= 30;
+    });
+  }, [todayTasks, currentTask]);
+
+  // ✅ התראות מנוהלות על ידי UnifiedNotificationManager ב-App.jsx
+  // הסרנו את הלולאה הכפולה כאן למניעת התראות כפולות
+
+  // סטטיסטיקות יום
+  const dayStats = useMemo(() => {
+    const completed = todayTasks.filter(t => t.is_completed).length;
+    const total = todayTasks.length;
+    const totalMinutes = todayTasks
+      .filter(t => !t.is_completed)
+      .reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
+    
+    return {
+      completed,
+      total,
+      pending: total - completed,
+      remainingTime: totalMinutes,
+      progress: total > 0 ? Math.round((completed / total) * 100) : 0
+    };
+  }, [todayTasks]);
+
+  // השלמת משימה - פותח דיאלוג במקום לסמן מיד
+  const handleComplete = async (task) => {
+    setTaskToEnd(task);
+    setElapsedTime(task.time_spent || 0);
+    setShowEndDialog(true);
+  };
+  
+  // סיום מלא של משימה
+  const handleFullComplete = async () => {
+    if (!taskToEnd) return;
+    try {
+      // 🔧 שמירת הזמן שנצבר לפני סימון כהושלם
+      const savedTime = currentTimeRef.current[taskToEnd.id];
+      if (savedTime && savedTime > (taskToEnd.time_spent || 0)) {
+        await updateTaskTime(taskToEnd.id, savedTime);
+        console.log('💾 handleFullComplete: נשמרו', savedTime, 'דקות');
+      }
+      
+      await toggleComplete(taskToEnd.id);
+      toast.success('✅ כל הכבוד! המשימה הושלמה');
+      
+      // ניקוי
+      delete currentTimeRef.current[taskToEnd.id];
+      setShowEndDialog(false);
+      setTaskToEnd(null);
+      setActiveTaskId(null);
+      loadTasks();
+    } catch (err) {
+      console.error('❌ שגיאה בסיום משימה:', err);
+      toast.error('שגיאה בעדכון');
+    }
+  };
+  
+  // הארכת זמן
+  const handleExtend = async (minutes) => {
+    if (!taskToEnd) return;
+    // פשוט סוגרים את הדיאלוג - הטיימר ימשיך
+    toast(`⏰ עוד ${minutes} דקות!`);
+    setShowEndDialog(false);
+    setTaskToEnd(null);
+  };
+  
+  // התקדמות חלקית
+  const handlePartial = async (percent) => {
+    if (!taskToEnd) return;
+    try {
+      // 🔧 שמירת הזמן שנצבר
+      const savedTime = currentTimeRef.current[taskToEnd.id];
+      if (savedTime && savedTime > (taskToEnd.time_spent || 0)) {
+        await updateTaskTime(taskToEnd.id, savedTime);
+        console.log('💾 handlePartial: נשמרו', savedTime, 'דקות');
+      }
+      
+      // שמירת ההתקדמות
+      const newProgress = Math.min(100, (taskToEnd.progress || 0) + percent);
+      await editTask(taskToEnd.id, { progress: newProgress });
+      toast.success(`📊 התקדמות נשמרה: ${newProgress}%`);
+      
+      // ניקוי
+      delete currentTimeRef.current[taskToEnd.id];
+      setShowEndDialog(false);
+      setTaskToEnd(null);
+      setActiveTaskId(null);
+      loadTasks();
+    } catch (err) {
+      console.error('❌ שגיאה בשמירת התקדמות:', err);
+      toast.error('שגיאה בשמירה');
+    }
+  };
+  
+  // נתקעתי
+  const handleStuck = async () => {
+    // 🔧 שמירת הזמן שנצבר גם אם נתקענו
+    if (taskToEnd) {
+      const savedTime = currentTimeRef.current[taskToEnd.id];
+      if (savedTime && savedTime > (taskToEnd.time_spent || 0)) {
+        try {
+          await updateTaskTime(taskToEnd.id, savedTime);
+          console.log('💾 handleStuck: נשמרו', savedTime, 'דקות');
+        } catch (err) {
+          console.error('שגיאה בשמירת זמן:', err);
+        }
+      }
+      delete currentTimeRef.current[taskToEnd.id];
+    }
+    
+    toast('😵 לא נורא! נמשיך אחר כך', { icon: '💪' });
+    setShowEndDialog(false);
+    setTaskToEnd(null);
+    setActiveTaskId(null);
+  };
+
+  // 🔧 עדכון זמן עבודה - נקרא מהטיימר
+  const handleTimeUpdate = async (taskId, totalMinutes, isAbsolute = false) => {
+    // שמירה ב-ref לשימוש ב-handleFullComplete
+    currentTimeRef.current[taskId] = totalMinutes;
+    
+    // 🔧 תיקון: שומרים ל-DB - הערך כבר מוחלט מ-FullScreenFocus
+    if (totalMinutes > 0) {
+      try {
+        await updateTaskTime(taskId, totalMinutes);
+        console.log('💾 FocusedDashboard: נשמרו', totalMinutes, 'דקות למשימה', taskId, isAbsolute ? '(מוחלט)' : '');
+      } catch (err) {
+        console.error('❌ שגיאה בשמירת זמן:', err);
+      }
+    }
+  };
+
+  // פתיחת טופס
+  const handleAddTask = () => {
+    setEditingTask(null);
+    setShowTaskForm(true);
+  };
+
+  const handleEditTask = (task) => {
+    setEditingTask(task);
+    setShowTaskForm(true);
+  };
+
+  const handleCloseForm = () => {
+    setShowTaskForm(false);
+    setEditingTask(null);
+    loadTasks();
+  };
+
+  // התחלת עבודה על משימה
+  const handleStartTask = (task) => {
+    setActiveTaskId(task.id);
+  };
+
+  // פורמט שעה
+  const formatTime = (timeStr) => {
+    if (!timeStr) return '';
+    const [h, m] = timeStr.split(':');
+    return `${h}:${m || '00'}`;
+  };
+
+  // בדיקה אם משימה באיחור
+  const isOverdue = (task) => {
+    if (!task.due_time || task.is_completed) return false;
+    const now = new Date();
+    const [h, m] = task.due_time.split(':').map(Number);
+    const taskMinutes = h * 60 + (m || 0);
+    const currentMinutes = now.getHours() * 60 + now.getMinutes();
+    return currentMinutes > taskMinutes + (task.estimated_duration || 30);
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-64">
+        <div className="animate-spin rounded-full h-8 w-8 border-4 border-blue-500 border-t-transparent"></div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="focused-dashboard p-4 max-w-2xl mx-auto">
+      {/* כותרת עם תאריך */}
+      <motion.div
+        initial={{ opacity: 0, y: -10 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="mb-6 text-center"
+      >
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          {new Date().toLocaleDateString('he-IL', { 
+            weekday: 'long', 
+            day: 'numeric', 
+            month: 'long' 
+          })}
+        </h1>
+        
+        {/* סרגל התקדמות */}
+        <div className="mt-3 flex items-center justify-center gap-4">
+          <div className="flex-1 max-w-xs">
+            <div className="h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+              <motion.div
+                initial={{ width: 0 }}
+                animate={{ width: `${dayStats.progress}%` }}
+                className="h-full bg-green-500 rounded-full"
+              />
+            </div>
+          </div>
+          <span className="text-sm font-medium text-gray-600 dark:text-gray-400">
+            {dayStats.completed}/{dayStats.total} ({dayStats.progress}%)
+          </span>
+        </div>
+      </motion.div>
+
+      {/* התראות קרובות */}
+      {upcomingTasks.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-xl"
+        >
+          <div className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+            <span>⏰</span>
+            <span className="text-sm font-medium">בקרוב:</span>
+            {upcomingTasks.map(t => (
+              <span key={t.id} className="text-sm">
+                {t.title} ({formatTime(t.due_time)})
+              </span>
+            ))}
+          </div>
+        </motion.div>
+      )}
+
+      {/* המשימה הנוכחית - בולטת */}
+      {currentTask && !currentTask.is_completed && (
+        <motion.div
+          initial={{ opacity: 0, scale: 0.95 }}
+          animate={{ opacity: 1, scale: 1 }}
+          className="mb-6"
+        >
+          <div className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-2">
+            <span className="animate-pulse">🎯</span>
+            עכשיו
+          </div>
+          
+          <CurrentTaskCard
+            task={currentTask}
+            onComplete={() => handleComplete(currentTask)}
+            onEdit={() => handleEditTask(currentTask)}
+            isActive={activeTaskId === currentTask.id}
+            onStart={() => handleStartTask(currentTask)}
+            onUpdate={loadTasks}
+            onTimeUpdate={(totalMinutes, isRunning) => handleTimeUpdate(currentTask.id, totalMinutes, isRunning)}
+          />
+        </motion.div>
+      )}
+
+      {/* הגדרות התראות */}
+      <div className="mb-4 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          {!notificationsEnabled && 'Notification' in window && (
+            <button
+              onClick={requestNotificationPermission}
+              className="text-sm text-blue-600 dark:text-blue-400 hover:underline flex items-center gap-1"
+            >
+              🔔 הפעל התראות
+            </button>
+          )}
+          
+          <button
+            onClick={() => setSoundEnabled(!soundEnabled)}
+            className={`text-sm flex items-center gap-1 ${
+              soundEnabled ? 'text-green-600' : 'text-gray-400'
+            }`}
+          >
+            {soundEnabled ? '🔊' : '🔇'} צליל
+          </button>
+        </div>
+        
+        <button
+          onClick={() => setShowCompleted(!showCompleted)}
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700"
+        >
+          {showCompleted ? '🙈 הסתר הושלמו' : '👁️ הצג הושלמו'}
+        </button>
+      </div>
+
+      {/* כפתור הוספה */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        className="mb-4"
+      >
+        <Button onClick={handleAddTask} className="w-full py-3">
+          + משימה חדשה
+        </Button>
+      </motion.div>
+
+      {/* רשימת המשימות */}
+      <div className="space-y-2">
+        <AnimatePresence>
+          {todayTasks
+            .filter(t => t.id !== currentTask?.id || t.is_completed)
+            .map((task) => (
+              <TaskRow
+                key={task.id}
+                task={task}
+                onComplete={() => handleComplete(task)}
+                onEdit={() => handleEditTask(task)}
+                isOverdue={isOverdue(task)}
+              />
+            ))}
+        </AnimatePresence>
+      </div>
+
+      {/* הודעה כשאין משימות */}
+      {todayTasks.length === 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="text-center py-12"
+        >
+          <span className="text-5xl mb-4 block">🎉</span>
+          <h3 className="text-lg font-medium text-gray-700 dark:text-gray-300">
+            אין משימות להיום
+          </h3>
+          <p className="text-sm text-gray-500 mt-2">
+            הוסיפי משימה חדשה או תהני מהיום!
+          </p>
+        </motion.div>
+      )}
+
+      {/* סיכום תחתון */}
+      {dayStats.pending > 0 && (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          className="mt-6 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl text-center"
+        >
+          <p className="text-sm text-gray-600 dark:text-gray-400">
+            נשארו <span className="font-bold text-gray-900 dark:text-white">{dayStats.pending}</span> משימות
+            {dayStats.remainingTime > 0 && (
+              <> • עוד <span className="font-bold text-gray-900 dark:text-white">{formatDuration(dayStats.remainingTime)}</span> עבודה</>
+            )}
+          </p>
+        </motion.div>
+      )}
+
+      {/* 🧠 כפתורי ADHD */}
+      <AddWeekTaskButton 
+        onAdd={(task) => {
+          // הוספת משימה לשבוע
+          addTask(task);
+          toast.success('✅ נוסף לשבוע!');
+        }}
+      />
+      <PanicButton tasks={tasks} />
+
+      {/* מודל טופס */}
+      <Modal
+        isOpen={showTaskForm}
+        onClose={handleCloseForm}
+        title={editingTask ? 'עריכת משימה' : 'משימה חדשה'}
+      >
+        <SimpleTaskForm
+          task={editingTask}
+          onClose={handleCloseForm}
+          taskTypes={TASK_TYPES}
+          defaultDate={new Date().toISOString().split('T')[0]}
+        />
+      </Modal>
+      
+      {/* 🏁 דיאלוג סיום משימה */}
+      <TimerEndDialog
+        isOpen={showEndDialog}
+        task={taskToEnd}
+        elapsedTime={elapsedTime}
+        onComplete={handleFullComplete}
+        onExtend={handleExtend}
+        onPartial={handlePartial}
+        onStuck={handleStuck}
+        onDismiss={() => {
+          setShowEndDialog(false);
+          setTaskToEnd(null);
+        }}
+      />
+    </div>
+  );
+}
+
+/**
+ * כרטיס המשימה הנוכחית - בולט
+ */
+function CurrentTaskCard({ task, onComplete, onEdit, isActive, onStart, onUpdate, onTimeUpdate }) {
+  const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
+  
+  return (
+    <div className={`
+      p-5 rounded-2xl border-2 shadow-lg
+      ${task.priority === 'urgent' 
+        ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700' 
+        : 'bg-white dark:bg-gray-800 border-blue-300 dark:border-blue-700'}
+    `}>
+      <div className="flex items-start gap-4">
+        {/* אייקון */}
+        <div className="text-3xl">{taskType.icon}</div>
+        
+        {/* תוכן */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-1">
+            {task.title}
+          </h3>
+          
+          <div className="flex items-center gap-3 text-sm text-gray-600 dark:text-gray-400 mb-3">
+            {task.due_time && (
+              <span className="flex items-center gap-1">
+                🕐 {task.due_time}
+              </span>
+            )}
+            {task.estimated_duration && (
+              <span className="flex items-center gap-1">
+                ⏱️ {formatDuration(task.estimated_duration)}
+              </span>
+            )}
+            <span 
+              className="px-2 py-0.5 rounded-full text-xs"
+              style={{ backgroundColor: taskType.bgColor || '#f3f4f6' }}
+            >
+              {taskType.name}
+            </span>
+          </div>
+          
+          {/* טיימר */}
+          {isActive ? (
+            <div className="mt-3">
+              <TaskTimerWithInterruptions
+                task={task}
+                onComplete={onComplete}
+                onUpdate={onUpdate}
+                onTimeUpdate={onTimeUpdate}
+              />
+            </div>
+          ) : (
+            <div className="flex gap-2">
+              <button
+                onClick={onStart}
+                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg transition-colors"
+              >
+                ▶️ התחל לעבוד
+              </button>
+              <button
+                onClick={onComplete}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors"
+              >
+                ✅ סיימתי
+              </button>
+              <button
+                onClick={onEdit}
+                className="px-3 py-2 text-gray-500 hover:text-gray-700 dark:hover:text-gray-300"
+              >
+                ✏️
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * שורת משימה פשוטה
+ */
+function TaskRow({ task, onComplete, onEdit, isOverdue }) {
+  const taskType = TASK_TYPES[task.task_type] || TASK_TYPES.other;
+  
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, x: -100 }}
+      className={`
+        p-3 rounded-xl border flex items-center gap-3 transition-all
+        ${task.is_completed 
+          ? 'bg-gray-50 dark:bg-gray-800/30 border-gray-200 dark:border-gray-700 opacity-60' 
+          : isOverdue
+            ? 'bg-red-50 dark:bg-red-900/10 border-red-200 dark:border-red-800'
+            : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300'}
+      `}
+    >
+      {/* כפתור השלמה */}
+      <button
+        onClick={onComplete}
+        className={`
+          w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all
+          ${task.is_completed 
+            ? 'bg-green-500 border-green-500 text-white' 
+            : 'border-gray-300 dark:border-gray-600 hover:border-green-400'}
+        `}
+      >
+        {task.is_completed && '✓'}
+      </button>
+      
+      {/* אייקון סוג */}
+      <span className="text-lg">{taskType.icon}</span>
+      
+      {/* תוכן */}
+      <div className="flex-1 min-w-0">
+        <div className={`font-medium truncate ${
+          task.is_completed 
+            ? 'text-gray-400 line-through' 
+            : 'text-gray-900 dark:text-white'
+        }`}>
+          {task.title}
+        </div>
+        
+        <div className="flex items-center gap-2 text-xs text-gray-500">
+          {task.due_time && (
+            <span className={isOverdue && !task.is_completed ? 'text-red-500 font-medium' : ''}>
+              {task.due_time}
+            </span>
+          )}
+          {task.estimated_duration && (
+            <span>{formatDuration(task.estimated_duration)}</span>
+          )}
+        </div>
+      </div>
+      
+      {/* תגית עדיפות */}
+      {task.priority === 'urgent' && !task.is_completed && (
+        <span className="px-2 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs rounded-full">
+          דחוף
+        </span>
+      )}
+      
+      {/* כפתור עריכה */}
+      <button
+        onClick={onEdit}
+        className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
+      >
+        ✏️
+      </button>
+    </motion.div>
+  );
+}
+
+export default FocusedDashboard;
