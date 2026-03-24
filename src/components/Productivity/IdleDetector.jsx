@@ -63,6 +63,45 @@ function toLocalISODate(date) {
   return `${year}-${month}-${day}`;
 }
 
+function getUserWorkHours(userId) {
+  const fallback = {
+    startMinutes: 8.5 * 60,  // 08:30
+    endMinutes: 16.25 * 60,  // 16:15
+    workDays: [0, 1, 2, 3, 4]
+  };
+
+  if (typeof window === 'undefined') return fallback;
+
+  try {
+    const userSettings = localStorage.getItem(`work_settings_${userId}`);
+    if (userSettings) {
+      const parsed = JSON.parse(userSettings);
+      if (parsed?.workHours) {
+        const { startHour, startMinute, endHour, endMinute, workDays } = parsed.workHours;
+        return {
+          startMinutes: (startHour ?? 8) * 60 + (startMinute ?? 30),
+          endMinutes: (endHour ?? 16) * 60 + (endMinute ?? 15),
+          workDays: workDays || fallback.workDays
+        };
+      }
+    }
+
+    const generalSettings = localStorage.getItem('zmanit_work_settings');
+    if (generalSettings) {
+      const parsed = JSON.parse(generalSettings);
+      return {
+        startMinutes: parsed.startMinutes ?? fallback.startMinutes,
+        endMinutes: parsed.endMinutes ?? fallback.endMinutes,
+        workDays: parsed.workDays || fallback.workDays
+      };
+    }
+  } catch (e) {
+    console.warn('[IdleDetector] שגיאה בקריאת הגדרות שעות עבודה:', e);
+  }
+
+  return fallback;
+}
+
 function IdleDetector() {
   const { user } = useAuth();
   const { tasks, editTask, toggleComplete, addTask } = useTasks();
@@ -164,8 +203,21 @@ function IdleDetector() {
 
     // בדיקה אם יש טיימר פעיל מ-FullScreenFocus
     const activeTimer = localStorage.getItem('zmanit_active_timer');
-    if (activeTimer) {
-      hasRunningTimer = true;
+    if (activeTimer && activeTimer !== 'null' && activeTimer !== 'undefined') {
+      const activeTimerData = localStorage.getItem(`timer_v2_${activeTimer}`);
+      if (activeTimerData) {
+        try {
+          const data = JSON.parse(activeTimerData);
+          if (data?.isRunning && !data?.isInterrupted) {
+            hasRunningTimer = true;
+          } else if (data?.isPaused || data?.isInterrupted) {
+            hasPausedTimer = true;
+            pausedTask = data.taskTitle || '';
+            const pauseTime = data.pausedAt || data.interruptionStart || data.lastPausedAt;
+            pausedSince = pauseTime ? new Date(pauseTime) : null;
+          }
+        } catch (e) {}
+      }
     }
 
     for (let i = 0; i < localStorage.length; i++) {
@@ -209,7 +261,9 @@ function IdleDetector() {
     const hour = now.getHours();
     const minutes = now.getMinutes();
     const day = now.getDay();
-    const dateISO = now.toISOString().split('T')[0];
+    const dateISO = toLocalISODate(now);
+    const currentTime = hour * 60 + minutes;
+    const userWorkSettings = getUserWorkHours(user?.id);
     
     // קבלת הגדרות יום העבודה מ-WORK_HOURS
     const dayConfig = WORK_HOURS[day];
@@ -222,24 +276,23 @@ function IdleDetector() {
     const dayOverride = overrides[dateISO];
     
     // שימוש בשעות מותאמות או ברירת מחדל
-    let startHour, endHour;
+    let startTime, endTime;
     if (dayOverride) {
-      startHour = dayOverride.start; // פורמט עשרוני: 8.5 = 08:30
-      endHour = dayOverride.end;
+      startTime = Math.floor(dayOverride.start * 60); // פורמט עשרוני: 8.5 = 08:30
+      endTime = Math.floor(dayOverride.end * 60);
     } else {
-      startHour = dayConfig.start;
-      endHour = dayConfig.end;
+      // אם למשתמש יש workDays מותאמים - נכבד אותם
+      if (Array.isArray(userWorkSettings.workDays) && !userWorkSettings.workDays.includes(day)) {
+        return false;
+      }
+      startTime = userWorkSettings.startMinutes ?? Math.floor(dayConfig.start * 60);
+      endTime = userWorkSettings.endMinutes ?? Math.floor(dayConfig.end * 60);
     }
-    
-    // המרה לדקות
-    const currentTime = hour * 60 + minutes;
-    const startTime = Math.floor(startHour * 60);
-    const endTime = Math.floor(endHour * 60);
-    
+
     const isWorkTime = currentTime >= startTime && currentTime <= endTime;
     
     return isWorkTime;
-  }, []);
+  }, [user?.id]);
 
   // בדיקה תקופתית
   useEffect(() => {
