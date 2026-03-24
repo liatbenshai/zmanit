@@ -14,7 +14,7 @@ import toast from 'react-hot-toast';
 
 const FOCUS_WORK_SECONDS = 45 * 60;
 const FOCUS_BREAK_SECONDS = 5 * 60;
-const DAILY_BREAK_WARNING_THRESHOLD = 6;
+const DEFAULT_DAILY_BREAK_WARNING_THRESHOLD = 6;
 
 /**
  * פורמט זמן MM:SS
@@ -68,6 +68,7 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
   const [showSessionSummary, setShowSessionSummary] = useState(false);
   const [breakCountToday, setBreakCountToday] = useState(0);
   const [warnedBreakCountToday, setWarnedBreakCountToday] = useState(false);
+  const [dailyBreakWarningThreshold, setDailyBreakWarningThreshold] = useState(DEFAULT_DAILY_BREAK_WARNING_THRESHOLD);
   
   // ✅ כלל 5 הדקות
   const {
@@ -122,6 +123,20 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
       return 0;
     }
   }, [task, editTask]);
+
+  useEffect(() => {
+    try {
+      const focusSettings = JSON.parse(localStorage.getItem('zmanit_focus_settings') || '{}');
+      const configuredThreshold = parseInt(focusSettings.maxDailyBreaks, 10);
+      if (!Number.isNaN(configuredThreshold) && configuredThreshold > 0) {
+        setDailyBreakWarningThreshold(configuredThreshold);
+      } else {
+        setDailyBreakWarningThreshold(DEFAULT_DAILY_BREAK_WARNING_THRESHOLD);
+      }
+    } catch {
+      setDailyBreakWarningThreshold(DEFAULT_DAILY_BREAK_WARNING_THRESHOLD);
+    }
+  }, []);
 
   useEffect(() => {
     try {
@@ -348,7 +363,7 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
         const updatedBreakCount = breakCountToday + 1;
         setBreakCountToday(updatedBreakCount);
         localStorage.setItem(breakCountStorageKey, String(updatedBreakCount));
-        if (updatedBreakCount >= DAILY_BREAK_WARNING_THRESHOLD && !warnedBreakCountToday) {
+        if (updatedBreakCount >= dailyBreakWarningThreshold && !warnedBreakCountToday) {
           toast.error('שימי לב: יש הרבה הפסקות היום. כדאי לחזור לפוקוס רציף.', { duration: 4500 });
           setWarnedBreakCountToday(true);
         }
@@ -376,7 +391,8 @@ export default function MiniTimer({ task: taskProp, onComplete, onNavigateToTask
     saveElapsedToTask,
     breakCountToday,
     breakCountStorageKey,
-    warnedBreakCountToday
+    warnedBreakCountToday,
+    dailyBreakWarningThreshold
   ]);
   
   // ===== אין משימה =====

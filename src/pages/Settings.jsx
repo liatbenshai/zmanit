@@ -504,7 +504,8 @@ function WorkSettings({ user }) {
     startMinute: 30, 
     endHour: 16, 
     endMinute: 15, 
-    workDays: [0, 1, 2, 3, 4] 
+    workDays: [0, 1, 2, 3, 4],
+    maxDailyBreaks: 6
   });
 
   useEffect(() => {
@@ -519,7 +520,8 @@ function WorkSettings({ user }) {
             startMinute: parsed.workHours.startMinute ?? 30,
             endHour: parsed.workHours.endHour || 16,
             endMinute: parsed.workHours.endMinute ?? 15,
-            workDays: parsed.workHours.workDays || [0, 1, 2, 3, 4]
+            workDays: parsed.workHours.workDays || [0, 1, 2, 3, 4],
+            maxDailyBreaks: parsed.workHours.maxDailyBreaks ?? 6
           });
         }
       } catch (e) {}
@@ -528,6 +530,9 @@ function WorkSettings({ user }) {
 
   const handleSave = () => {
     localStorage.setItem(`work_settings_${user?.id}`, JSON.stringify({ workHours }));
+    localStorage.setItem('zmanit_focus_settings', JSON.stringify({
+      maxDailyBreaks: workHours.maxDailyBreaks ?? 6
+    }));
     
     // 🔧 שמירה גם בפורמט שמנהל ההתראות מחפש
     localStorage.setItem('zmanit_work_settings', JSON.stringify({
@@ -641,6 +646,23 @@ function WorkSettings({ user }) {
             ? 'לא נבחרו ימי עבודה'
             : `${workHours.workDays.length} ימי עבודה בשבוע`
           }
+        </div>
+      </div>
+
+      <div className="space-y-3">
+        <h3 className="font-medium text-gray-700 dark:text-gray-300">פוקוס והפסקות</h3>
+        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-lg">
+          <label className="block text-sm text-gray-500 mb-2">מקסימום הפסקות ביום (לפני התראה)</label>
+          <select
+            value={workHours.maxDailyBreaks}
+            onChange={(e) => setWorkHours(w => ({ ...w, maxDailyBreaks: parseInt(e.target.value, 10) }))}
+            className="px-3 py-2 border border-gray-200 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+          >
+            {[3, 4, 5, 6, 7, 8, 10].map(v => (
+              <option key={v} value={v}>{v} הפסקות</option>
+            ))}
+          </select>
+          <p className="text-xs text-gray-500 mt-2">אחרי כמות זו, הטיימר יציג תזכורת לחזור לרצף פוקוס.</p>
         </div>
       </div>
 
