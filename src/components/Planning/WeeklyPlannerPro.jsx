@@ -53,6 +53,8 @@ const formatDuration = (minutes) => {
   return `${hours}:${String(mins).padStart(2, '0')}`;
 };
 
+const isPlanningWorkDay = (day) => day?.isWorkDay && day?.dayOfWeek !== 6;
+
 // ============================================
 // קומפוננטה ראשית
 // ============================================
@@ -129,6 +131,11 @@ function WeeklyPlannerPro() {
     console.log('📆 WeeklyPlannerPro: מחשב plan, dataVersion:', dataVersion);
     return smartScheduleWeekV4(weekStart, tasks);
   }, [tasks, weekStart, dataVersion]);
+
+  const planningDays = useMemo(
+    () => (plan?.days || []).filter(isPlanningWorkDay),
+    [plan]
+  );
 
   // יצירת הצעות חכמות עם אפשרויות
   const smartSuggestions = useMemo(() => {
@@ -531,7 +538,7 @@ function WeeklyPlannerPro() {
       {selectedDayForDetail ? (
         <DayDetailPanel
           day={selectedDayForDetail}
-          allDays={plan.days.filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4)}
+          allDays={planningDays}
           onBack={() => setSelectedDayForDetail(null)}
           onAddTask={handleAddTask}
           onEditTask={handleEditTask}
@@ -544,7 +551,7 @@ function WeeklyPlannerPro() {
       ) : isMobile ? (
         /* ========== תצוגת נייד - יום בודד עם ניווט ========== */
         <MobileDayView
-          days={plan.days.filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4)}
+          days={planningDays}
           currentIndex={mobileDayIndex}
           onChangeDay={setMobileDayIndex}
           todayStr={todayStr}
@@ -557,9 +564,7 @@ function WeeklyPlannerPro() {
       ) : (
         /* ========== תצוגת דסקטופ - 5 עמודות ========== */
         <div className="grid grid-cols-5 gap-4">
-          {plan.days
-            .filter(d => d.dayOfWeek >= 0 && d.dayOfWeek <= 4)
-            .map((day) => (
+          {planningDays.map((day) => (
             <DayColumn
               key={day.date}
               day={day}
@@ -602,8 +607,7 @@ function WeeklyPlannerPro() {
 // ============================================
 
 function WeeklyAnalysis({ plan }) {
-  // ✅ רק ראשון עד חמישי
-  const workDays = plan.days.filter(d => d.isWorkDay && d.dayOfWeek >= 0 && d.dayOfWeek <= 4);
+  const workDays = plan.days.filter(isPlanningWorkDay);
   
   const maxDay = workDays.reduce((max, d) => 
     (d.usagePercent || 0) > (max?.usagePercent || 0) ? d : max, null);
@@ -1432,7 +1436,7 @@ function minutesToTimeStr(minutes) {
 
 function generateInteractiveSuggestions(plan, tasks, dismissedSuggestions) {
   const suggestions = [];
-  const workDays = plan.days.filter(d => d.isWorkDay && d.dayOfWeek >= 0 && d.dayOfWeek <= 4);
+  const workDays = plan.days.filter(isPlanningWorkDay);
   
   if (workDays.length === 0) return suggestions;
   
@@ -1634,7 +1638,7 @@ function formatDateShort(dateStr) {
 
 function calculateAutoBalance(plan, tasks) {
   const moves = [];
-  const workDays = plan.days.filter(d => d.isWorkDay && d.dayOfWeek >= 0 && d.dayOfWeek <= 4);
+  const workDays = plan.days.filter(isPlanningWorkDay);
   
   if (workDays.length < 2) return moves;
   
