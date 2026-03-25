@@ -186,6 +186,10 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
     
     // שלב 6: שיבוץ משימות שהושלמו (לתצוגה)
     scheduleCompletedTasks(completedTasks, days, config);
+
+    // שלב 6.5: התאמת המשך היום/מחר במקרה של חריגה מזמן מתוכנן
+    // (רק לבלוקי עבודה, לא לבלוקי בית/משפחה)
+    adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config);
     
     // שלב 7: יצירת המלצות
     const recommendations = generateRecommendations(days, schedulingResult, config);
@@ -217,6 +221,174 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
       function: 'smartScheduleWeekV4',
       input: { weekStart, taskCount: allTasks?.length }
     });
+  }
+}
+
+// ============================================
+// התאמת לוח זמנים בעקבות overrun (פוקוס/טיימר רץ)
+// ============================================
+function adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config) {
+  try {
+    if (!Array.isArray(days) || !Array.isArray(allTasks)) return;
+
+    const todayIndex = days.findIndex(d => d.date === todayISO);
+    if (todayIndex < 0) return;
+
+    const tomorrow = new Date(`${todayISO}T12:00:00`);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const tomorrowISO = toLocalISODate(tomorrow);
+    const tomorrowIndex = days.findIndex(d => d.date === tomorrowISO);
+
+    const maxShiftDays = typeof tomorrowIndex === 'number' && tomorrowIndex >= 0 ? 2 : 1;
+    const endIndex = todayIndex + (maxShiftDays - 1);
+
+    const tasksById = new Map();
+    for (const t of allTasks) {
+      if (t && t.id) tasksById.set(t.id, t);
+    }
+
+    let overflowQueue = [];
+
+    for (let i = todayIndex; i <= endIndex; i++) {
+      const day = days[i];
+      if (!day?.blocks) continue;
+
+      const dayStart = day.dayStart || config.defaultDayStart;
+      const dayEnd = day.dayEnd || config.defaultDayEnd;
+
+      // רק בלוקי עבודה (לא בית/משפחה)
+      const workBlocks = day.blocks.filter(b => b?.isHomeTask !== true);
+
+      const fixedWorkBlocks = workBlocks.filter(b => b.isGoogleEvent || b.isFixed);
+      const movableWorkBlocks = workBlocks
+        .filter(b => !(b.isGoogleEvent || b.isFixed))
+        .sort((a, b) => a.startMinute - b.startMinute);
+
+      // אם זו המחרת והגיע overflow - נשים אותם לפני הבלוקים המקוריים של מחר
+      let movableQueue = i === todayIndex
+        ? movableWorkBlocks
+        : overflowQueue.concat(movableWorkBlocks);
+
+      // התאמת משך הבלוקים הרלוונטיים לעודף זמן בזמן אמת
+      if (i === todayIndex) {
+        for (const block of movableQueue) {
+          const task = tasksById.get(block.taskId);
+          if (!task) continue;
+          if (task.is_completed) continue;
+          if (task.due_date !== todayISO) continue;
+
+          const planned = block.duration || 0;
+          if (!planned) continue;
+
+          const runningExtraMinutes = getRunningExtraMinutesForTask(task.id);
+          const actualMinutes = (parseInt(task.time_spent || '0', 10) || 0) + runningExtraMinutes;
+
+          // רק אם יש חריגה משמעותית - מזיז
+          if (actualMinutes > planned) {
+            // חותכים גבול כדי למנוע "קפיצה" מוגזמת (למשל אם זמן נשמר מצטבר מתקופות קודמות)
+            const capped = Math.min(actualMinutes, planned * 2);
+            block.duration = capped;
+          }
+        }
+      }
+
+      overflowQueue = [];
+
+      // בנייה מחדש של העבודה בדסקטופ: מקבעים fixed, מזיזים movable בהתאם
+      fixedWorkBlocks.sort((a, b) => a.startMinute - b.startMinute);
+
+      const newWorkBlocks = [];
+      let cursor = dayStart;
+
+      for (const fixed of fixedWorkBlocks) {
+        // מקום פנוי עד תחילת ה-fixed הבא
+        while (movableQueue.length > 0) {
+          const next = movableQueue[0];
+          const dur = next.duration || 0;
+          if (!dur) {
+            movableQueue.shift();
+            continue;
+          }
+
+          if (cursor + dur > fixed.startMinute) break; // לא נכנס - מחכים ל-fixed הבא/מחר
+
+          movableQueue.shift();
+          const startMinute = cursor;
+          const endMinute = cursor + dur;
+
+          next.startMinute = startMinute;
+          next.endMinute = endMinute;
+          next.startTime = minutesToTime(startMinute);
+          next.endTime = minutesToTime(endMinute);
+          next.dayDate = day.date;
+
+          newWorkBlocks.push(next);
+          cursor = endMinute + config.breakDuration;
+        }
+
+        // אם החלק הקודם דחף את cursor אחרי ה-fixed - נדלג קדימה (כדי למנוע חפיפה)
+        cursor = Math.max(cursor, fixed.endMinute + config.breakDuration);
+        newWorkBlocks.push(fixed);
+        // cursor כבר עודכן אחרי ה-fixed
+      }
+
+      // שאר ה-movable אחרי כל ה-fixedים
+      while (movableQueue.length > 0) {
+        const next = movableQueue[0];
+        const dur = next.duration || 0;
+        if (!dur) {
+          movableQueue.shift();
+          continue;
+        }
+
+        if (cursor + dur > dayEnd) break;
+
+        movableQueue.shift();
+        const startMinute = cursor;
+        const endMinute = cursor + dur;
+
+        next.startMinute = startMinute;
+        next.endMinute = endMinute;
+        next.startTime = minutesToTime(startMinute);
+        next.endTime = minutesToTime(endMinute);
+        next.dayDate = day.date;
+
+        newWorkBlocks.push(next);
+        cursor = endMinute + config.breakDuration;
+      }
+
+      // כל מה שנותר שלא נכנס ביום הזה עובר ליום הבא (overflow)
+      overflowQueue = movableQueue;
+
+      // מחזירים ללוח: עבודה שעודכנה + בלוקי בית/משפחה המקוריים ללא שינוי
+      const homeBlocks = day.blocks.filter(b => b?.isHomeTask === true);
+      day.blocks = [...newWorkBlocks, ...homeBlocks].sort((a, b) => a.startMinute - b.startMinute);
+
+      // עדכון סטטיסטיקות יום
+      day.fixedMinutes = 0;
+      day.totalScheduledMinutes = 0;
+      for (const b of day.blocks) {
+        const dur = parseInt(b.duration || '0', 10) || (b.endMinute && b.startMinute ? (b.endMinute - b.startMinute) : 0);
+        day.totalScheduledMinutes += dur;
+        if (b.isGoogleEvent || b.isFixed) day.fixedMinutes += dur;
+      }
+    }
+  } catch (e) {
+    // לא קריטי לשבור תכנון: אם יש שגיאה פשוט נשאיר את ה-plan כמו שהוא
+  }
+}
+
+function getRunningExtraMinutesForTask(taskId) {
+  try {
+    if (!taskId) return 0;
+    const raw = localStorage.getItem(`timer_v2_${taskId}`);
+    if (!raw) return 0;
+    const data = JSON.parse(raw);
+    if (!data?.isRunning || data?.isPaused || data?.isInterrupted) return 0;
+    const elapsedSeconds = parseInt(data.elapsedSeconds || '0', 10) || 0;
+    return Math.floor(elapsedSeconds / 60);
+  } catch {
+    return 0;
   }
 }
 
