@@ -469,8 +469,23 @@ function DailyView() {
     
     try {
       const updates = [];
+      
+      // אם אנחנו מארגנות את "היום" בזמן אמת - לא משבצים לאחור לשעות שכבר עברו.
+      const isTodayReschedule = dateISO === currentTime?.dateISO;
+      const roundUpToStep = (minutes, stepMinutes = 5) =>
+        Math.ceil(minutes / stepMinutes) * stepMinutes;
+
+      const nowPlusBuffer = isTodayReschedule
+        ? roundUpToStep((currentTime?.minutes || 0) + 5, 5)
+        : null;
+
       let currentMorning = SMART_SCHEDULING_RULES.workHours.start;
       let currentAfternoon = SMART_SCHEDULING_RULES.workHours.morningEnd;
+      
+      if (isTodayReschedule && typeof nowPlusBuffer === 'number') {
+        currentMorning = Math.max(currentMorning, nowPlusBuffer);
+        currentAfternoon = Math.max(currentAfternoon, nowPlusBuffer);
+      }
       
       // מיון לפי עדיפות (דחוף קודם)
       const priorityOrder = { urgent: 0, high: 1, normal: 2 };

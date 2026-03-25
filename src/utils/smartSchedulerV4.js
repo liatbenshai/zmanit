@@ -669,18 +669,28 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
   // ✅ מעקב אחרי הזמן הבא הפנוי בכל יום - עבודה ובית בנפרד
   const dayNextAvailableWork = new Map();
   const dayNextAvailableHome = new Map();
+
+  // כדי לא לשבץ את "היום הנוכחי" לתוך שעות שכבר עברו,
+  // מתחילים מהזמן הנוכחי + מרווח קטן (ברירת מחדל: 5 דק').
+  const now = new Date();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+  const roundUp = (minutes, stepMinutes = 5) =>
+    Math.ceil(minutes / stepMinutes) * stepMinutes;
+  const minStartForToday = roundUp(nowMinutes + (config?.breakDuration || 5), 5);
   
   for (const day of days) {
     if (day.date >= todayISO) {
       // זמני עבודה
       if (day.isWorkDay) {
         const dayStart = day.dayStart || config.defaultDayStart;
-        dayNextAvailableWork.set(day.date, dayStart);
+        const effectiveStart = day.date === todayISO ? Math.max(dayStart, minStartForToday) : dayStart;
+        dayNextAvailableWork.set(day.date, effectiveStart);
       }
       // זמני בית
       if (day.isHomeDay) {
         const homeStart = day.homeDayStart || 17 * 60;
-        dayNextAvailableHome.set(day.date, homeStart);
+        const effectiveStart = day.date === todayISO ? Math.max(homeStart, minStartForToday) : homeStart;
+        dayNextAvailableHome.set(day.date, effectiveStart);
       }
     }
   }
