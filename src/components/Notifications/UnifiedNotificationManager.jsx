@@ -281,14 +281,42 @@ function getElapsedTimeFromTimer(taskId) {
     const timerData = localStorage.getItem(`timer_v2_${taskId}`);
     if (timerData) {
       const data = JSON.parse(timerData);
-      let totalMs = data.accumulatedTime || data.elapsed || 0;
-      
-      if (data.isRunning && data.startTime) {
-        const startTime = new Date(data.startTime).getTime();
-        totalMs += (Date.now() - startTime);
+
+      // TaskTimerWithInterruptions מסמן:
+      // - startTime: הזמן המקורי של הטיימר
+      // - totalInterruptionSeconds: סכום הפרעות שסוכמו עד כה (שניות)
+      // - interruptionStart: התחלת הפרעה *נוכחית* בזמן אמת (אם יש) -> מאפשר תיקון בזמן אמת
+      //
+      // לכן: זמן עבודה = (now - startTime) בניכוי זמן הפרעות (כולל הפרעה פעילה כרגע).
+      const interruptionSecondsBase = parseInt(data.totalInterruptionSeconds || '0', 10) || 0;
+      const isInterrupted = data.isInterrupted === true;
+      const interruptionStartMs = data.interruptionStart
+        ? new Date(data.interruptionStart).getTime()
+        : NaN;
+
+      const ongoingInterruptionSeconds =
+        isInterrupted && Number.isFinite(interruptionStartMs)
+          ? Math.max(0, Math.floor((Date.now() - interruptionStartMs) / 1000))
+          : 0;
+
+      const effectiveInterruptionSeconds = interruptionSecondsBase + ongoingInterruptionSeconds;
+
+      // אם יש startTime נחשב net elapsed ממנה ועד עכשיו (או pausedAt אם מושהה).
+      if (data.startTime) {
+        const startMs = new Date(data.startTime).getTime();
+        const endMs = (data.isPaused === true && data.pausedAt)
+          ? new Date(data.pausedAt).getTime()
+          : Date.now();
+
+        if (Number.isFinite(startMs) && Number.isFinite(endMs)) {
+          const netMs = (endMs - startMs) - (effectiveInterruptionSeconds * 1000);
+          return Math.max(0, Math.floor(netMs / 60000));
+        }
       }
-      
-      return Math.floor(totalMs / 60000);
+
+      // fallback לתרחישים ישנים/אחרים
+      const totalMs = (data.accumulatedTime || data.elapsed || 0);
+      return Math.max(0, Math.floor(totalMs / 60000));
     }
     
     // נסה את הפורמט הישן (timer_{id}_startTime)
