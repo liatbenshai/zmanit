@@ -96,7 +96,7 @@ export function useSchedule() {
     }
     
     const dateISO = toLocalISODate(date);
-    const dayPlan = weekPlan.days.find(d => d.date === dateISO);
+    const dayPlan = weekPlan?.days?.find(d => d.date === dateISO);
     
     if (!dayPlan) {
       return { blocks: [], tasks: [], isEmpty: true };

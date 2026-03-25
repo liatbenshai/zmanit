@@ -597,7 +597,7 @@ function DailyView() {
     if (!weekPlan) return { blocks: [], tasks: [] };
     
     const dateISO = getDateISO(selectedDate);
-    const dayPlan = weekPlan.days.find(d => d.date === dateISO);
+    const dayPlan = weekPlan?.days?.find(d => d.date === dateISO);
     
     if (!dayPlan) {
       return { blocks: [], tasks: [] };
