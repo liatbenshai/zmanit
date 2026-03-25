@@ -250,6 +250,8 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
       // תכנון שבועי: מציגים רק משימות עם תאריך יעד עד סוף השבוע (כולל פיגור)
       if (!task.due_date) continue;
       if (task.due_date > weekEndISO) continue;
+      // תכנון שבועי: לא מציגים משימות/אירועים מהעבר הרחוק לפני תחילת השבוע
+      if (task.due_date < weekStartISO) continue;
       
       if (task.is_completed) {
         if (task.due_date && task.due_date >= weekStartISO && task.due_date <= weekEndISO) {
@@ -927,11 +929,28 @@ function formatDayForOutput(day, config) {
     }
     return a.startMinute - b.startMinute;
   });
+
+  // דה-דופליקציה: במקרה שנוצר אותו בלוק פעמיים (למשל מאותה משימה),
+  // אנחנו משאירות רק מופע אחד כדי לא ליצור כפילויות בתצוגה.
+  const seenBlockIds = new Set();
+  const dedupedBlocks = [];
+  for (const block of sortedBlocks) {
+    const id = block?.id;
+    const fallbackKey = id
+      ? null
+      : `${block?.taskId || ''}-${block?.startMinute ?? ''}-${block?.endMinute ?? ''}-${block?.blockType || ''}`;
+
+    const key = id || fallbackKey;
+    if (!key) continue;
+    if (seenBlockIds.has(key)) continue;
+    seenBlockIds.add(key);
+    dedupedBlocks.push(block);
+  }
   
   return {
     ...day,
-    blocks: sortedBlocks,
-    scheduledBlocks: sortedBlocks,
+    blocks: dedupedBlocks,
+    scheduledBlocks: dedupedBlocks,
     usagePercent: dayCapacity > 0 ? Math.round((day.totalScheduledMinutes / dayCapacity) * 100) : 0,
     freeMinutes: Math.max(0, dayCapacity - day.totalScheduledMinutes),
     scheduledMinutes: day.totalScheduledMinutes,
