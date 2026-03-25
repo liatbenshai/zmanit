@@ -11,7 +11,7 @@
  * 4. מניעת התראות על משימות שונות בזמן עבודה
  */
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useCallback, useState, useMemo } from 'react';
 import { useTasks } from '../../hooks/useTasks';
 import { useNotifications } from '../../hooks/useNotifications';
 import { useAuth } from '../../hooks/useAuth';
@@ -338,6 +338,8 @@ export function useUnifiedNotifications() {
   const [overdueTaskPopup, setOverdueTaskPopup] = useState(null);
   const [procrastinationPopup, setProcrastinationPopup] = useState(null);
   const [dailyOverloadPopup, setDailyOverloadPopup] = useState(null);
+  const [timerEndingPopup, setTimerEndingPopup] = useState(null); // ⏳ נשארו X דקות
+  const [timerTimeUpPopup, setTimerTimeUpPopup] = useState(null); // 🔔 זמן נגמר
   
   // refs
   const lastNotifiedRef = useRef({});
@@ -485,6 +487,13 @@ export function useUnifiedNotifications() {
             }
             toast(`⏳ נשארו ${remaining} דקות ל-${activeTask.title}`, { duration: 5000, icon: '⏰' });
             markNotifiedForTask(activeTask, 'ending-soon');
+
+            setTimerTimeUpPopup(null);
+            setTimerEndingPopup({
+              taskId: activeTask.id,
+              taskTitle: activeTask.title,
+              remainingMinutes: remaining
+            });
           }
         }
         
@@ -500,6 +509,12 @@ export function useUnifiedNotifications() {
             }
             toast.error(`🔔 הזמן נגמר: ${activeTask.title}`, { duration: 8000 });
             markNotifiedForTask(activeTask, 'time-up');
+
+            setTimerEndingPopup(null);
+            setTimerTimeUpPopup({
+              taskId: activeTask.id,
+              taskTitle: activeTask.title
+            });
           }
         }
       }
@@ -864,6 +879,10 @@ export function useUnifiedNotifications() {
   return {
     overdueTaskPopup,
     setOverdueTaskPopup,
+    timerEndingPopup,
+    setTimerEndingPopup,
+    timerTimeUpPopup,
+    setTimerTimeUpPopup,
     dailyOverloadPopup,
     setDailyOverloadPopup,
     procrastinationPopup,
@@ -882,13 +901,128 @@ export function UnifiedNotificationManager() {
   const { 
     overdueTaskPopup,
     setOverdueTaskPopup,
+    timerEndingPopup,
+    setTimerEndingPopup,
+    timerTimeUpPopup,
+    setTimerTimeUpPopup,
     dailyOverloadPopup,
     setDailyOverloadPopup,
     procrastinationPopup,
     dismissProcrastinationPopup,
     handleProcrastinationAction
   } = useUnifiedNotifications();
+
+  const { tasks, editTask, toggleComplete } = useTasks();
+
+  const activeTimerTask = useMemo(() => {
+    const id = timerTimeUpPopup?.taskId || timerEndingPopup?.taskId;
+    if (!id) return null;
+    return tasks.find(t => t.id === id) || null;
+  }, [tasks, timerEndingPopup?.taskId, timerTimeUpPopup?.taskId]);
+
+  const handleExtendTimerTask = async (minutes) => {
+    if (!activeTimerTask) return;
+    try {
+      const currentDuration = parseInt(activeTimerTask.estimated_duration, 10) || 30;
+      await editTask(activeTimerTask.id, { estimated_duration: currentDuration + minutes });
+      toast.success(`⏱️ הוספתי ${minutes} דק׳ ל-${activeTimerTask.title}`);
+    } catch (e) {
+      toast.error('שגיאה בהארכת המשימה');
+    } finally {
+      setTimerEndingPopup(null);
+      setTimerTimeUpPopup(null);
+    }
+  };
+
+  const handleCompleteTimerTask = async () => {
+    if (!activeTimerTask) return;
+    try {
+      await toggleComplete(activeTimerTask.id, true);
+      toast.success(`✅ סיימתי: ${activeTimerTask.title}`);
+    } catch (e) {
+      toast.error('שגיאה בסימון כהושלמה');
+    } finally {
+      setTimerEndingPopup(null);
+      setTimerTimeUpPopup(null);
+    }
+  };
   
+  // פופאפ: זמן נגמר (עדיפות ראשונה)
+  if (timerTimeUpPopup) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100000] p-4 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-md w-full p-6 text-right z-[100001] border-4 border-red-300">
+          <div className="text-5xl mb-3">🔔</div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            הזמן נגמר
+          </h2>
+          <p className="text-gray-700 dark:text-gray-200 mb-6 text-sm">
+            {timerTimeUpPopup.taskTitle}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleCompleteTimerTask}
+              className="w-full py-3 rounded-xl bg-red-500 hover:bg-red-600 text-white font-bold text-base shadow-lg"
+            >
+              ✅ סיימתי
+            </button>
+            <button
+              onClick={() => handleExtendTimerTask(15)}
+              className="w-full py-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
+            >
+              ⏱️ +15 דק׳
+            </button>
+            <button
+              onClick={() => {
+                setTimerTimeUpPopup(null);
+              }}
+              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
+            >
+              סגור (המשך עבודה)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // פופאפ: עוד X דקות לסיום
+  if (timerEndingPopup) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[100000] p-4 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-md w-full p-6 text-right z-[100001] border-4 border-yellow-300">
+          <div className="text-5xl mb-3">⏳</div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            נשארו {timerEndingPopup.remainingMinutes} דקות
+          </h2>
+          <p className="text-gray-700 dark:text-gray-200 mb-6 text-sm">
+            {timerEndingPopup.taskTitle}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={handleCompleteTimerTask}
+              className="w-full py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base shadow-lg"
+            >
+              ✅ סיימתי
+            </button>
+            <button
+              onClick={() => handleExtendTimerTask(15)}
+              className="w-full py-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
+            >
+              ⏱️ +15 דק׳
+            </button>
+            <button
+              onClick={() => setTimerEndingPopup(null)}
+              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
+            >
+              סגור (המשך עבודה)
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   // פופאפ משימה באיחור
   if (overdueTaskPopup) {
     return (
