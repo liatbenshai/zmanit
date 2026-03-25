@@ -7,6 +7,7 @@ import { getTaskType, getAllTaskTypes } from '../../config/taskTypes';
 import { recordTaskCompletion } from '../../utils/taskLearning';
 import ConfirmDialog from '../UI/ConfirmDialog';
 import BlockerLogModal from '../Learning/BlockerLogModal'; // ✅ לוג חסמים
+import { useNavigate } from 'react-router-dom';
 
 // קבלת TASK_TYPES מ-config (לתאימות לאחור)
 const TASK_TYPES = getAllTaskTypes();
@@ -203,6 +204,7 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
  */
 function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggable = false }) {
   const { toggleComplete, removeTask, editTask, tasks } = useTasks();
+  const navigate = useNavigate();
   const [showTimer, setShowTimer] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -695,6 +697,25 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
                 title={showTimer ? 'הסתר טיימר' : 'הצג טיימר'}
               >
                 ⏱️
+              </button>
+            )}
+
+            {/* מסך מיקוד - מפעיל את /focus עבור המשימה הנוכחית */}
+            {!isCompleted && !isVirtual && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  try {
+                    localStorage.setItem('start_task_id', currentTask.id);
+                    // ניקוי pause של פוקוס אם יש - כדי לא להיתקע במצב מושהה ישן
+                    localStorage.removeItem('zmanit_focus_paused');
+                  } catch (_) {}
+                  navigate('/focus');
+                }}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-500"
+                title="🎯 מסך מיקוד"
+              >
+                🎯
               </button>
             )}
             

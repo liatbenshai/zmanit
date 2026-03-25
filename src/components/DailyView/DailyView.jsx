@@ -1233,11 +1233,84 @@ function DailyView() {
     isFromGoogle: true
   }));
   
-  const rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes].sort((a, b) => {
+  let rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes].sort((a, b) => {
     const aTime = a.startTime?.split(':').map(Number) || [0, 0];
     const bTime = b.startTime?.split(':').map(Number) || [0, 0];
     return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
   });
+
+  // Fallback: אם מנוע השיבוץ החזיר 0 בלוקים (למשל בגלל weekPlan לא תקין),
+  // נציג את המשימות מה-DB כבלוקים "ארעיים" כדי שלא ייראה כאילו הן נמחקו.
+  if (rescheduledBlocks.length === 0 && tasks?.length > 0) {
+    const fallbackDateISO = getDateISO(selectedDate);
+    const normalizeTaskDateISO = (value) => {
+      if (!value) return null;
+      if (typeof value === 'string') return value;
+      try {
+        const d = new Date(value);
+        return isNaN(d.getTime()) ? null : getDateISO(d);
+      } catch {
+        return null;
+      }
+    };
+    const dayTasks = tasks
+      .filter(t => {
+        if (!t || t.is_completed || t.deleted_at || t.is_project) return false;
+        const dueISO = normalizeTaskDateISO(t.due_date || t.dueDate);
+        const startISO = normalizeTaskDateISO(t.start_date || t.startDate);
+        return dueISO === fallbackDateISO || startISO === fallbackDateISO;
+      })
+      .sort((a, b) => {
+        const priorityOrder = { urgent: 0, high: 1, normal: 2 };
+        const p = (priorityOrder[a.priority] ?? 2) - (priorityOrder[b.priority] ?? 2);
+        if (p !== 0) return p;
+        if (a.due_time && b.due_time) return a.due_time.localeCompare(b.due_time);
+        return 0;
+      });
+
+    const daySchedule = getScheduleForDate(selectedDate);
+    const dayStartMinutes = daySchedule?.hours?.start != null ? daySchedule.hours.start * 60 : 8.5 * 60;
+
+    const cursorStart = (() => {
+      const base = isViewingToday
+        ? Math.max(dayStartMinutes, (currentTime?.minutes || dayStartMinutes) + 5)
+        : dayStartMinutes;
+      return Math.ceil(base / 5) * 5;
+    })();
+
+    let cursor = cursorStart;
+    const currentMinutes = currentTime?.minutes ?? dayStartMinutes;
+
+    rescheduledBlocks = dayTasks.map((t, idx) => {
+      const duration = t.estimated_duration || 30;
+      const startMinutes = cursor;
+      const endMinutes = startMinutes + duration;
+      cursor = endMinutes + 5;
+
+      return {
+        id: `${t.id}-fallback-block-${idx + 1}`,
+        taskId: t.id,
+        task: t,
+        taskType: t.task_type || t.taskType,
+        priority: t.priority || 'normal',
+        quadrant: t.quadrant,
+        title: t.title,
+        duration,
+        startTime: minutesToTimeStr(startMinutes),
+        endTime: minutesToTimeStr(endMinutes),
+        startMinute: startMinutes,
+        endMinute: endMinutes,
+        totalBlocks: 1,
+        blockIndex: idx + 1,
+        isRunning: isTimerRunning?.(t.id) || false,
+        // אם הבלוק נסגר לפני הזמן הנוכחי – נשים אותו ב"נדחו"
+        isPostponed: endMinutes < currentMinutes,
+        isRescheduled: false,
+        isCompleted: false,
+        isFromGoogle: false
+      };
+    });
+  }
   
   const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
   const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
@@ -1648,7 +1721,7 @@ function DailyView() {
         </Button>
         
         {/* ✅ חדש: כפתור סידור חכם */}
-        {allBlocks.length > 0 && (
+        {rescheduledBlocks.length > 0 && (
           <Button 
             onClick={handleSmartReschedule}
             loading={isRescheduling}
@@ -1666,7 +1739,7 @@ function DailyView() {
         transition={{ delay: 0.3 }}
         className="flex gap-4"
       >
-        {allBlocks.length > 0 && (
+        {rescheduledBlocks.length > 0 && (
           <div 
             ref={timelineRef}
             className={`
@@ -1709,7 +1782,7 @@ function DailyView() {
         )}
 
         <div className="flex-1 space-y-3">
-        {allBlocks.length === 0 ? (
+        {rescheduledBlocks.length === 0 ? (
           <div className="card p-8 text-center">
             <span className="text-4xl mb-4 block">📝</span>
             <h3 className="text-lg font-medium text-gray-900 dark:text-white mb-2">
