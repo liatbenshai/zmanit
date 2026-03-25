@@ -233,6 +233,13 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
     const flexibleTasks = [];
     const completedTasks = [];
     const seenTaskIds = new Set();
+
+    // מטרה: להציג איחורים כדי לעזור לא לאחר,
+    // אבל לא לייצר "זבל" של דברים ישנים מדי.
+    const MAX_OVERDUE_DAYS_BACK = 7;
+    const minDueDate = new Date(`${weekStartISO}T12:00:00`);
+    minDueDate.setDate(minDueDate.getDate() - MAX_OVERDUE_DAYS_BACK);
+    const minDueISO = toLocalISODate(minDueDate);
     
     for (const task of allTasks) {
       // Skip invalid tasks
@@ -250,8 +257,8 @@ function categorizeTasks(allTasks, weekStartISO, weekEndISO, todayISO) {
       // תכנון שבועי: מציגים רק משימות עם תאריך יעד עד סוף השבוע (כולל פיגור)
       if (!task.due_date) continue;
       if (task.due_date > weekEndISO) continue;
-      // תכנון שבועי: לא מציגים משימות/אירועים מהעבר הרחוק לפני תחילת השבוע
-      if (task.due_date < weekStartISO) continue;
+      // תכנון שבועי: כן להציג איחורים, אבל רק מהטווח האחרון
+      if (task.due_date < minDueISO) continue;
       
       if (task.is_completed) {
         if (task.due_date && task.due_date >= weekStartISO && task.due_date <= weekEndISO) {
