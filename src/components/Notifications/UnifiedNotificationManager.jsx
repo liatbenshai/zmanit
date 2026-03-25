@@ -934,6 +934,8 @@ export function UnifiedNotificationManager() {
     }
   };
 
+  const extendOptions = [5, 10, 15, 30];
+
   const handleCompleteTimerTask = async () => {
     if (!activeTimerTask) return;
     try {
@@ -966,20 +968,15 @@ export function UnifiedNotificationManager() {
             >
               ✅ סיימתי
             </button>
-            <button
-              onClick={() => handleExtendTimerTask(15)}
-              className="w-full py-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
-            >
-              ⏱️ +15 דק׳
-            </button>
-            <button
-              onClick={() => {
-                setTimerTimeUpPopup(null);
-              }}
-              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
-            >
-              סגור (המשך עבודה)
-            </button>
+            {extendOptions.map((m) => (
+              <button
+                key={m}
+                onClick={() => handleExtendTimerTask(m)}
+                className="w-full py-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
+              >
+                ⏱️ +{m} דק׳
+              </button>
+            ))}
           </div>
         </div>
       </div>
@@ -1005,18 +1002,15 @@ export function UnifiedNotificationManager() {
             >
               ✅ סיימתי
             </button>
-            <button
-              onClick={() => handleExtendTimerTask(15)}
-              className="w-full py-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
-            >
-              ⏱️ +15 דק׳
-            </button>
-            <button
-              onClick={() => setTimerEndingPopup(null)}
-              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
-            >
-              סגור (המשך עבודה)
-            </button>
+            {extendOptions.map((m) => (
+              <button
+                key={m}
+                onClick={() => handleExtendTimerTask(m)}
+                className="w-full py-3 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
+              >
+                ⏱️ +{m} דק׳
+              </button>
+            ))}
           </div>
         </div>
       </div>
