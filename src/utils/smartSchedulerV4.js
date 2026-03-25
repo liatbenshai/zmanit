@@ -189,7 +189,7 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
 
     // שלב 6.5: התאמת המשך היום/מחר במקרה של חריגה מזמן מתוכנן
     // (רק לבלוקי עבודה, לא לבלוקי בית/משפחה)
-    adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config);
+    const overrunReports = adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config);
     
     // שלב 7: יצירת המלצות
     const recommendations = generateRecommendations(days, schedulingResult, config);
@@ -201,7 +201,16 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
       weekStart: weekStartISO,
       days: days.map(d => formatDayForOutput(d, config)),
       summary: stats,
-      warnings: schedulingResult.warnings,
+      warnings: [
+        ...(schedulingResult.warnings || []),
+        ...(overrunReports?.map(r => ({
+          type: 'overrun_reschedule',
+          severity: r.severity || 'high',
+          taskTitle: r.taskTitle || 'משימות שהוזזו',
+          message: r.message,
+          date: r.date
+        })) || [])
+      ],
       unscheduledTasks: schedulingResult.unscheduledTasks,
       recommendations,
       isCurrentWeek: weekStartISO <= todayISO && todayISO <= weekEndISO
@@ -229,10 +238,10 @@ export function smartScheduleWeekV4(weekStart, allTasks) {
 // ============================================
 function adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config) {
   try {
-    if (!Array.isArray(days) || !Array.isArray(allTasks)) return;
+    if (!Array.isArray(days) || !Array.isArray(allTasks)) return [];
 
     const todayIndex = days.findIndex(d => d.date === todayISO);
-    if (todayIndex < 0) return;
+    if (todayIndex < 0) return [];
 
     const tomorrow = new Date(`${todayISO}T12:00:00`);
     tomorrow.setDate(tomorrow.getDate() + 1);
@@ -248,6 +257,8 @@ function adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config) {
     }
 
     let overflowQueue = [];
+    const overrunTasks = new Map(); // taskId -> { title, planned, actual }
+    const reports = [];
 
     for (let i = todayIndex; i <= endIndex; i++) {
       const day = days[i];
@@ -285,6 +296,11 @@ function adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config) {
 
           // רק אם יש חריגה משמעותית - מזיז
           if (actualMinutes > planned) {
+            overrunTasks.set(task.id, {
+              title: task.title,
+              planned,
+              actual: actualMinutes
+            });
             // חותכים גבול כדי למנוע "קפיצה" מוגזמת (למשל אם זמן נשמר מצטבר מתקופות קודמות)
             const capped = Math.min(actualMinutes, planned * 2);
             block.duration = capped;
@@ -360,6 +376,20 @@ function adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config) {
       // כל מה שנותר שלא נכנס ביום הזה עובר ליום הבא (overflow)
       overflowQueue = movableQueue;
 
+      // אם הייתה חריגה היום (ולכן משהו נדחף), נייצר דיווח
+      if (i === todayIndex && overrunTasks.size > 0) {
+        const shifted = overflowQueue.length > 0;
+        const taskTitles = Array.from(overrunTasks.values()).map(t => t.title).slice(0, 3);
+        const extra = shifted ? 'ושהמשימות שלא נכנסו נדחו להמשך היום/מחר.' : 'והתוכנית הותאמה להמשך היום.';
+
+        reports.push({
+          severity: 'high',
+          taskTitle: taskTitles[0] || 'חריגה בזמן',
+          message: `עקב חריגה בזמן ב-${taskTitles.join(', ')}. ${extra}`,
+          date: todayISO
+        });
+      }
+
       // מחזירים ללוח: עבודה שעודכנה + בלוקי בית/משפחה המקוריים ללא שינוי
       const homeBlocks = day.blocks.filter(b => b?.isHomeTask === true);
       day.blocks = [...newWorkBlocks, ...homeBlocks].sort((a, b) => a.startMinute - b.startMinute);
@@ -373,8 +403,11 @@ function adjustWorkBlocksForOverrunsAndShift(days, allTasks, todayISO, config) {
         if (b.isGoogleEvent || b.isFixed) day.fixedMinutes += dur;
       }
     }
+
+    return reports;
   } catch (e) {
     // לא קריטי לשבור תכנון: אם יש שגיאה פשוט נשאיר את ה-plan כמו שהוא
+    return [];
   }
 }
 

@@ -472,6 +472,23 @@ function WeeklyPlannerPro() {
 
       {/* ===== ניתוח שבועי - מוקטן בנייד ===== */}
       {!isMobile && <WeeklyAnalysis plan={plan} />}
+
+      {/* ===== אזהרות / הודעות מערכת ===== */}
+      {plan.warnings?.length > 0 && (
+        <div className="mb-4 md:mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl">
+          <div className="font-bold text-yellow-800 dark:text-yellow-200 mb-2 flex items-center gap-2">
+            <span>⚠️</span>
+            <span>התראות תכנון השבוע</span>
+          </div>
+          <div className="space-y-2">
+            {plan.warnings.slice(0, 4).map((w, idx) => (
+              <div key={`${w.type || 'warn'}-${w.date || idx}-${idx}`} className="text-sm text-yellow-900/90 dark:text-yellow-100">
+                • {w.message || w.taskTitle || 'משהו השתנה בתכנון'}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
       
       {/* סיכום מהיר בנייד */}
       {isMobile && (

@@ -337,6 +337,7 @@ export function useUnifiedNotifications() {
   // מצבים
   const [overdueTaskPopup, setOverdueTaskPopup] = useState(null);
   const [procrastinationPopup, setProcrastinationPopup] = useState(null);
+  const [dailyOverloadPopup, setDailyOverloadPopup] = useState(null);
   
   // refs
   const lastNotifiedRef = useRef({});
@@ -787,11 +788,20 @@ export function useUnifiedNotifications() {
           if (hasPushPermission) {
             sendNotification('📉 את בפיגור מול תכנון היום', {
               body,
-              tag: 'daily-overload'
+              tag: 'daily-overload',
+              renotify: true,
+              requireInteraction: true
             });
           }
 
           toast.error(`📉 פיגור יומי של כ-${overloadMinutes} דק׳`, { duration: 9000 });
+          setDailyOverloadPopup({
+            type: 'daily-overload',
+            title: '📉 פיגור יומי',
+            message: body,
+            overloadMinutes,
+            urgentCount
+          });
           markNotified('daily-overload');
         }
       }
@@ -854,6 +864,8 @@ export function useUnifiedNotifications() {
   return {
     overdueTaskPopup,
     setOverdueTaskPopup,
+    dailyOverloadPopup,
+    setDailyOverloadPopup,
     procrastinationPopup,
     dismissProcrastinationPopup,
     handleProcrastinationAction,
@@ -870,6 +882,8 @@ export function UnifiedNotificationManager() {
   const { 
     overdueTaskPopup,
     setOverdueTaskPopup,
+    dailyOverloadPopup,
+    setDailyOverloadPopup,
     procrastinationPopup,
     dismissProcrastinationPopup,
     handleProcrastinationAction
@@ -886,6 +900,40 @@ export function UnifiedNotificationManager() {
           console.log('התחלת עבודה על משימה:', taskId);
         }}
       />
+    );
+  }
+
+  // פופאפ פיגור יומי מול קיבולת
+  if (dailyOverloadPopup) {
+    return (
+      <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-[10000] p-4 backdrop-blur-sm">
+        <div className="bg-white dark:bg-gray-800 rounded-3xl shadow-2xl max-w-md w-full p-6 text-right z-[10001] border-4 border-yellow-300">
+          <div className="text-5xl mb-3">📉</div>
+          <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+            {dailyOverloadPopup.title}
+          </h2>
+          <p className="text-gray-700 dark:text-gray-200 mb-6 text-sm">
+            {dailyOverloadPopup.message}
+          </p>
+          <div className="flex flex-col gap-3">
+            <button
+              onClick={() => {
+                setDailyOverloadPopup(null);
+                window.location.href = '/daily';
+              }}
+              className="w-full py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base shadow-lg"
+            >
+              לראות משימות דחופות
+            </button>
+            <button
+              onClick={() => setDailyOverloadPopup(null)}
+              className="w-full py-2 rounded-xl bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-200 font-medium"
+            >
+              סגור
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
   
