@@ -63,6 +63,11 @@ function isTimerActiveForOtherTask(taskId) {
     if (taskId && activeTimerId === taskId) {
       return false;
     }
+
+    // התראות כלליות (ללא taskId) — לא לחסום (סיום יום, יומן וכו')
+    if (!taskId) {
+      return false;
+    }
     
     // בודקים אם הטיימר באמת פעיל - פורמט חדש
     const timerData = localStorage.getItem(`timer_v2_${activeTimerId}`);
@@ -90,6 +95,29 @@ function isTimerActiveForOtherTask(taskId) {
  * שליחת התראה מקומית
  * ✅ תיקון v3.1: בדיקה משופרת של טיימר פעיל
  */
+/** שדות חוקיים ל-Notification API בלבד (שאר השדות שוברים את ההתראה בחלק מהדפדפנים) */
+function buildBrowserNotificationOptions(options = {}) {
+  const taskId = options.taskId || options.data?.taskId;
+  const {
+    taskId: _t,
+    soundType: _s,
+    playSound: _p,
+    ...rest
+  } = options;
+  const allowedKeys = new Set([
+    'body', 'icon', 'badge', 'tag', 'data', 'dir', 'lang', 'silent',
+    'requireInteraction', 'renotify', 'timestamp', 'vibrate', 'image', 'actions'
+  ]);
+  const cleaned = {};
+  Object.keys(rest).forEach((k) => {
+    if (allowedKeys.has(k)) cleaned[k] = rest[k];
+  });
+  if (taskId && cleaned.data === undefined) {
+    cleaned.data = { taskId };
+  }
+  return cleaned;
+}
+
 function sendLocalNotification(title, options = {}) {
   if (!isNotificationSupported()) return null;
   if (Notification.permission !== 'granted') return null;
@@ -108,7 +136,7 @@ function sendLocalNotification(title, options = {}) {
       dir: 'rtl',
       lang: 'he',
       requireInteraction: true,
-      ...options
+      ...buildBrowserNotificationOptions(options)
     });
 
     notification.onclick = () => {
@@ -131,11 +159,16 @@ export function NotificationProvider({ children }) {
   const [settings, setSettings] = useState(DEFAULT_SETTINGS);
   const [permission, setPermission] = useState('default');
 
-  // בדיקת הרשאות בעליה
+  // בדיקת הרשאות בעליה + רענון כשחוזרים ללשונית (המשתמש אולי שינה בהגדרות הדפדפן)
   useEffect(() => {
-    if (isNotificationSupported()) {
-      setPermission(Notification.permission);
-    }
+    if (!isNotificationSupported()) return;
+    const sync = () => setPermission(Notification.permission);
+    sync();
+    const onVis = () => {
+      if (document.visibilityState === 'visible') sync();
+    };
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
   }, []);
 
   // טעינת הגדרות מ-localStorage

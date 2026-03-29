@@ -142,11 +142,15 @@ function TaskTimerWithInterruptions({ task, onUpdate, onComplete, onTimeUpdate }
         interruptionType,
         interruptionStart: interruptionStart?.toISOString(),
         totalInterruptionSeconds,
-        interruptions
+        interruptions,
+        budgetMinutes:
+          (targetMinutes && targetMinutes > 0)
+            ? targetMinutes
+            : (estimated > 0 ? estimated : 30)
       };
       localStorage.setItem(timerStorageKey, JSON.stringify(data));
     }
-  }, [timerStorageKey, currentTask?.id, startTime, isRunning, isPaused, isInterrupted, interruptionType, interruptionStart, totalInterruptionSeconds, interruptions]);
+  }, [timerStorageKey, currentTask?.id, startTime, isRunning, isPaused, isInterrupted, interruptionType, interruptionStart, totalInterruptionSeconds, interruptions, targetMinutes, estimated]);
 
   useEffect(() => {
     saveToStorage();

@@ -66,21 +66,27 @@ function TaskTimer({ task, onUpdate, onComplete }) {
       } else {
         localStorage.removeItem('zmanit_active_timer');
       }
+
+      const budgetMinutes =
+        (targetMinutes && targetMinutes > 0)
+          ? targetMinutes
+          : (currentTask?.estimated_duration ? parseInt(currentTask.estimated_duration, 10) : 30);
       
       // שמירת נתוני הטיימר בפורמט שמנהל ההתראות מצפה לו
       const timerData = {
         isRunning: running,
         startTime: startTimeValue ? startTimeValue.toISOString() : null,
         accumulatedTime: accumulatedMs,
-        elapsed: accumulatedMs
+        elapsed: accumulatedMs,
+        budgetMinutes
       };
       localStorage.setItem(`timer_v2_${taskId}`, JSON.stringify(timerData));
       
-      console.log('🔄 [Timer] סנכרון עם מנהל ההתראות:', { taskId, running, accumulatedMs });
+      console.log('🔄 [Timer] סנכרון עם מנהל ההתראות:', { taskId, running, accumulatedMs, budgetMinutes });
     } catch (e) {
       console.error('🔄 [Timer] שגיאה בסנכרון:', e);
     }
-  }, []);
+  }, [targetMinutes, currentTask?.estimated_duration]);
   
   const clearTimerFromNotificationManager = useCallback((taskId) => {
     if (!taskId) return;
@@ -409,13 +415,18 @@ function TaskTimer({ task, onUpdate, onComplete }) {
     if (currentTask?.id) {
       try {
         const accumulatedMs = elapsedSeconds * 1000;
+        const budgetMinutes =
+          (targetMinutes && targetMinutes > 0)
+            ? targetMinutes
+            : (currentTask?.estimated_duration ? parseInt(currentTask.estimated_duration, 10) : 30);
         const timerData = {
           isRunning: false,
           isPaused: true,
           pausedAt: new Date().toISOString(),
           startTime: startTime ? startTime.toISOString() : null,
           accumulatedTime: accumulatedMs,
-          elapsed: accumulatedMs
+          elapsed: accumulatedMs,
+          budgetMinutes
         };
         localStorage.setItem(`timer_v2_${currentTask.id}`, JSON.stringify(timerData));
         // לא מוחקים את zmanit_active_timer - מנהל ההתראות יבדוק isPaused

@@ -29,7 +29,7 @@ const CONFIG = {
   USE_LEGACY_IDLE_POPUP: false,
 
   // מרווחי בדיקה
-  CHECK_INTERVAL_MS: 30 * 1000,        // בדיקה כל 30 שניות
+  CHECK_INTERVAL_MS: 10 * 1000,        // בדיקה כל 10 שניות (טיימר/התראות מדויקות יותר)
   GRACE_PERIOD_MS: 30 * 1000,           // 30 שניות חסד בתחילת סשן (מספיק לטעינת נתונים)
   
   // מרווחים בין התראות (בדקות)
@@ -354,6 +354,23 @@ function getParentTaskId(task) {
   return task.parent_task_id || task.id;
 }
 
+/**
+ * תקציב זמן למשימה (דקות) — מה-DB, אחרת מ-timer_v2_ (נשמר מהטיימר), אחרת ברירת מחדל
+ */
+function getTimerBudgetMinutes(taskId, task) {
+  const fromDb = parseInt(task?.estimated_duration, 10);
+  if (Number.isFinite(fromDb) && fromDb > 0) return fromDb;
+  try {
+    const raw = localStorage.getItem(`timer_v2_${taskId}`);
+    if (raw) {
+      const d = JSON.parse(raw);
+      const b = parseInt(d.budgetMinutes ?? d.targetMinutes, 10);
+      if (Number.isFinite(b) && b > 0) return b;
+    }
+  } catch (e) {}
+  return 30;
+}
+
 // ============================================
 // הוק ניהול התראות
 // ============================================
@@ -462,8 +479,8 @@ export function useUnifiedNotifications() {
    * בדיקת משימות ושליחת התראות
    */
   const checkAndNotify = useCallback(() => {
-    if (!tasks || tasks.length === 0) return;
-    
+    const taskList = Array.isArray(tasks) ? tasks : [];
+
     const now = new Date();
     const today = toLocalISODate(now);
     const currentMinutes = now.getHours() * 60 + now.getMinutes();
@@ -494,32 +511,39 @@ export function useUnifiedNotifications() {
     // ========================================
     if (hasRunningTimer || hasInterruptedTimer) {
       const activeTaskId = timerInfo.taskId;
-      const activeTask = tasks.find(t => t.id === activeTaskId);
-      
-      // בודקים רק את המשימה הפעילה (אזהרת סיום זמן)
-      if (activeTask?.estimated_duration) {
+      const activeTask = taskList.find(t => t.id === activeTaskId);
+      const budgetMinutes = getTimerBudgetMinutes(activeTaskId, activeTask);
+      const taskTitle = activeTask?.title || 'משימה נוכחית';
+      const taskForNotify = activeTask || {
+        id: activeTaskId,
+        title: taskTitle,
+        parent_task_id: null
+      };
+
+      // בודקים רק את המשימה הפעילה (אזהרת סיום זמן) — גם בלי estimated_duration ב-DB אם נשמר budget ב-timer_v2_
+      if (budgetMinutes > 0) {
         // ✅ תיקון: כולל את time_spent מהDB + זמן הסשן הנוכחי מהטיימר
-        const timerElapsed = getElapsedTimeFromTimer(activeTask.id);
-        const dbTimeSpent = parseInt(activeTask.time_spent) || 0;
+        const timerElapsed = getElapsedTimeFromTimer(activeTaskId);
+        const dbTimeSpent = activeTask ? (parseInt(activeTask.time_spent, 10) || 0) : 0;
         const totalTimeSpent = dbTimeSpent + timerElapsed;
-        const remaining = activeTask.estimated_duration - totalTimeSpent;
+        const remaining = budgetMinutes - totalTimeSpent;
         
         // 5 דקות לסיום
         if (remaining > 0 && remaining <= CONFIG.THRESHOLD.TIME_ENDING) {
-          if (canNotifyForTask(activeTask, 'ending-soon', 3)) {
-            sendNotification(`⏳ ${activeTask.title}`, {
+          if (canNotifyForTask(taskForNotify, 'ending-soon', 3)) {
+            sendNotification(`⏳ ${taskTitle}`, {
               body: `נשארו ${remaining} דקות`,
-              tag: `task-ending-${activeTask.id}`,
-              taskId: activeTask.id,
+              tag: `task-ending-${activeTaskId}`,
+              taskId: activeTaskId,
               soundType: 'warning'
             });
-            toast(`⏳ נשארו ${remaining} דקות ל-${activeTask.title}`, { duration: 5000, icon: '⏰' });
-            markNotifiedForTask(activeTask, 'ending-soon');
+            toast(`⏳ נשארו ${remaining} דקות ל-${taskTitle}`, { duration: 5000, icon: '⏰' });
+            markNotifiedForTask(taskForNotify, 'ending-soon');
 
             setTimerTimeUpPopup(null);
             setTimerEndingPopup({
-              taskId: activeTask.id,
-              taskTitle: activeTask.title,
+              taskId: activeTaskId,
+              taskTitle,
               remainingMinutes: remaining
             });
           }
@@ -527,20 +551,20 @@ export function useUnifiedNotifications() {
         
         // הזמן נגמר
         if (remaining <= 0) {
-          if (canNotifyForTask(activeTask, 'time-up', 5)) {
-            sendNotification(`🔔 הזמן נגמר: ${activeTask.title}`, {
+          if (canNotifyForTask(taskForNotify, 'time-up', 5)) {
+            sendNotification(`🔔 הזמן נגמר: ${taskTitle}`, {
               body: 'הזמן המוקצב הסתיים',
-              tag: `task-timeup-${activeTask.id}`,
-              taskId: activeTask.id,
+              tag: `task-timeup-${activeTaskId}`,
+              taskId: activeTaskId,
               soundType: 'warning'
             });
-            toast.error(`🔔 הזמן נגמר: ${activeTask.title}`, { duration: 8000 });
-            markNotifiedForTask(activeTask, 'time-up');
+            toast.error(`🔔 הזמן נגמר: ${taskTitle}`, { duration: 8000 });
+            markNotifiedForTask(taskForNotify, 'time-up');
 
             setTimerEndingPopup(null);
             setTimerTimeUpPopup({
-              taskId: activeTask.id,
-              taskTitle: activeTask.title
+              taskId: activeTaskId,
+              taskTitle
             });
           }
         }
@@ -559,7 +583,7 @@ export function useUnifiedNotifications() {
       
       if (pausedMinutes >= CONFIG.THRESHOLD.PAUSED_TIMER) {
         if (canNotify('paused-timer-too-long', CONFIG.MIN_INTERVAL.PAUSED_TIMER)) {
-          const pausedTask = tasks.find(t => t.id === timerInfo.taskId);
+          const pausedTask = taskList.find(t => t.id === timerInfo.taskId);
           const taskTitle = pausedTask?.title || 'משימה';
           
           logNotificationToHistory('paused', taskTitle, `מושהית ${pausedMinutes} דקות`);
@@ -597,10 +621,10 @@ export function useUnifiedNotifications() {
     // ✅ תיקון: hasActiveTimer כולל גם מושהה, אז צריך לבדוק ספציפית
     const hasNoWorkingTimer = !hasRunningTimer && !timerInfo?.isPaused && !hasInterruptedTimer;
     
-    if ((isWorkHours || tasks.some(t => !t.is_completed && !t.is_project && t.due_date === today)) && hasNoWorkingTimer && !CONFIG.USE_LEGACY_IDLE_POPUP) {
+    if ((isWorkHours || taskList.some(t => !t.is_completed && !t.is_project && t.due_date === today)) && hasNoWorkingTimer && !CONFIG.USE_LEGACY_IDLE_POPUP) {
       if (canNotify('work-hours-no-timer', CONFIG.MIN_INTERVAL.NO_TIMER)) {
         // ✅ תיקון v3.1: מסננים משימות הוריות!
-        const pendingTasks = tasks.filter(t => 
+        const pendingTasks = taskList.filter(t => 
           t.due_date === today && 
           !t.is_completed && 
           !t.is_project  // לא כוללים משימות הוריות
@@ -678,7 +702,7 @@ export function useUnifiedNotifications() {
     // ========================================
     if (hasNoWorkingTimer) {
       // ✅ תיקון v3.1: מסננים משימות הוריות!
-      const todayTasks = tasks.filter(task => {
+      const todayTasks = taskList.filter(task => {
         if (task.is_completed || task.is_project || task.was_deferred) return false;
         const taskDate = normalizeTaskDate(task.due_date);
         return taskDate === today && task.due_time;
@@ -793,7 +817,7 @@ export function useUnifiedNotifications() {
     // 5. התראת פיגור יומי מול קיבולת היום
     // ========================================
     if (hasNoWorkingTimer && isWorkHours) {
-      const todayPending = tasks.filter(t =>
+      const todayPending = taskList.filter(t =>
         !t.is_completed &&
         !t.is_project &&
         !t.was_deferred &&

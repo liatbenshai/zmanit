@@ -51,7 +51,7 @@ function NotificationBanner() {
           initial={{ opacity: 0, y: -50 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -50 }}
-          className="fixed top-20 left-4 right-4 md:left-auto md:right-4 md:w-96 z-50"
+          className="fixed top-20 left-4 right-4 md:left-auto md:right-4 md:w-96 z-[100003]"
         >
           <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 p-4">
             <div className="flex gap-4">
