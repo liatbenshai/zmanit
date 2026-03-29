@@ -1,0 +1,615 @@
+import { useMemo, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { TASK_TYPES } from '../../config/taskTypes';
+import { suggestWeeklyBalance, suggestDailyReschedule } from '../../utils/urgentRescheduler';
+import { getSplitRecommendation, splitTask } from '../../utils/smartTaskSplitter';
+import toast from 'react-hot-toast';
+
+/**
+ * פאנל המלצות חכמות
+ * מנתח את דפוסי העבודה ומציע שיפורים - עם כפתורי פעולה!
+ */
+function SmartRecommendationsPanel({ tasks, onUpdateTask, onAddTask, onRefresh }) {
+  const [expandedCategory, setExpandedCategory] = useState(null);
+  const [dismissedRecs, setDismissedRecs] = useState(() => {
+    // שמירת המלצות שנדחו ב-localStorage
+    const saved = localStorage.getItem('dismissed_recommendations');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [processingRec, setProcessingRec] = useState(null);
+
+  // דחיית המלצה
+  const dismissRecommendation = useCallback((recId) => {
+    const newDismissed = [...dismissedRecs, { id: recId, dismissedAt: new Date().toISOString() }];
+    setDismissedRecs(newDismissed);
+    localStorage.setItem('dismissed_recommendations', JSON.stringify(newDismissed));
+    toast('ההמלצה הוסתרה', { icon: '👋' });
+  }, [dismissedRecs]);
+
+  // ביצוע פעולה על המלצה
+  const executeRecommendation = useCallback(async (rec) => {
+    setProcessingRec(rec.id);
+    
+    try {
+      switch (rec.action) {
+        case 'split': {
+          // פיצול משימה
+          const task = tasks.find(t => t.id === rec.taskId);
+          if (task && onAddTask) {
+            const splitResult = splitTask(task);
+            if (splitResult.parts && splitResult.parts.length > 0) {
+              // יצירת משימות-בנות
+              for (const part of splitResult.parts) {
+                await onAddTask({
+                  title: part.title,
+                  estimated_duration: part.estimatedDuration,
+                  quadrant: task.quadrant,
+                  due_date: part.suggestedDate || task.due_date,
+                  parent_task_id: task.id,
+                  task_type: task.task_type
+                });
+              }
+              // עדכון המשימה המקורית כפרויקט
+              if (onUpdateTask) {
+                await onUpdateTask(task.id, { is_project: true });
+              }
+              toast.success(`המשימה פוצלה ל-${splitResult.parts.length} חלקים!`);
+              dismissRecommendation(rec.id);
+              if (onRefresh) onRefresh();
+            }
+          }
+          break;
+        }
+        
+        case 'reschedule': {
+          // 🔧 תיקון: בדיקה אם זה המלצה כללית או ספציפית
+          if (rec.taskId) {
+            // המלצה על משימה ספציפית
+            const tomorrow = new Date();
+            tomorrow.setDate(tomorrow.getDate() + 1);
+            await onUpdateTask(rec.taskId, { 
+              due_date: tomorrow.toISOString().split('T')[0] 
+            });
+            toast.success('המשימה הועברה למחר');
+            dismissRecommendation(rec.id);
+            if (onRefresh) onRefresh();
+          } else {
+            // 🔧 המלצה כללית (daily-reschedule) - מעבירים את כל המשימות שניתן לדחות
+            const dailyReschedule = suggestDailyReschedule(tasks);
+            if (dailyReschedule.suggestions && dailyReschedule.suggestions.length > 0) {
+              const tomorrow = new Date();
+              tomorrow.setDate(tomorrow.getDate() + 1);
+              const tomorrowISO = tomorrow.toISOString().split('T')[0];
+              
+              let movedCount = 0;
+              for (const suggestion of dailyReschedule.suggestions) {
+                if (suggestion.canDefer && suggestion.task?.id) {
+                  await onUpdateTask(suggestion.task.id, { due_date: tomorrowISO });
+                  movedCount++;
+                }
+              }
+              
+              if (movedCount > 0) {
+                toast.success(`${movedCount} משימות הועברו למחר!`);
+                dismissRecommendation(rec.id);
+                if (onRefresh) onRefresh();
+              } else {
+                toast('אין משימות שאפשר להעביר', { icon: '🤷' });
+              }
+            }
+          }
+          break;
+        }
+
+        case 'balance': {
+          // איזון עומס - הצעה לפעולה
+          toast('פתחי את תצוגת השבוע כדי לגרור משימות בין ימים', { 
+            icon: '📅',
+            duration: 4000 
+          });
+          break;
+        }
+
+        case 'adjust':
+        case 'adjust-type': {
+          // התאמת הערכות - הצעה לפעולה
+          toast('המערכת תתחשב בזה בהערכות העתידיות', { 
+            icon: '🎯',
+            duration: 3000 
+          });
+          dismissRecommendation(rec.id);
+          break;
+        }
+
+        default:
+          toast('המלצה התקבלה', { icon: '✅' });
+          dismissRecommendation(rec.id);
+      }
+    } catch (error) {
+      console.error('שגיאה בביצוע המלצה:', error);
+      toast.error('שגיאה בביצוע הפעולה');
+    } finally {
+      setProcessingRec(null);
+    }
+  }, [tasks, onAddTask, onUpdateTask, onRefresh, dismissRecommendation]);
+
+  // יצירת המלצות (עם סינון נדחות)
+  const recommendations = useMemo(() => {
+    const allRecommendations = [];
+    const today = new Date().toISOString().split('T')[0];
+    const activeTasks = tasks.filter(t => !t.is_completed);
+    const completedTasks = tasks.filter(t => t.is_completed);
+    
+    // סינון המלצות שנדחו (רק ב-24 שעות האחרונות)
+    const recentDismissed = dismissedRecs
+      .filter(d => {
+        const dismissedTime = new Date(d.dismissedAt);
+        const hoursSince = (Date.now() - dismissedTime) / (1000 * 60 * 60);
+        return hoursSince < 24;
+      })
+      .map(d => d.id);
+
+    // --- 1. המלצות על איזון עומס ---
+    const weekBalance = suggestWeeklyBalance(tasks);
+    if (!weekBalance.isBalanced) {
+      allRecommendations.push({
+        id: 'week-balance',
+        category: 'workload',
+        priority: 'high',
+        icon: '⚖️',
+        title: 'איזון עומס שבועי',
+        message: weekBalance.summary,
+        action: 'balance',
+        details: weekBalance.balanceSuggestions.map(s => 
+          `העבר "${s.task.title}" מיום ${s.fromDayName} ליום ${s.toDayName}`
+        )
+      });
+    }
+
+    // --- 2. המלצות על משימות שלא הושלמו ---
+    const dailyReschedule = suggestDailyReschedule(tasks);
+    // 🔧 מציגים המלצה רק אם יש משימות שאפשר לדחות
+    if (dailyReschedule.hasUnfinished && dailyReschedule.suggestions && dailyReschedule.suggestions.length > 0) {
+      allRecommendations.push({
+        id: 'daily-reschedule',
+        category: 'tasks',
+        priority: 'low', // לא דחוף כי אלה משימות שאפשר לדחות
+        icon: '⏳',
+        title: `${dailyReschedule.suggestions.length} משימות אפשר להעביר`,
+        message: dailyReschedule.summary,
+        action: 'reschedule',
+        details: dailyReschedule.suggestions.slice(0, 3).map(s => 
+          `${s.task.title}: ${s.suggestedAction}`
+        )
+      });
+    }
+
+    // --- 3. המלצות על משימות ארוכות מדי ---
+    const longTasks = activeTasks.filter(t => 
+      (t.estimated_duration || 0) > 60
+    );
+    longTasks.forEach(task => {
+      const recommendation = getSplitRecommendation(task);
+      if (recommendation.shouldSplit) {
+        allRecommendations.push({
+          id: `split-${task.id}`,
+          category: 'optimization',
+          priority: 'low',
+          icon: '✂️',
+          title: `פצל את "${task.title}"`,
+          message: `משימה של ${task.estimated_duration} דקות. מומלץ לפצל ל-${recommendation.recommendation.numParts} חלקים`,
+          action: 'split',
+          taskId: task.id
+        });
+      }
+    });
+
+    // --- 4. ניתוח דיוק הערכות ---
+    if (completedTasks.length >= 5) {
+      const withTimeData = completedTasks.filter(t => t.time_spent && t.estimated_duration);
+      if (withTimeData.length >= 5) {
+        const avgRatio = withTimeData.reduce((sum, t) => {
+          return sum + (t.time_spent / (t.estimated_duration || 30));
+        }, 0) / withTimeData.length;
+
+        if (avgRatio > 1.3) {
+          allRecommendations.push({
+            id: 'underestimate',
+            category: 'accuracy',
+            priority: 'medium',
+            icon: '📏',
+            title: 'הערכות זמן נמוכות מדי',
+            message: `בממוצע, המשימות לוקחות ${Math.round((avgRatio - 1) * 100)}% יותר זמן מהמשוער. נסה להוסיף מרווח ביטחון`,
+            action: 'adjust',
+            details: [
+              'הוסף 30% לכל הערכת זמן',
+              'השתמש בטיימר כדי ללמוד את הקצב האמיתי',
+              'פצל משימות גדולות לקטנות יותר'
+            ]
+          });
+        } else if (avgRatio < 0.7) {
+          allRecommendations.push({
+            id: 'overestimate',
+            category: 'accuracy',
+            priority: 'low',
+            icon: '🎯',
+            title: 'את מהירה ממה שחשבת!',
+            message: `בממוצע, המשימות נגמרות ${Math.round((1 - avgRatio) * 100)}% יותר מהר. יכולה להוסיף עוד משימות`,
+            action: 'info',
+            positive: true
+          });
+        }
+
+        // ניתוח לפי סוג משימה
+        const byType = {};
+        withTimeData.forEach(t => {
+          const type = t.task_type || 'other';
+          if (!byType[type]) {
+            byType[type] = { tasks: [], totalRatio: 0 };
+          }
+          byType[type].tasks.push(t);
+          byType[type].totalRatio += t.time_spent / (t.estimated_duration || 30);
+        });
+
+        Object.entries(byType).forEach(([type, data]) => {
+          if (data.tasks.length >= 3) {
+            const avgTypeRatio = data.totalRatio / data.tasks.length;
+            const typeInfo = TASK_TYPES[type] || { name: type, icon: '📋' };
+            
+            if (avgTypeRatio > 1.4) {
+              allRecommendations.push({
+                id: `type-slow-${type}`,
+                category: 'accuracy',
+                priority: 'medium',
+                icon: typeInfo.icon,
+                title: `${typeInfo.name} לוקח יותר זמן`,
+                message: `משימות מסוג ${typeInfo.name} לוקחות ${Math.round((avgTypeRatio - 1) * 100)}% יותר זמן מהמשוער`,
+                action: 'adjust-type',
+                taskType: type
+              });
+            }
+          }
+        });
+      }
+    }
+
+    // --- 5. ניתוח התחלות באיחור ---
+    try {
+      const lateStartsHistory = JSON.parse(localStorage.getItem('late_starts_history') || '[]');
+      const recentLateStarts = lateStartsHistory.filter(record => {
+        const recordDate = new Date(record.date);
+        const daysSince = (Date.now() - recordDate) / (1000 * 60 * 60 * 24);
+        return daysSince <= 14; // שבועיים אחרונים
+      });
+
+      if (recentLateStarts.length >= 3) {
+        const avgLateMinutes = Math.round(
+          recentLateStarts.reduce((sum, r) => sum + r.lateMinutes, 0) / recentLateStarts.length
+        );
+        
+        // ניתוח לפי שעות
+        const lateByHour = {};
+        recentLateStarts.forEach(r => {
+          const hour = r.scheduledTime?.split(':')[0] || '00';
+          lateByHour[hour] = (lateByHour[hour] || 0) + 1;
+        });
+        const problematicHour = Object.entries(lateByHour)
+          .sort((a, b) => b[1] - a[1])[0];
+        
+        // ניתוח לפי סוג משימה
+        const lateByType = {};
+        recentLateStarts.forEach(r => {
+          const type = r.taskType || 'general';
+          lateByType[type] = (lateByType[type] || 0) + 1;
+        });
+        const problematicType = Object.entries(lateByType)
+          .sort((a, b) => b[1] - a[1])[0];
+
+        const details = [];
+        if (problematicHour && problematicHour[1] >= 2) {
+          details.push(`שעה בעייתית: ${problematicHour[0]}:00 (${problematicHour[1]} פעמים)`);
+        }
+        if (problematicType && problematicType[1] >= 2) {
+          const typeInfo = TASK_TYPES[problematicType[0]] || { name: problematicType[0] };
+          details.push(`סוג בעייתי: ${typeInfo.name} (${problematicType[1]} פעמים)`);
+        }
+        details.push(`💡 טיפ: נסי לתזמן משימות ${avgLateMinutes} דקות מאוחר יותר`);
+
+        allRecommendations.push({
+          id: 'late-starts-pattern',
+          category: 'accuracy',
+          priority: recentLateStarts.length >= 5 ? 'high' : 'medium',
+          icon: '⏰',
+          title: `התחלת באיחור ${recentLateStarts.length} פעמים לאחרונה`,
+          message: `ממוצע איחור: ${avgLateMinutes} דקות. המערכת לומדת את הדפוסים שלך`,
+          action: 'adjust',
+          details
+        });
+      }
+    } catch (e) {
+      console.error('שגיאה בניתוח איחורים:', e);
+    }
+
+    // --- 6. התראות על עומס יתר ---
+    const todayTasks = activeTasks.filter(t => t.due_date === today);
+    const todayTotal = todayTasks.reduce((sum, t) => sum + (t.estimated_duration || 30), 0);
+    const availableToday = 8 * 60; // 8 שעות
+
+    if (todayTotal > availableToday) {
+      allRecommendations.push({
+        id: 'overload-today',
+        category: 'workload',
+        priority: 'high',
+        icon: '🔥',
+        title: 'עומס יתר היום!',
+        message: `יש ${Math.round((todayTotal - availableToday) / 60)} שעות יותר מדי מתוכננות להיום`,
+        action: 'reschedule',
+        urgent: true
+      });
+    }
+
+    // --- 6. המלצות על הרגלים ---
+    if (completedTasks.length >= 10) {
+      // ניתוח שעות עבודה
+      const hourCounts = {};
+      completedTasks.forEach(t => {
+        if (t.completed_at) {
+          const hour = new Date(t.completed_at).getHours();
+          hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+        }
+      });
+
+      const peakHours = Object.entries(hourCounts)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 2)
+        .map(([hour]) => parseInt(hour));
+
+      if (peakHours.length >= 2) {
+        allRecommendations.push({
+          id: 'peak-hours',
+          category: 'habits',
+          priority: 'info',
+          icon: '⏰',
+          title: 'שעות שיא',
+          message: `את הכי פרודוקטיבית בשעות ${peakHours[0]}:00 ו-${peakHours[1]}:00. תכנני משימות חשובות לשעות האלה`,
+          action: 'info',
+          positive: true
+        });
+      }
+    }
+
+    // --- 7. המלצה להשתמש בטיימר ---
+    const tasksWithoutTimeTracking = completedTasks.filter(t => !t.time_spent || t.time_spent === 0);
+    if (tasksWithoutTimeTracking.length > completedTasks.length * 0.5 && completedTasks.length >= 5) {
+      allRecommendations.push({
+        id: 'use-timer',
+        category: 'habits',
+        priority: 'medium',
+        icon: '⏱️',
+        title: 'השתמשי בטיימר',
+        message: 'רוב המשימות נסגרות ללא מעקב זמן. שימוש בטיימר יעזור למערכת ללמוד את הקצב שלך',
+        action: 'info'
+      });
+    }
+
+    // מיון לפי עדיפות וסינון נדחות
+    const priorityOrder = { high: 0, medium: 1, low: 2, info: 3 };
+    return allRecommendations
+      .filter(rec => !recentDismissed.includes(rec.id))
+      .sort((a, b) => 
+        (priorityOrder[a.priority] || 3) - (priorityOrder[b.priority] || 3)
+      );
+  }, [tasks, dismissedRecs]);
+
+  // קיבוץ לפי קטגוריה
+  const byCategory = useMemo(() => {
+    const categories = {
+      workload: { name: 'עומס עבודה', icon: '⚖️', items: [] },
+      tasks: { name: 'משימות', icon: '📋', items: [] },
+      accuracy: { name: 'דיוק הערכות', icon: '🎯', items: [] },
+      optimization: { name: 'אופטימיזציה', icon: '⚡', items: [] },
+      habits: { name: 'הרגלים', icon: '📈', items: [] }
+    };
+
+    recommendations.forEach(rec => {
+      const cat = rec.category || 'tasks';
+      if (categories[cat]) {
+        categories[cat].items.push(rec);
+      }
+    });
+
+    return Object.entries(categories)
+      .filter(([_, data]) => data.items.length > 0)
+      .map(([key, data]) => ({ key, ...data }));
+  }, [recommendations]);
+
+  // צבעי עדיפות
+  const priorityColors = {
+    high: 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-700',
+    medium: 'bg-yellow-50 dark:bg-yellow-900/20 border-yellow-200 dark:border-yellow-700',
+    low: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-700',
+    info: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-700'
+  };
+
+  const priorityTextColors = {
+    high: 'text-red-700 dark:text-red-300',
+    medium: 'text-yellow-700 dark:text-yellow-300',
+    low: 'text-blue-700 dark:text-blue-300',
+    info: 'text-green-700 dark:text-green-300'
+  };
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="card p-6"
+    >
+      <h3 className="text-lg font-bold text-gray-900 dark:text-white mb-4">
+        🤖 המלצות חכמות
+      </h3>
+
+      {recommendations.length === 0 ? (
+        <div className="text-center py-8">
+          <span className="text-4xl block mb-4">✨</span>
+          <p className="text-gray-600 dark:text-gray-400">
+            הכל נראה מצוין! אין המלצות כרגע
+          </p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {/* המלצות חשובות ראשונות - עם כפתורי פעולה */}
+          {recommendations.filter(r => r.priority === 'high').map(rec => (
+            <motion.div
+              key={rec.id}
+              initial={{ opacity: 0, x: -20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className={`p-4 rounded-lg border ${priorityColors[rec.priority]}`}
+            >
+              <div className="flex items-start gap-3">
+                <span className="text-2xl">{rec.icon}</span>
+                <div className="flex-1">
+                  <div className={`font-medium ${priorityTextColors[rec.priority]}`}>
+                    {rec.title}
+                  </div>
+                  <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                    {rec.message}
+                  </p>
+                  {rec.details && rec.details.length > 0 && (
+                    <ul className="mt-2 text-sm text-gray-500 space-y-1">
+                      {rec.details.map((detail, i) => (
+                        <li key={i} className="flex items-center gap-1">
+                          <span className="text-xs">•</span> {detail}
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                  
+                  {/* כפתורי פעולה */}
+                  <div className="flex gap-2 mt-3">
+                    <button
+                      onClick={() => executeRecommendation(rec)}
+                      disabled={processingRec === rec.id}
+                      className={`
+                        flex-1 px-3 py-2 rounded-lg text-sm font-medium
+                        transition-colors
+                        ${processingRec === rec.id 
+                          ? 'bg-gray-200 text-gray-500 cursor-wait'
+                          : 'bg-green-500 hover:bg-green-600 text-white'
+                        }
+                      `}
+                    >
+                      {processingRec === rec.id ? '⏳ מבצע...' : '✅ קבל'}
+                    </button>
+                    <button
+                      onClick={() => dismissRecommendation(rec.id)}
+                      className="px-3 py-2 rounded-lg text-sm font-medium bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 dark:hover:bg-gray-600 text-gray-700 dark:text-gray-300 transition-colors"
+                    >
+                      ❌ דחה
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
+
+          {/* שאר ההמלצות לפי קטגוריה */}
+          {byCategory.map(category => {
+            const nonHighItems = category.items.filter(r => r.priority !== 'high');
+            if (nonHighItems.length === 0) return null;
+
+            const isExpanded = expandedCategory === category.key;
+
+            return (
+              <div key={category.key}>
+                <button
+                  onClick={() => setExpandedCategory(isExpanded ? null : category.key)}
+                  className="w-full flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span>{category.icon}</span>
+                    <span className="font-medium text-gray-700 dark:text-gray-300">
+                      {category.name}
+                    </span>
+                    <span className="text-xs bg-gray-200 dark:bg-gray-600 px-2 py-0.5 rounded-full">
+                      {nonHighItems.length}
+                    </span>
+                  </div>
+                  <span className={`transform transition-transform ${isExpanded ? 'rotate-180' : ''}`}>
+                    ▼
+                  </span>
+                </button>
+
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      initial={{ height: 0, opacity: 0 }}
+                      animate={{ height: 'auto', opacity: 1 }}
+                      exit={{ height: 0, opacity: 0 }}
+                      className="overflow-hidden"
+                    >
+                      <div className="mt-2 space-y-2 pl-4">
+                        {nonHighItems.map(rec => (
+                          <div
+                            key={rec.id}
+                            className={`p-3 rounded-lg border ${priorityColors[rec.priority]}`}
+                          >
+                            <div className="flex items-start gap-2">
+                              <span>{rec.icon}</span>
+                              <div className="flex-1">
+                                <div className={`text-sm font-medium ${priorityTextColors[rec.priority]}`}>
+                                  {rec.title}
+                                </div>
+                                <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                                  {rec.message}
+                                </p>
+                                
+                                {/* כפתורי פעולה קומפקטיים */}
+                                {rec.action !== 'info' && (
+                                  <div className="flex gap-2 mt-2">
+                                    <button
+                                      onClick={() => executeRecommendation(rec)}
+                                      disabled={processingRec === rec.id}
+                                      className="px-2 py-1 rounded text-xs font-medium bg-green-100 dark:bg-green-900/30 hover:bg-green-200 dark:hover:bg-green-800/40 text-green-700 dark:text-green-300 transition-colors"
+                                    >
+                                      {processingRec === rec.id ? '⏳' : '✅ בצע'}
+                                    </button>
+                                    <button
+                                      onClick={() => dismissRecommendation(rec.id)}
+                                      className="px-2 py-1 rounded text-xs font-medium bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 text-gray-600 dark:text-gray-400 transition-colors"
+                                    >
+                                      הסתר
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* סיכום */}
+      {recommendations.length > 0 && (
+        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between text-sm text-gray-500">
+            <span>
+              {recommendations.filter(r => r.priority === 'high').length} המלצות דחופות
+            </span>
+            <span>
+              סה"כ {recommendations.length} המלצות
+            </span>
+          </div>
+        </div>
+      )}
+    </motion.div>
+  );
+}
+
+export default SmartRecommendationsPanel;
