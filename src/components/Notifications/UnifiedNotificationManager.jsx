@@ -577,18 +577,16 @@ export function useUnifiedNotifications() {
         parent_task_id: null
       };
 
-      // אם localStorage נשאר עם "טיימר רץ" אבל בפועל התחלת את זה ביום אחר
-      // (למשל סגירת טאב / רענון גדול), זה מייצר "זמן נגמר" גם בלי התחלה.
-      // כאן מנקים טיימר כזה ומאפשרים לפופאפ המזכירה/‏no-timer לעבוד שוב.
+      // אם נשאר בטעות "טיימר פעיל" מיום אחר (למשל אחרי רענון/מעבר מסך),
+      // זה מייצר "הזמן נגמר" גם בלי שהתחלת באמת היום.
+      // לכן: מנקים כל טיימר שה-start שלו לא שייך להיום (ללא תלות בדדליין).
       const startDate = timerInfo?.startTimeMs ? toLocalISODate(new Date(timerInfo.startTimeMs)) : null;
-      const dueDate = activeTask?.due_date ? normalizeTaskDate(activeTask.due_date) : null;
-      const isStaleTimer =
-        !!startDate &&
-        startDate !== today &&
-        (!dueDate || dueDate === today);
+      const isStaleTimer = !!startDate && startDate !== today;
 
       if (isStaleTimer) {
         localStorage.removeItem(`timer_v2_${activeTaskId}`);
+        // ניקוי גם מפורמט ישן (אם קיים)
+        localStorage.removeItem(`timer_${activeTaskId}_startTime`);
         localStorage.removeItem('zmanit_active_timer');
         setTimerEndingPopup(null);
         setTimerTimeUpPopup(null);
