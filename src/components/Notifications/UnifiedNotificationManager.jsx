@@ -1186,6 +1186,11 @@ export function UnifiedNotificationManager() {
       setTimerTimeUpPopup(null);
     }
   };
+
+  // ✅ המשך לעבוד: סוגר את פופאפ "עוד X דקות" בלי לשנות estimated_duration
+  const handleContinueTimerEnding = () => {
+    setTimerEndingPopup(null);
+  };
   
   // פופאפ: זמן נגמר (עדיפות ראשונה)
   if (timerTimeUpPopup) {
@@ -1239,6 +1244,12 @@ export function UnifiedNotificationManager() {
               className="w-full py-3 rounded-xl bg-yellow-500 hover:bg-yellow-600 text-white font-bold text-base shadow-lg"
             >
               ✅ סיימתי
+            </button>
+            <button
+              onClick={handleContinueTimerEnding}
+              className="w-full py-3 rounded-xl bg-green-500 hover:bg-green-600 text-white font-bold text-base shadow-lg"
+            >
+              ▶️ המשך לעבוד (עם הזמן שנשאר)
             </button>
             {extendOptions.map((m) => (
               <button
