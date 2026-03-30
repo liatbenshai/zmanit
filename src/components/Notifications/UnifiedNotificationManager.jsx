@@ -63,13 +63,13 @@ const CONFIG = {
 // DEBUG (לכיבוי/הפעלה מהדפדפן)
 // הפעלה: פתח/י Console והמרי:
 // localStorage.setItem('zmanit_debug_notifications','true')
-const DEBUG_NOTIFICATIONS = (() => {
+function isDebugNotificationsEnabled() {
   try {
     return localStorage.getItem('zmanit_debug_notifications') === 'true';
   } catch {
     return false;
   }
-})();
+}
 
 // ============================================
 // פונקציות עזר
@@ -186,7 +186,7 @@ function getActiveTimerInfo() {
         // טיימר רץ
         if (data.isRunning === true && data.startTime) {
           const startTimeMs = new Date(data.startTime).getTime();
-          if (DEBUG_NOTIFICATIONS) {
+          if (isDebugNotificationsEnabled()) {
             console.log('[UnifiedNotificationManager][timerActive:running]', {
               activeTimerId,
               startTime: data.startTime,
@@ -215,7 +215,7 @@ function getActiveTimerInfo() {
             } catch (e) {}
           }
           const startTimeMs = data.startTime ? new Date(data.startTime).getTime() : null;
-          if (DEBUG_NOTIFICATIONS) {
+          if (isDebugNotificationsEnabled()) {
             console.log('[UnifiedNotificationManager][timerActive:paused]', {
               activeTimerId,
               startTime: data.startTime,
@@ -235,7 +235,7 @@ function getActiveTimerInfo() {
         // טיימר במצב הפרעה נחשב פעיל
         if (data.isInterrupted === true && data.startTime) {
           const startTimeMs = new Date(data.startTime).getTime();
-          if (DEBUG_NOTIFICATIONS) {
+          if (isDebugNotificationsEnabled()) {
             console.log('[UnifiedNotificationManager][timerActive:interrupted]', {
               activeTimerId,
               startTime: data.startTime,
@@ -260,7 +260,7 @@ function getActiveTimerInfo() {
       const oldStartTime = localStorage.getItem(oldTimerKey);
       if (oldStartTime) {
         const startTimeMs = new Date(oldStartTime).getTime();
-        if (DEBUG_NOTIFICATIONS) {
+        if (isDebugNotificationsEnabled()) {
           console.log('[UnifiedNotificationManager][timerActive:legacy]', {
             activeTimerId,
             oldStartTime,
@@ -288,7 +288,7 @@ function getActiveTimerInfo() {
           if (data.isRunning === true && data.startTime) {
             localStorage.setItem('zmanit_active_timer', taskId);
             const startTimeMs = new Date(data.startTime).getTime();
-            if (DEBUG_NOTIFICATIONS) {
+            if (isDebugNotificationsEnabled()) {
               console.log('[UnifiedNotificationManager][timerActive:scanRunning]', {
                 taskId,
                 startTime: data.startTime,
@@ -315,7 +315,7 @@ function getActiveTimerInfo() {
               } catch (e) {}
             }
             const startTimeMs = data.startTime ? new Date(data.startTime).getTime() : null;
-            if (DEBUG_NOTIFICATIONS) {
+            if (isDebugNotificationsEnabled()) {
               console.log('[UnifiedNotificationManager][timerActive:scanPaused]', {
                 taskId,
                 startTime: data.startTime,
@@ -334,7 +334,7 @@ function getActiveTimerInfo() {
           
           if (data.isInterrupted === true && data.startTime) {
             const startTimeMs = new Date(data.startTime).getTime();
-            if (DEBUG_NOTIFICATIONS) {
+            if (isDebugNotificationsEnabled()) {
               console.log('[UnifiedNotificationManager][timerActive:scanInterrupted]', {
                 taskId,
                 startTime: data.startTime,
@@ -364,7 +364,7 @@ function getActiveTimerInfo() {
           localStorage.setItem('zmanit_active_timer', taskId);
         const startTimeValue = localStorage.getItem(key);
         const startTimeMs = startTimeValue ? new Date(startTimeValue).getTime() : null;
-        if (DEBUG_NOTIFICATIONS) {
+        if (isDebugNotificationsEnabled()) {
           console.log('[UnifiedNotificationManager][timerActive:legacyScan]', {
             taskId,
             key,
@@ -653,7 +653,7 @@ export function useUnifiedNotifications() {
       const startDate = timerInfo?.startTimeMs ? toLocalISODate(new Date(timerInfo.startTimeMs)) : null;
       const isStaleTimer = !!startDate && startDate !== today;
 
-      if (DEBUG_NOTIFICATIONS) {
+      if (isDebugNotificationsEnabled()) {
         console.log('[UnifiedNotificationManager][checkActiveTimer]', {
           today,
           nowHHMM: `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`,
@@ -683,7 +683,7 @@ export function useUnifiedNotifications() {
         const totalTimeSpent = dbTimeSpent + timerElapsed;
         const remaining = budgetMinutes - totalTimeSpent;
 
-          if (DEBUG_NOTIFICATIONS) {
+          if (isDebugNotificationsEnabled()) {
             console.log('[UnifiedNotificationManager][timeCalc]', {
               activeTaskId,
               budgetMinutes,
