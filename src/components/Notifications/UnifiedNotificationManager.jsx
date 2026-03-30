@@ -174,7 +174,14 @@ function getActiveTimerInfo() {
         
         // טיימר רץ
         if (data.isRunning === true && data.startTime) {
-          return { taskId: activeTimerId, isRunning: true, isPaused: false, isInterrupted: false };
+          const startTimeMs = new Date(data.startTime).getTime();
+          return {
+            taskId: activeTimerId,
+            isRunning: true,
+            isPaused: false,
+            isInterrupted: false,
+            startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+          };
         }
         
         // טיימר מושהה
@@ -189,12 +196,26 @@ function getActiveTimerInfo() {
               }
             } catch (e) {}
           }
-          return { taskId: activeTimerId, isRunning: false, isPaused: true, pausedAt };
+          const startTimeMs = data.startTime ? new Date(data.startTime).getTime() : null;
+          return {
+            taskId: activeTimerId,
+            isRunning: false,
+            isPaused: true,
+            pausedAt,
+            startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+          };
         }
         
         // טיימר במצב הפרעה נחשב פעיל
         if (data.isInterrupted === true && data.startTime) {
-          return { taskId: activeTimerId, isRunning: false, isPaused: false, isInterrupted: true };
+          const startTimeMs = new Date(data.startTime).getTime();
+          return {
+            taskId: activeTimerId,
+            isRunning: false,
+            isPaused: false,
+            isInterrupted: true,
+            startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+          };
         }
       } else {
         // מפתח יתום - מנקים כדי לא לחסום מנגנון התראות
@@ -205,7 +226,14 @@ function getActiveTimerInfo() {
       const oldTimerKey = `timer_${activeTimerId}_startTime`;
       const oldStartTime = localStorage.getItem(oldTimerKey);
       if (oldStartTime) {
-        return { taskId: activeTimerId, isRunning: true, isPaused: false, isInterrupted: false };
+        const startTimeMs = new Date(oldStartTime).getTime();
+        return {
+          taskId: activeTimerId,
+          isRunning: true,
+          isPaused: false,
+          isInterrupted: false,
+          startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+        };
       }
     }
     
@@ -219,7 +247,14 @@ function getActiveTimerInfo() {
           
           if (data.isRunning === true && data.startTime) {
             localStorage.setItem('zmanit_active_timer', taskId);
-            return { taskId, isRunning: true, isPaused: false, isInterrupted: false };
+            const startTimeMs = new Date(data.startTime).getTime();
+            return {
+              taskId,
+              isRunning: true,
+              isPaused: false,
+              isInterrupted: false,
+              startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+            };
           }
           
           if (data.isPaused === true) {
@@ -232,11 +267,25 @@ function getActiveTimerInfo() {
                 }
               } catch (e) {}
             }
-            return { taskId, isRunning: false, isPaused: true, pausedAt };
+            const startTimeMs = data.startTime ? new Date(data.startTime).getTime() : null;
+            return {
+              taskId,
+              isRunning: false,
+              isPaused: true,
+              pausedAt,
+              startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+            };
           }
           
           if (data.isInterrupted === true && data.startTime) {
-            return { taskId, isRunning: false, isPaused: false, isInterrupted: true };
+            const startTimeMs = new Date(data.startTime).getTime();
+            return {
+              taskId,
+              isRunning: false,
+              isPaused: false,
+              isInterrupted: true,
+              startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+            };
           }
         } catch (e) {
           // התעלם משגיאות parsing
@@ -251,7 +300,15 @@ function getActiveTimerInfo() {
         const taskId = key.replace('timer_', '').replace('_startTime', '');
         if (taskId && taskId.length > 10) { // UUID is long enough
           localStorage.setItem('zmanit_active_timer', taskId);
-          return { taskId, isRunning: true, isPaused: false, isInterrupted: false };
+          const startTimeValue = localStorage.getItem(key);
+          const startTimeMs = startTimeValue ? new Date(startTimeValue).getTime() : null;
+          return {
+            taskId,
+            isRunning: true,
+            isPaused: false,
+            isInterrupted: false,
+            startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+          };
         }
       }
     }
@@ -520,6 +577,23 @@ export function useUnifiedNotifications() {
         parent_task_id: null
       };
 
+      // אם localStorage נשאר עם "טיימר רץ" אבל בפועל התחלת את זה ביום אחר
+      // (למשל סגירת טאב / רענון גדול), זה מייצר "זמן נגמר" גם בלי התחלה.
+      // כאן מנקים טיימר כזה ומאפשרים לפופאפ המזכירה/‏no-timer לעבוד שוב.
+      const startDate = timerInfo?.startTimeMs ? toLocalISODate(new Date(timerInfo.startTimeMs)) : null;
+      const dueDate = activeTask?.due_date ? normalizeTaskDate(activeTask.due_date) : null;
+      const isStaleTimer =
+        !!startDate &&
+        startDate !== today &&
+        (!dueDate || dueDate === today);
+
+      if (isStaleTimer) {
+        localStorage.removeItem(`timer_v2_${activeTaskId}`);
+        localStorage.removeItem('zmanit_active_timer');
+        setTimerEndingPopup(null);
+        setTimerTimeUpPopup(null);
+      } else {
+
       // בודקים רק את המשימה הפעילה (אזהרת סיום זמן) — גם בלי estimated_duration ב-DB אם נשמר budget ב-timer_v2_
       if (budgetMinutes > 0) {
         // ✅ תיקון: כולל את time_spent מהDB + זמן הסשן הנוכחי מהטיימר
@@ -572,6 +646,7 @@ export function useUnifiedNotifications() {
       
       // ✅ תיקון v3.1: לא ממשיכים לבדוק משימות אחרות כשיש טיימר פעיל!
       return;
+      }
     }
     
     // ========================================
