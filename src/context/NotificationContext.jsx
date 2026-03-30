@@ -24,6 +24,14 @@ const SOUND_TYPES = {
   complete: { freq1: 392, freq2: 523, freq3: 659, freq4: 784, duration: 0.15 }  // Victory fanfare
 };
 
+function isDebugNotificationsEnabled() {
+  try {
+    return localStorage.getItem('zmanit_debug_notifications') === 'true';
+  } catch {
+    return false;
+  }
+}
+
 /**
  * בדיקה אם הדפדפן תומך בהתראות
  */
@@ -125,11 +133,23 @@ function sendLocalNotification(title, options = {}) {
   // ✅ תיקון v3.1: אם יש טיימר רץ על משימה אחרת - לא לשלוח התראה
   const taskId = options.taskId || options.data?.taskId;
   if (isTimerActiveForOtherTask(taskId)) {
+    if (isDebugNotificationsEnabled()) {
+      console.log('[NotificationContext] blocked: timer active for other task', { taskId });
+    }
     console.log('🔇 NotificationContext: יש טיימר פעיל - לא שולח התראה על משימה אחרת');
     return null;
   }
 
   try {
+    if (isDebugNotificationsEnabled()) {
+      console.log('[NotificationContext] new Notification(...)', {
+        title,
+        body: options?.body,
+        tag: options?.tag,
+        taskId: taskId || options?.data?.taskId || null,
+        permission: Notification.permission
+      });
+    }
     const notification = new Notification(title, {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
@@ -146,6 +166,9 @@ function sendLocalNotification(title, options = {}) {
 
     return notification;
   } catch (err) {
+    if (isDebugNotificationsEnabled()) {
+      console.error('[NotificationContext] failed to create Notification', err);
+    }
     console.error('שגיאה בשליחת התראה:', err);
     return null;
   }
