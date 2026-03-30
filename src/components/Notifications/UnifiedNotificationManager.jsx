@@ -60,6 +60,17 @@ const CONFIG = {
   }
 };
 
+// DEBUG (לכיבוי/הפעלה מהדפדפן)
+// הפעלה: פתח/י Console והמרי:
+// localStorage.setItem('zmanit_debug_notifications','true')
+const DEBUG_NOTIFICATIONS = (() => {
+  try {
+    return localStorage.getItem('zmanit_debug_notifications') === 'true';
+  } catch {
+    return false;
+  }
+})();
+
 // ============================================
 // פונקציות עזר
 // ============================================
@@ -175,6 +186,13 @@ function getActiveTimerInfo() {
         // טיימר רץ
         if (data.isRunning === true && data.startTime) {
           const startTimeMs = new Date(data.startTime).getTime();
+          if (DEBUG_NOTIFICATIONS) {
+            console.log('[UnifiedNotificationManager][timerActive:running]', {
+              activeTimerId,
+              startTime: data.startTime,
+              startTimeMs,
+            });
+          }
           return {
             taskId: activeTimerId,
             isRunning: true,
@@ -197,6 +215,14 @@ function getActiveTimerInfo() {
             } catch (e) {}
           }
           const startTimeMs = data.startTime ? new Date(data.startTime).getTime() : null;
+          if (DEBUG_NOTIFICATIONS) {
+            console.log('[UnifiedNotificationManager][timerActive:paused]', {
+              activeTimerId,
+              startTime: data.startTime,
+              startTimeMs,
+              pausedAt: pausedAt || null,
+            });
+          }
           return {
             taskId: activeTimerId,
             isRunning: false,
@@ -209,6 +235,13 @@ function getActiveTimerInfo() {
         // טיימר במצב הפרעה נחשב פעיל
         if (data.isInterrupted === true && data.startTime) {
           const startTimeMs = new Date(data.startTime).getTime();
+          if (DEBUG_NOTIFICATIONS) {
+            console.log('[UnifiedNotificationManager][timerActive:interrupted]', {
+              activeTimerId,
+              startTime: data.startTime,
+              startTimeMs,
+            });
+          }
           return {
             taskId: activeTimerId,
             isRunning: false,
@@ -227,6 +260,13 @@ function getActiveTimerInfo() {
       const oldStartTime = localStorage.getItem(oldTimerKey);
       if (oldStartTime) {
         const startTimeMs = new Date(oldStartTime).getTime();
+        if (DEBUG_NOTIFICATIONS) {
+          console.log('[UnifiedNotificationManager][timerActive:legacy]', {
+            activeTimerId,
+            oldStartTime,
+            startTimeMs,
+          });
+        }
         return {
           taskId: activeTimerId,
           isRunning: true,
@@ -248,6 +288,13 @@ function getActiveTimerInfo() {
           if (data.isRunning === true && data.startTime) {
             localStorage.setItem('zmanit_active_timer', taskId);
             const startTimeMs = new Date(data.startTime).getTime();
+            if (DEBUG_NOTIFICATIONS) {
+              console.log('[UnifiedNotificationManager][timerActive:scanRunning]', {
+                taskId,
+                startTime: data.startTime,
+                startTimeMs,
+              });
+            }
             return {
               taskId,
               isRunning: true,
@@ -268,6 +315,14 @@ function getActiveTimerInfo() {
               } catch (e) {}
             }
             const startTimeMs = data.startTime ? new Date(data.startTime).getTime() : null;
+            if (DEBUG_NOTIFICATIONS) {
+              console.log('[UnifiedNotificationManager][timerActive:scanPaused]', {
+                taskId,
+                startTime: data.startTime,
+                startTimeMs,
+                pausedAt,
+              });
+            }
             return {
               taskId,
               isRunning: false,
@@ -279,6 +334,13 @@ function getActiveTimerInfo() {
           
           if (data.isInterrupted === true && data.startTime) {
             const startTimeMs = new Date(data.startTime).getTime();
+            if (DEBUG_NOTIFICATIONS) {
+              console.log('[UnifiedNotificationManager][timerActive:scanInterrupted]', {
+                taskId,
+                startTime: data.startTime,
+                startTimeMs,
+              });
+            }
             return {
               taskId,
               isRunning: false,
@@ -300,15 +362,23 @@ function getActiveTimerInfo() {
         const taskId = key.replace('timer_', '').replace('_startTime', '');
         if (taskId && taskId.length > 10) { // UUID is long enough
           localStorage.setItem('zmanit_active_timer', taskId);
-          const startTimeValue = localStorage.getItem(key);
-          const startTimeMs = startTimeValue ? new Date(startTimeValue).getTime() : null;
-          return {
+        const startTimeValue = localStorage.getItem(key);
+        const startTimeMs = startTimeValue ? new Date(startTimeValue).getTime() : null;
+        if (DEBUG_NOTIFICATIONS) {
+          console.log('[UnifiedNotificationManager][timerActive:legacyScan]', {
             taskId,
-            isRunning: true,
-            isPaused: false,
-            isInterrupted: false,
-            startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
-          };
+            key,
+            startTimeValue,
+            startTimeMs,
+          });
+        }
+        return {
+          taskId,
+          isRunning: true,
+          isPaused: false,
+          isInterrupted: false,
+          startTimeMs: Number.isFinite(startTimeMs) ? startTimeMs : null
+        };
         }
       }
     }
@@ -583,6 +653,19 @@ export function useUnifiedNotifications() {
       const startDate = timerInfo?.startTimeMs ? toLocalISODate(new Date(timerInfo.startTimeMs)) : null;
       const isStaleTimer = !!startDate && startDate !== today;
 
+      if (DEBUG_NOTIFICATIONS) {
+        console.log('[UnifiedNotificationManager][checkActiveTimer]', {
+          today,
+          nowHHMM: `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`,
+          activeTaskId,
+          timerInfo,
+          activeTaskTitle: activeTask?.title || null,
+          budgetMinutes,
+          startDate,
+          isStaleTimer
+        });
+      }
+
       if (isStaleTimer) {
         localStorage.removeItem(`timer_v2_${activeTaskId}`);
         // ניקוי גם מפורמט ישן (אם קיים)
@@ -599,6 +682,17 @@ export function useUnifiedNotifications() {
         const dbTimeSpent = activeTask ? (parseInt(activeTask.time_spent, 10) || 0) : 0;
         const totalTimeSpent = dbTimeSpent + timerElapsed;
         const remaining = budgetMinutes - totalTimeSpent;
+
+          if (DEBUG_NOTIFICATIONS) {
+            console.log('[UnifiedNotificationManager][timeCalc]', {
+              activeTaskId,
+              budgetMinutes,
+              dbTimeSpent,
+              timerElapsed,
+              totalTimeSpent,
+              remaining
+            });
+          }
         
         // 5 דקות לסיום
         if (remaining > 0 && remaining <= CONFIG.THRESHOLD.TIME_ENDING) {
