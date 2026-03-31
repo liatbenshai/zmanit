@@ -1317,6 +1317,26 @@ function DailyView() {
 
   const renderDraggableCard = (block, index, blocksArray) => {
     const isFromGoogle = block.isFromGoogle || block.is_from_google || block.task?.is_from_google || block.isGoogleEvent;
+    const isBreakBlock = block.isBreak || block.blockType === 'break' || block.taskType === 'break';
+
+    if (isBreakBlock) {
+      return (
+        <motion.div
+          key={block.id || `break-${index}`}
+          layout
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3"
+        >
+          <div className="flex items-center justify-between">
+            <div className="font-medium text-amber-800 dark:text-amber-200">☕ הפסקה</div>
+            <div className="text-sm text-amber-700 dark:text-amber-300">
+              {block.startTime} - {block.endTime} ({block.duration || 5} דק׳)
+            </div>
+          </div>
+        </motion.div>
+      );
+    }
     
     return (
     <motion.div

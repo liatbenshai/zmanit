@@ -75,6 +75,7 @@ export const SMART_SCHEDULE_CONFIG = {
 export const BLOCK_TYPES = {
   GOOGLE_EVENT: 'google_event',
   FLEXIBLE_TASK: 'flexible_task',
+  FIXED_TASK: 'fixed_task',
   BREAK: 'break',
   LUNCH: 'lunch'
 };
@@ -670,6 +671,33 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
   const dayNextAvailableWork = new Map();
   const dayNextAvailableHome = new Map();
 
+  const createBreakBlock = (day, startMinute, breakMinutes, isHome, suffix = '') => {
+    if (!Number.isFinite(startMinute) || !Number.isFinite(breakMinutes) || breakMinutes <= 0) return null;
+    const endMinute = startMinute + breakMinutes;
+    return {
+      id: `break-${day.date}-${startMinute}${suffix ? `-${suffix}` : ''}`,
+      taskId: null,
+      task: null,
+      type: 'break',
+      taskType: 'break',
+      category: isHome ? 'home' : 'work',
+      priority: 'normal',
+      title: '☕ הפסקה',
+      startMinute,
+      endMinute,
+      startTime: minutesToTime(startMinute),
+      endTime: minutesToTime(endMinute),
+      duration: breakMinutes,
+      dayDate: day.date,
+      isFixed: true,
+      isBreak: true,
+      isHomeTask: isHome,
+      blockType: BLOCK_TYPES.BREAK,
+      canMove: false,
+      canResize: false
+    };
+  };
+
   // כדי לא לשבץ את "היום הנוכחי" לתוך שעות שכבר עברו,
   // מתחילים מהזמן הנוכחי + מרווח קטן (ברירת מחדל: 5 דק').
   const now = new Date();
@@ -780,9 +808,22 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
           day.totalScheduledMinutes += duration;
           remainingDuration -= duration;
           blocksCreated++;
-          
-          // הבלוק הבא מתחיל מיד אחרי (עם הפסקה קטנה)
-          blockStart = blockStart + duration + config.breakDuration;
+
+          // הבלוק הבא מתחיל אחרי הפסקה (יוצרים בלוק הפסקה אמיתי)
+          const breakStart = blockStart + duration;
+          const breakEnd = breakStart + config.breakDuration;
+          const canPlaceBreak =
+            remainingDuration > 0 &&
+            breakEnd <= dayEnd;
+          if (canPlaceBreak) {
+            const breakBlock = createBreakBlock(day, breakStart, config.breakDuration, isHome, `${task.id}-${blocksCreated}`);
+            if (breakBlock) {
+              day.blocks.push(breakBlock);
+              day.totalScheduledMinutes += breakBlock.duration;
+            }
+          }
+
+          blockStart = breakStart + (canPlaceBreak ? config.breakDuration : 0);
         }
         
         // עדכון הזמן הבא הפנוי ביום
@@ -828,12 +869,27 @@ function scheduleFlexibleTasks(sortedTasks, days, todayISO, config) {
         day.totalScheduledMinutes += blockDuration;
         remainingDuration -= blockDuration;
         blocksCreated++;
+
+        // בלוק הפסקה מפורש בין בלוקים
+        const breakStart = slot.start + blockDuration;
+        const breakEnd = breakStart + config.breakDuration;
+        const canPlaceBreak =
+          breakEnd <= slot.end &&
+          (remainingDuration > 0 || (slot.end - breakEnd >= 15));
+
+        if (canPlaceBreak) {
+          const breakBlock = createBreakBlock(day, breakStart, config.breakDuration, isHome, `${task.id}-${blocksCreated}`);
+          if (breakBlock) {
+            day.blocks.push(breakBlock);
+            day.totalScheduledMinutes += breakBlock.duration;
+          }
+        }
         
         // ✅ עדכון הזמן הבא הפנוי ביום
-        dayNextAvailable.set(day.date, slot.start + blockDuration + config.breakDuration);
+        dayNextAvailable.set(day.date, breakStart + (canPlaceBreak ? config.breakDuration : 0));
         
         // עדכון ה-slot לבלוק הבא
-        slot.start = slot.start + blockDuration + config.breakDuration;
+        slot.start = breakStart + (canPlaceBreak ? config.breakDuration : 0);
       }
       
       // מיון בלוקים
