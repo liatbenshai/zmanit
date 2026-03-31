@@ -187,6 +187,10 @@ function getDateISO(date) {
   return `${year}-${month}-${day}`;
 }
 
+function getManualBreakStorageKey(dateISO) {
+  return `zmanit_manual_break_blocks_${dateISO}`;
+}
+
 /**
  * בדיקה אם התאריך הוא היום
  */
@@ -260,6 +264,7 @@ function DailyView() {
   const [dragOverTime, setDragOverTime] = useState(null);
   const [taskOrder, setTaskOrder] = useState([]);
   const [highlightedTaskId, setHighlightedTaskId] = useState(null); // ✅ משימה מודגשת
+  const [manualBreakBlocks, setManualBreakBlocks] = useState([]);
   const timelineRef = useRef(null);
   
   const [draggedIndex, setDraggedIndex] = useState(null);
@@ -337,6 +342,17 @@ function DailyView() {
       setTimeout(() => setHighlightedTaskId(null), 5000);
     }
   }, []);
+
+  useEffect(() => {
+    const dateISO = getDateISO(selectedDate);
+    try {
+      const raw = localStorage.getItem(getManualBreakStorageKey(dateISO));
+      const parsed = raw ? JSON.parse(raw) : [];
+      setManualBreakBlocks(Array.isArray(parsed) ? parsed : []);
+    } catch {
+      setManualBreakBlocks([]);
+    }
+  }, [selectedDate]);
   
   useEffect(() => {
     const syncGoogleForDate = async () => {
@@ -1138,6 +1154,68 @@ function DailyView() {
   }
   
   const dateISO = getDateISO(selectedDate);
+
+  const persistManualBreakBlocks = (dateISOValue, blocks) => {
+    try {
+      localStorage.setItem(getManualBreakStorageKey(dateISOValue), JSON.stringify(blocks));
+    } catch (e) {}
+  };
+
+  const createManualBreakAfterTask = (taskForBreak, sourceBlock = null) => {
+    const now = new Date();
+    const dateISOValue = getDateISO(selectedDate);
+    const isForToday = dateISOValue === getDateISO(now);
+
+    const toMinutes = (timeStr) => {
+      const parts = String(timeStr || '').split(':').map(Number);
+      if (!Number.isFinite(parts[0])) return null;
+      return (parts[0] || 0) * 60 + (parts[1] || 0);
+    };
+
+    let startMinute = null;
+    if (sourceBlock) {
+      startMinute = Number.isFinite(sourceBlock.endMinute)
+        ? sourceBlock.endMinute
+        : toMinutes(sourceBlock.endTime);
+    }
+    if (!Number.isFinite(startMinute)) {
+      startMinute = isForToday
+        ? now.getHours() * 60 + now.getMinutes()
+        : (toMinutes(taskForBreak?.due_time) || 8.5 * 60);
+    }
+
+    const breakMinutes = 5;
+    const newBreak = {
+      id: `manual-break-${Date.now()}`,
+      title: '☕ הפסקה',
+      taskType: 'break',
+      blockType: 'break',
+      isBreak: true,
+      isPostponed: false,
+      isRescheduled: false,
+      isCompleted: false,
+      isFromGoogle: false,
+      duration: breakMinutes,
+      startMinute,
+      endMinute: startMinute + breakMinutes,
+      startTime: minutesToTime(startMinute),
+      endTime: minutesToTime(startMinute + breakMinutes)
+    };
+
+    setManualBreakBlocks(prev => {
+      const overlap = prev.some(b => {
+        const aStart = Number.isFinite(b?.startMinute) ? b.startMinute : toMinutes(b?.startTime);
+        const aEnd = Number.isFinite(b?.endMinute) ? b.endMinute : toMinutes(b?.endTime);
+        if (!Number.isFinite(aStart) || !Number.isFinite(aEnd)) return false;
+        return !(newBreak.endMinute <= aStart || newBreak.startMinute >= aEnd);
+      });
+      const next = overlap ? prev : [...prev, newBreak].sort((a, b) => (a.startMinute || 0) - (b.startMinute || 0));
+      persistManualBreakBlocks(dateISOValue, next);
+      return next;
+    });
+
+    toast('☕ התחילה הפסקה של 5 דקות', { duration: 3000, icon: '⏸️' });
+  };
   
   const googleTasks = activeBlocks.filter(b => b.is_from_google || b.task?.is_from_google || b.isGoogleEvent);
   const regularBlocks = activeBlocks.filter(b => !b.is_from_google && !b.task?.is_from_google && !b.isGoogleEvent);
@@ -1236,7 +1314,7 @@ function DailyView() {
     isRescheduled: false,
     isFromGoogle: true
   }));
-  
+
   const explicitBreakBlocksWithTimes = explicitBreakBlocks.map((block) => {
     const start = Number.isFinite(block?.startMinute) ? block.startMinute : (() => {
       const parts = String(block?.startTime || '00:00').split(':').map(Number);
@@ -1260,7 +1338,7 @@ function DailyView() {
     };
   });
 
-  let rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes, ...explicitBreakBlocksWithTimes].sort((a, b) => {
+  let rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes, ...explicitBreakBlocksWithTimes, ...manualBreakBlocks].sort((a, b) => {
     const aTime = a.startTime?.split(':').map(Number) || [0, 0];
     const bTime = b.startTime?.split(':').map(Number) || [0, 0];
     return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
@@ -1279,40 +1357,40 @@ function DailyView() {
     const nextIsBreak = next?.isBreak || next?.blockType === 'break' || next?.taskType === 'break';
     if (currentIsBreak || nextIsBreak) continue;
 
-    const currentIsGoogle = current?.isFromGoogle || current?.is_from_google || current?.isGoogleEvent;
-    const nextIsGoogle = next?.isFromGoogle || next?.is_from_google || next?.isGoogleEvent;
+    const currentIsGoogle = current?.isFromGoogle || current?.is_from_google || current?.task?.is_from_google || current?.isGoogleEvent;
+    const nextIsGoogle = next?.isFromGoogle || next?.is_from_google || next?.task?.is_from_google || next?.isGoogleEvent;
     if (currentIsGoogle || nextIsGoogle) continue;
 
     const currentEnd = Number.isFinite(current?.endMinute)
       ? current.endMinute
       : (() => {
-        const parts = String(current?.endTime || '00:00').split(':').map(Number);
-        return (parts[0] || 0) * 60 + (parts[1] || 0);
-      })();
+          const parts = String(current?.endTime || '').split(':').map(Number);
+          return Number.isFinite(parts[0]) ? (parts[0] || 0) * 60 + (parts[1] || 0) : null;
+        })();
     const nextStart = Number.isFinite(next?.startMinute)
       ? next.startMinute
       : (() => {
-        const parts = String(next?.startTime || '00:00').split(':').map(Number);
-        return (parts[0] || 0) * 60 + (parts[1] || 0);
-      })();
+          const parts = String(next?.startTime || '').split(':').map(Number);
+          return Number.isFinite(parts[0]) ? (parts[0] || 0) * 60 + (parts[1] || 0) : null;
+        })();
+    if (!Number.isFinite(currentEnd) || !Number.isFinite(nextStart)) continue;
     const gap = nextStart - currentEnd;
     if (gap >= 5) {
       const breakMinutes = Math.min(10, gap);
       withDisplayBreaks.push({
-        id: `display-break-${dateISO}-${currentEnd}`,
+        id: `display-break-${dateISO}-${currentEnd}-${nextStart}-${i}`,
         title: '☕ הפסקה',
         taskType: 'break',
         blockType: 'break',
         isBreak: true,
-        isPostponed: false,
-        isRescheduled: false,
-        isCompleted: false,
-        isFromGoogle: false,
         duration: breakMinutes,
         startMinute: currentEnd,
         endMinute: currentEnd + breakMinutes,
         startTime: minutesToTime(currentEnd),
-        endTime: minutesToTime(currentEnd + breakMinutes)
+        endTime: minutesToTime(currentEnd + breakMinutes),
+        isPostponed: Boolean(current?.isPostponed && next?.isPostponed),
+        isRescheduled: false,
+        isFromGoogle: false
       });
     }
   }
@@ -1390,6 +1468,57 @@ function DailyView() {
       };
     });
   }
+
+  const withDisplayBreaksAfterFallback = [];
+  for (let i = 0; i < rescheduledBlocks.length; i++) {
+    const current = rescheduledBlocks[i];
+    withDisplayBreaksAfterFallback.push(current);
+    const next = rescheduledBlocks[i + 1];
+    if (!next) continue;
+
+    const currentIsBreak = current?.isBreak || current?.blockType === 'break' || current?.taskType === 'break';
+    const nextIsBreak = next?.isBreak || next?.blockType === 'break' || next?.taskType === 'break';
+    if (currentIsBreak || nextIsBreak) continue;
+
+    const currentIsGoogle = current?.isFromGoogle || current?.is_from_google || current?.task?.is_from_google || current?.isGoogleEvent;
+    const nextIsGoogle = next?.isFromGoogle || next?.is_from_google || next?.task?.is_from_google || next?.isGoogleEvent;
+    if (currentIsGoogle || nextIsGoogle) continue;
+
+    const currentEnd = Number.isFinite(current?.endMinute)
+      ? current.endMinute
+      : (() => {
+          const parts = String(current?.endTime || '').split(':').map(Number);
+          return Number.isFinite(parts[0]) ? (parts[0] || 0) * 60 + (parts[1] || 0) : null;
+        })();
+    const nextStart = Number.isFinite(next?.startMinute)
+      ? next.startMinute
+      : (() => {
+          const parts = String(next?.startTime || '').split(':').map(Number);
+          return Number.isFinite(parts[0]) ? (parts[0] || 0) * 60 + (parts[1] || 0) : null;
+        })();
+    if (!Number.isFinite(currentEnd) || !Number.isFinite(nextStart)) continue;
+
+    const gap = nextStart - currentEnd;
+    if (gap >= 5) {
+      const breakMinutes = Math.min(10, gap);
+      withDisplayBreaksAfterFallback.push({
+        id: `display-break-post-fallback-${dateISO}-${currentEnd}-${nextStart}-${i}`,
+        title: '☕ הפסקה',
+        taskType: 'break',
+        blockType: 'break',
+        isBreak: true,
+        duration: breakMinutes,
+        startMinute: currentEnd,
+        endMinute: currentEnd + breakMinutes,
+        startTime: minutesToTime(currentEnd),
+        endTime: minutesToTime(currentEnd + breakMinutes),
+        isPostponed: Boolean(current?.isPostponed && next?.isPostponed),
+        isRescheduled: false,
+        isFromGoogle: false
+      });
+    }
+  }
+  rescheduledBlocks = withDisplayBreaksAfterFallback;
   
   const overdueBlocks = rescheduledBlocks.filter(b => b.isPostponed);
   const upcomingBlocks = rescheduledBlocks.filter(b => !b.isPostponed);
@@ -1498,6 +1627,7 @@ function DailyView() {
         })()} 
         onEdit={() => handleEditTask(block)}
         onUpdate={loadTasks}
+        onTaskCompleted={(taskData) => createManualBreakAfterTask(taskData, block)}
         showTime={true}
         onDragStart={handleDragStart}
         onDragEnd={handleDragEnd}

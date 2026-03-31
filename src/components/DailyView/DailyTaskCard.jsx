@@ -202,7 +202,7 @@ function CompletionFeedbackModal({ isOpen, onClose, task, actualMinutes, onConfi
  * ✅ עם תמיכה בגרירה, משוב בסיום, והעברה למחר
  * ✅ כפתור התחל במיקוד
  */
-function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggable = false }) {
+function DailyTaskCard({ task, onEdit, onUpdate, onTaskCompleted, onDragStart, onDragEnd, draggable = false }) {
   const { toggleComplete, removeTask, editTask, tasks } = useTasks();
   const navigate = useNavigate();
   const [showTimer, setShowTimer] = useState(false);
@@ -361,6 +361,9 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
       localStorage.setItem(key, newCompleted.toString());
       if (newCompleted) {
         toast.success('✅ הבלוק הושלם!');
+        if (onTaskCompleted) {
+          onTaskCompleted(currentTask);
+        }
       } else {
         toast.success('הבלוק הוחזר לפעיל');
       }
@@ -410,6 +413,10 @@ function DailyTaskCard({ task, onEdit, onUpdate, onDragStart, onDragEnd, draggab
         );
       } else {
         toast.success('✅ המשימה הושלמה!');
+      }
+
+      if (onTaskCompleted) {
+        onTaskCompleted(currentTask);
       }
       
       if (onUpdate) onUpdate();
