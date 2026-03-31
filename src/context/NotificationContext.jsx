@@ -139,15 +139,9 @@ function sendLocalNotification(title, options = {}) {
   if (!isNotificationSupported()) return null;
   if (getRuntimeNotificationPermission() !== 'granted') return null;
   
-  // ✅ תיקון v3.1: אם יש טיימר רץ על משימה אחרת - לא לשלוח התראה
+  // לא חוסמים התראות מערכת ברמת ה-context.
+  // הסינון העסקי מתבצע ב-UnifiedNotificationManager, וכאן חשוב לא "לאכול" popup בצד המערכת.
   const taskId = options.taskId || options.data?.taskId;
-  if (isTimerActiveForOtherTask(taskId)) {
-    if (isDebugNotificationsEnabled()) {
-      console.log('[NotificationContext] blocked: timer active for other task', { taskId });
-    }
-    console.log('🔇 NotificationContext: יש טיימר פעיל - לא שולח התראה על משימה אחרת');
-    return null;
-  }
 
   try {
     const isHidden = typeof document !== 'undefined' && document.visibilityState !== 'visible';
