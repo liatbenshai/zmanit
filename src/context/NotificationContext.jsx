@@ -39,6 +39,15 @@ function isNotificationSupported() {
   return 'Notification' in window;
 }
 
+function getRuntimeNotificationPermission() {
+  if (!isNotificationSupported()) return 'denied';
+  try {
+    return Notification.permission;
+  } catch {
+    return 'denied';
+  }
+}
+
 /**
  * בקשת הרשאה להתראות
  */
@@ -128,7 +137,7 @@ function buildBrowserNotificationOptions(options = {}) {
 
 function sendLocalNotification(title, options = {}) {
   if (!isNotificationSupported()) return null;
-  if (Notification.permission !== 'granted') return null;
+  if (getRuntimeNotificationPermission() !== 'granted') return null;
   
   // ✅ תיקון v3.1: אם יש טיימר רץ על משימה אחרת - לא לשלוח התראה
   const taskId = options.taskId || options.data?.taskId;
@@ -150,13 +159,16 @@ function sendLocalNotification(title, options = {}) {
         permission: Notification.permission
       });
     }
+    const browserOptions = buildBrowserNotificationOptions(options);
     const notification = new Notification(title, {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
       dir: 'rtl',
       lang: 'he',
       requireInteraction: true,
-      ...buildBrowserNotificationOptions(options)
+      // בחלק מהדפדפנים עדכון של אותה תגית לא מקפיץ שוב בלי renotify
+      ...(browserOptions.tag ? { renotify: true } : {}),
+      ...browserOptions
     });
 
     notification.onclick = () => {
@@ -289,7 +301,11 @@ export function NotificationProvider({ children }) {
       playSound(soundType);
     }
 
-    if (permission !== 'granted') return null;
+    const runtimePermission = getRuntimeNotificationPermission();
+    if (permission !== runtimePermission) {
+      setPermission(runtimePermission);
+    }
+    if (runtimePermission !== 'granted') return null;
 
     return sendLocalNotification(title, options);
   }, [permission, playSound]);
