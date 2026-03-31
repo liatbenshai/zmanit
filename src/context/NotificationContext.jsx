@@ -150,16 +150,25 @@ function sendLocalNotification(title, options = {}) {
   }
 
   try {
+    const isHidden = typeof document !== 'undefined' && document.visibilityState !== 'visible';
+    const effectiveOptions = { ...options };
+    // כשחלון האפליקציה ברקע ובאותו tag משתמשים שוב, חלק מהדפדפנים רק מעדכנים בשקט בלי באנר.
+    // tag ייחודי מכריח יצירת toast חדש בצד המסך.
+    if (isHidden && effectiveOptions.tag) {
+      effectiveOptions.tag = `${effectiveOptions.tag}-${Date.now()}`;
+      effectiveOptions.renotify = true;
+    }
+
     if (isDebugNotificationsEnabled()) {
       console.log('[NotificationContext] new Notification(...)', {
         title,
-        body: options?.body,
-        tag: options?.tag,
-        taskId: taskId || options?.data?.taskId || null,
+        body: effectiveOptions?.body,
+        tag: effectiveOptions?.tag,
+        taskId: taskId || effectiveOptions?.data?.taskId || null,
         permission: Notification.permission
       });
     }
-    const browserOptions = buildBrowserNotificationOptions(options);
+    const browserOptions = buildBrowserNotificationOptions(effectiveOptions);
 
     // כשלא בפוקוס, showNotification דרך Service Worker אמין יותר במערכות מסוימות
     const shouldUseServiceWorkerPath =
@@ -169,7 +178,7 @@ function sendLocalNotification(title, options = {}) {
       'serviceWorker' in navigator;
 
     if (shouldUseServiceWorkerPath) {
-      navigator.serviceWorker.getRegistration().then((registration) => {
+      navigator.serviceWorker.ready.then((registration) => {
         if (!registration?.showNotification) return;
         registration.showNotification(title, {
           icon: '/icon-192.png',
