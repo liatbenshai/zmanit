@@ -1507,6 +1507,65 @@ function DailyView() {
   );
   };
 
+  const toMinutesFromBlock = (block, field) => {
+    const numeric = block?.[field];
+    if (Number.isFinite(numeric)) return numeric;
+    const timeStr = field === 'startMinute' ? block?.startTime : block?.endTime;
+    const parts = String(timeStr || '').split(':').map(Number);
+    if (!Number.isFinite(parts[0])) return null;
+    return (parts[0] || 0) * 60 + (parts[1] || 0);
+  };
+
+  const renderDisplayBreak = (startMinute, breakMinutes, key) => (
+    <motion.div
+      key={key}
+      layout
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="rounded-xl border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 p-3"
+    >
+      <div className="flex items-center justify-between">
+        <div className="font-medium text-amber-800 dark:text-amber-200">☕ הפסקה</div>
+        <div className="text-sm text-amber-700 dark:text-amber-300">
+          {minutesToTime(startMinute)} - {minutesToTime(startMinute + breakMinutes)} ({breakMinutes} דק׳)
+        </div>
+      </div>
+    </motion.div>
+  );
+
+  const renderBlocksWithDisplayBreaks = (blocksArray) => {
+    const rendered = [];
+    for (let i = 0; i < blocksArray.length; i++) {
+      const current = blocksArray[i];
+      rendered.push(renderDraggableCard(current, i, blocksArray));
+      const next = blocksArray[i + 1];
+      if (!next) continue;
+
+      const currentIsBreak = current?.isBreak || current?.blockType === 'break' || current?.taskType === 'break';
+      const nextIsBreak = next?.isBreak || next?.blockType === 'break' || next?.taskType === 'break';
+      if (currentIsBreak || nextIsBreak) continue;
+
+      const currentIsGoogle = current?.isFromGoogle || current?.is_from_google || current?.task?.is_from_google || current?.isGoogleEvent;
+      const nextIsGoogle = next?.isFromGoogle || next?.is_from_google || next?.task?.is_from_google || next?.isGoogleEvent;
+      if (currentIsGoogle || nextIsGoogle) continue;
+
+      const currentEnd = toMinutesFromBlock(current, 'endMinute');
+      const nextStart = toMinutesFromBlock(next, 'startMinute');
+      if (!Number.isFinite(currentEnd) || !Number.isFinite(nextStart)) continue;
+
+      const gap = nextStart - currentEnd;
+      if (gap >= 5) {
+        const breakMinutes = Math.min(10, gap);
+        rendered.push(renderDisplayBreak(
+          currentEnd,
+          breakMinutes,
+          `inline-break-${dateISO}-${currentEnd}-${nextStart}-${i}`
+        ));
+      }
+    }
+    return rendered;
+  };
+
   return (
     <div className="w-full max-w-4xl mx-auto px-2 sm:px-4 overflow-x-hidden">
       <motion.div
@@ -1899,7 +1958,7 @@ function DailyView() {
                   🔄 נדחו ({overdueBlocks.length}) - זמנים מעודכנים
                 </h3>
                 <div className="space-y-2 border-r-4 border-orange-400 pr-2">
-                  {overdueBlocks.map((block, index) => renderDraggableCard(block, index, overdueBlocks))}
+                  {renderBlocksWithDisplayBreaks(overdueBlocks)}
                 </div>
               </div>
             )}
@@ -1912,7 +1971,7 @@ function DailyView() {
                   </h3>
                 )}
                 <div className="space-y-2">
-                  {upcomingBlocks.map((block, index) => renderDraggableCard(block, index, upcomingBlocks))}
+                  {renderBlocksWithDisplayBreaks(upcomingBlocks)}
                 </div>
                 
                 {upcomingBlocks.length > 1 && (
