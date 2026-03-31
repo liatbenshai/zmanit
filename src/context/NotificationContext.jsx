@@ -160,6 +160,29 @@ function sendLocalNotification(title, options = {}) {
       });
     }
     const browserOptions = buildBrowserNotificationOptions(options);
+
+    // כשלא בפוקוס, showNotification דרך Service Worker אמין יותר במערכות מסוימות
+    const shouldUseServiceWorkerPath =
+      typeof document !== 'undefined' &&
+      document.visibilityState !== 'visible' &&
+      typeof navigator !== 'undefined' &&
+      'serviceWorker' in navigator;
+
+    if (shouldUseServiceWorkerPath) {
+      navigator.serviceWorker.getRegistration().then((registration) => {
+        if (!registration?.showNotification) return;
+        registration.showNotification(title, {
+          icon: '/icon-192.png',
+          badge: '/icon-192.png',
+          dir: 'rtl',
+          lang: 'he',
+          requireInteraction: true,
+          ...(browserOptions.tag ? { renotify: true } : {}),
+          ...browserOptions
+        }).catch(() => {});
+      }).catch(() => {});
+    }
+
     const notification = new Notification(title, {
       icon: '/icon-192.png',
       badge: '/icon-192.png',
