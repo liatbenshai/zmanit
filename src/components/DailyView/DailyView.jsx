@@ -1141,8 +1141,10 @@ function DailyView() {
   
   const googleTasks = activeBlocks.filter(b => b.is_from_google || b.task?.is_from_google || b.isGoogleEvent);
   const regularBlocks = activeBlocks.filter(b => !b.is_from_google && !b.task?.is_from_google && !b.isGoogleEvent);
+  const explicitBreakBlocks = regularBlocks.filter(b => b?.isBreak || b?.blockType === 'break' || b?.taskType === 'break');
+  const nonBreakRegularBlocks = regularBlocks.filter(b => !(b?.isBreak || b?.blockType === 'break' || b?.taskType === 'break'));
   
-  let sortedRegularBlocks = sortTasksByOrder(regularBlocks.map(b => ({
+  let sortedRegularBlocks = sortTasksByOrder(nonBreakRegularBlocks.map(b => ({
     ...b,
     id: b.taskId || b.id,
     parentId: b.parentId || b.task?.parent_task_id,
@@ -1219,6 +1221,8 @@ function DailyView() {
       ...block,
       originalStartTime: block.startTime,
       originalEndTime: block.endTime,
+      startMinute: startMinutes,
+      endMinute: endMinutes,
       startTime: minutesToTime(startMinutes),
       endTime: minutesToTime(endMinutes),
       isPostponed: wasPostponed,
@@ -1233,7 +1237,30 @@ function DailyView() {
     isFromGoogle: true
   }));
   
-  let rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes].sort((a, b) => {
+  const explicitBreakBlocksWithTimes = explicitBreakBlocks.map((block) => {
+    const start = Number.isFinite(block?.startMinute) ? block.startMinute : (() => {
+      const parts = String(block?.startTime || '00:00').split(':').map(Number);
+      return (parts[0] || 0) * 60 + (parts[1] || 0);
+    })();
+    const end = Number.isFinite(block?.endMinute) ? block.endMinute : (() => {
+      const parts = String(block?.endTime || '00:00').split(':').map(Number);
+      return (parts[0] || 0) * 60 + (parts[1] || 0);
+    })();
+    return {
+      ...block,
+      startMinute: start,
+      endMinute: end,
+      startTime: block?.startTime || minutesToTime(start),
+      endTime: block?.endTime || minutesToTime(end),
+      isBreak: true,
+      blockType: 'break',
+      taskType: 'break',
+      isPostponed: false,
+      isRescheduled: false
+    };
+  });
+
+  let rescheduledBlocks = [...rescheduledRegularBlocks, ...googleTasksWithTimes, ...explicitBreakBlocksWithTimes].sort((a, b) => {
     const aTime = a.startTime?.split(':').map(Number) || [0, 0];
     const bTime = b.startTime?.split(':').map(Number) || [0, 0];
     return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
@@ -1256,11 +1283,23 @@ function DailyView() {
     const nextIsGoogle = next?.isFromGoogle || next?.is_from_google || next?.isGoogleEvent;
     if (currentIsGoogle || nextIsGoogle) continue;
 
-    const gap = (next.startMinute || 0) - (current.endMinute || 0);
+    const currentEnd = Number.isFinite(current?.endMinute)
+      ? current.endMinute
+      : (() => {
+        const parts = String(current?.endTime || '00:00').split(':').map(Number);
+        return (parts[0] || 0) * 60 + (parts[1] || 0);
+      })();
+    const nextStart = Number.isFinite(next?.startMinute)
+      ? next.startMinute
+      : (() => {
+        const parts = String(next?.startTime || '00:00').split(':').map(Number);
+        return (parts[0] || 0) * 60 + (parts[1] || 0);
+      })();
+    const gap = nextStart - currentEnd;
     if (gap >= 5) {
       const breakMinutes = Math.min(10, gap);
       withDisplayBreaks.push({
-        id: `display-break-${dateISO}-${current.endMinute}`,
+        id: `display-break-${dateISO}-${currentEnd}`,
         title: '☕ הפסקה',
         taskType: 'break',
         blockType: 'break',
@@ -1270,10 +1309,10 @@ function DailyView() {
         isCompleted: false,
         isFromGoogle: false,
         duration: breakMinutes,
-        startMinute: current.endMinute,
-        endMinute: current.endMinute + breakMinutes,
-        startTime: minutesToTime(current.endMinute),
-        endTime: minutesToTime(current.endMinute + breakMinutes)
+        startMinute: currentEnd,
+        endMinute: currentEnd + breakMinutes,
+        startTime: minutesToTime(currentEnd),
+        endTime: minutesToTime(currentEnd + breakMinutes)
       });
     }
   }
