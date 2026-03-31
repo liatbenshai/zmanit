@@ -1239,6 +1239,46 @@ function DailyView() {
     return (aTime[0] * 60 + aTime[1]) - (bTime[0] * 60 + bTime[1]);
   });
 
+  // שכבת תצוגה: אם המנוע לא יצר בלוקי הפסקה מפורשים, נוסיף ביניים להצגה
+  // כדי שתמיד יופיעו הפסקות בין בלוקים עם רווח >= 5 דקות.
+  const withDisplayBreaks = [];
+  for (let i = 0; i < rescheduledBlocks.length; i++) {
+    const current = rescheduledBlocks[i];
+    withDisplayBreaks.push(current);
+    const next = rescheduledBlocks[i + 1];
+    if (!next) continue;
+
+    const currentIsBreak = current?.isBreak || current?.blockType === 'break' || current?.taskType === 'break';
+    const nextIsBreak = next?.isBreak || next?.blockType === 'break' || next?.taskType === 'break';
+    if (currentIsBreak || nextIsBreak) continue;
+
+    const currentIsGoogle = current?.isFromGoogle || current?.is_from_google || current?.isGoogleEvent;
+    const nextIsGoogle = next?.isFromGoogle || next?.is_from_google || next?.isGoogleEvent;
+    if (currentIsGoogle || nextIsGoogle) continue;
+
+    const gap = (next.startMinute || 0) - (current.endMinute || 0);
+    if (gap >= 5) {
+      const breakMinutes = Math.min(10, gap);
+      withDisplayBreaks.push({
+        id: `display-break-${dateISO}-${current.endMinute}`,
+        title: '☕ הפסקה',
+        taskType: 'break',
+        blockType: 'break',
+        isBreak: true,
+        isPostponed: false,
+        isRescheduled: false,
+        isCompleted: false,
+        isFromGoogle: false,
+        duration: breakMinutes,
+        startMinute: current.endMinute,
+        endMinute: current.endMinute + breakMinutes,
+        startTime: minutesToTime(current.endMinute),
+        endTime: minutesToTime(current.endMinute + breakMinutes)
+      });
+    }
+  }
+  rescheduledBlocks = withDisplayBreaks;
+
   // Fallback: אם מנוע השיבוץ החזיר 0 בלוקים (למשל בגלל weekPlan לא תקין),
   // נציג את המשימות מה-DB כבלוקים "ארעיים" כדי שלא ייראה כאילו הן נמחקו.
   if (rescheduledBlocks.length === 0 && tasks?.length > 0) {

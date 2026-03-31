@@ -25,8 +25,8 @@ import toast from 'react-hot-toast';
 
 const CONFIG = {
   // כש-IdleDetector פעיל (פופאפ המזכירה), נמנעים מפופאפ no-timer כפול
-  // הוחזר ל-false כדי לשמור fallback כשהפופאפ הישן לא קופץ
-  USE_LEGACY_IDLE_POPUP: false,
+  // true = משתמשים בפופאפ המזכירה הישן (IdleDetector) עבור "אין טיימר"
+  USE_LEGACY_IDLE_POPUP: true,
 
   // מרווחי בדיקה
   CHECK_INTERVAL_MS: 10 * 1000,        // בדיקה כל 10 שניות (טיימר/התראות מדויקות יותר)

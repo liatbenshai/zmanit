@@ -227,6 +227,14 @@ function IdleDetector() {
         try {
           const data = JSON.parse(activeTimerData);
           const hasValidStart = !!data?.startTime;
+          const startDate = hasValidStart ? toLocalISODate(new Date(data.startTime)) : null;
+          const today = toLocalISODate(new Date());
+          const isStale = !!startDate && startDate !== today;
+          if (isStale) {
+            localStorage.removeItem(`timer_v2_${activeTimer}`);
+            localStorage.removeItem(`timer_${activeTimer}_startTime`);
+            localStorage.removeItem('zmanit_active_timer');
+          } else
           if (data?.isRunning && !data?.isInterrupted && hasValidStart) {
             hasRunningTimer = true;
           } else if (data?.isPaused || data?.isInterrupted) {
@@ -248,6 +256,12 @@ function IdleDetector() {
         try {
           const data = JSON.parse(localStorage.getItem(key));
           const hasValidStart = !!data?.startTime;
+          const startDate = hasValidStart ? toLocalISODate(new Date(data.startTime)) : null;
+          const today = toLocalISODate(new Date());
+          if (startDate && startDate !== today) {
+            localStorage.removeItem(key);
+            continue;
+          }
           if (data?.isRunning && !data?.isInterrupted && hasValidStart) {
             hasRunningTimer = true;
           } else if (data?.isRunning && data?.isInterrupted) {
@@ -449,7 +463,7 @@ function IdleDetector() {
     toast('⏰ אזכיר שוב בעוד 5 דקות', { duration: 2000 });
   }, []);
 
-  if (!user || !isWorkHours) return null;
+  if (!user || (!isWorkHours && !hasActionableScheduledTask)) return null;
 
   return (
     <AnimatePresence>
