@@ -158,6 +158,11 @@ function sendLocalNotification(title, options = {}) {
       effectiveOptions.tag = `${effectiveOptions.tag}-${Date.now()}`;
       effectiveOptions.renotify = true;
     }
+    // גם בלי tag שנשלח מבחוץ - נכפה tag ייחודי במצב רקע כדי לקבל toast חדש בצד המסך.
+    if (isHidden && !effectiveOptions.tag) {
+      effectiveOptions.tag = `zmanit-bg-${Date.now()}`;
+      effectiveOptions.renotify = true;
+    }
 
     if (isDebugNotificationsEnabled()) {
       console.log('[NotificationContext] new Notification(...)', {
@@ -190,6 +195,9 @@ function sendLocalNotification(title, options = {}) {
           ...browserOptions
         }).catch(() => {});
       }).catch(() => {});
+
+      // במצב רקע: מסתמכים על Service Worker להצגת toast מערכת אמין.
+      return { close: () => {} };
     }
 
     const notification = new Notification(title, {
