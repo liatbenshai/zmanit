@@ -1398,12 +1398,23 @@ function DailyView() {
 
   // Fallback: אם מנוע השיבוץ החזיר 0 בלוקים (למשל בגלל weekPlan לא תקין),
   // נציג את המשימות מה-DB כבלוקים "ארעיים" כדי שלא ייראה כאילו הן נמחקו.
-  if (rescheduledBlocks.length === 0 && tasks?.length > 0) {
+  const hasRenderableTaskBlocks = rescheduledBlocks.some((b) => {
+    const isBreak = b?.isBreak || b?.blockType === 'break' || b?.taskType === 'break';
+    const isGoogle = b?.isFromGoogle || b?.is_from_google || b?.task?.is_from_google || b?.isGoogleEvent;
+    return !isBreak && !isGoogle;
+  });
+  if (!hasRenderableTaskBlocks && tasks?.length > 0) {
     const fallbackDateISO = getDateISO(selectedDate);
     const normalizeTaskDateISO = (value) => {
       if (!value) return null;
-      if (typeof value === 'string') return value;
       try {
+        // תומך גם ב-"YYYY-MM-DD" וגם ב-"YYYY-MM-DDTHH:mm:ss..."
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+          const parsed = new Date(trimmed);
+          return isNaN(parsed.getTime()) ? null : getDateISO(parsed);
+        }
         const d = new Date(value);
         return isNaN(d.getTime()) ? null : getDateISO(d);
       } catch {
